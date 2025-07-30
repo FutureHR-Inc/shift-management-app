@@ -7,6 +7,7 @@ export interface User {
   role: 'manager' | 'staff';
   stores: string[];
   skillLevel: 'training' | 'regular' | 'veteran';
+  hourlyWage?: number; // 時給（円）
   memo?: string;
 }
 
@@ -177,6 +178,7 @@ export interface DatabaseUser {
   phone: string;
   role: 'manager' | 'staff';
   skill_level: 'training' | 'regular' | 'veteran';
+  hourly_wage?: number; // 時給（円）
   memo?: string;
   user_stores?: UserStore[];
 }

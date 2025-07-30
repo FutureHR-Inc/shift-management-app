@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -242,6 +242,12 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
   const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
   const [deletingSlotId, setDeletingSlotId] = useState<string | null>(null);
 
+  // onTimeSlotsChangeの最新の参照を保持
+  const onTimeSlotsChangeRef = useRef(onTimeSlotsChange);
+  useEffect(() => {
+    onTimeSlotsChangeRef.current = onTimeSlotsChange;
+  }, [onTimeSlotsChange]);
+
   // 時間帯データを取得
   const fetchTimeSlots = useCallback(async () => {
     if (!storeId) return;
@@ -257,20 +263,20 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
 
       const result = await response.json();
       const slots = result.data || [];
-      setTimeSlots(prevSlots => {
-        // データが変更された場合のみ状態とコールバックを更新
-        if (JSON.stringify(slots) !== JSON.stringify(prevSlots)) {
-          onTimeSlotsChange?.(slots);
-          return slots;
-        }
-        return prevSlots;
-      });
+      setTimeSlots(slots);
     } catch (error) {
       setError(error instanceof Error ? error.message : '時間帯データの取得に失敗しました');
     } finally {
       setLoading(false);
     }
-  }, [storeId]); // onTimeSlotsChangeを依存配列から除外して無限ループを防止
+  }, [storeId]);
+
+  // timeSlots が変更された時にコールバックを実行
+  useEffect(() => {
+    if (timeSlots.length > 0 || !loading) {
+      onTimeSlotsChangeRef.current?.(timeSlots);
+    }
+  }, [timeSlots, loading]);
 
   useEffect(() => {
     if (storeId) {

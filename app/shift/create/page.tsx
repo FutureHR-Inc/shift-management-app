@@ -21,6 +21,7 @@ interface ApiUser {
   email: string;
   role: 'manager' | 'staff';
   skillLevel: 'training' | 'regular' | 'veteran';
+  hourlyWage?: number; // 時給（円）
   memo?: string;
   stores: string[];
 }
@@ -168,6 +169,7 @@ function ShiftCreatePageInner() {
         email: user.email,
         role: user.role,
         skillLevel: user.skill_level,
+        hourlyWage: user.hourly_wage, // DB上の時給データを追加
         memo: user.memo,
         stores: user.user_stores?.map((us: UserStore) => us.store_id) || []
       })) || [];
@@ -858,14 +860,25 @@ function ShiftCreatePageInner() {
   // 店舗所属スタッフのみフィルタ（基本的なシフト作成は所属スタッフ内で完結）
   const availableStaff = selectedStore ? users.filter(user => user.stores.includes(selectedStore)) : [];
 
-  // 時給計算（仮）
-  const calculateHourlyWage = (skillLevel: string) => {
-    const wages = {
+  // 時給計算（個別給与ベース）
+  const getHourlyWage = (user: any) => {
+    // 個別時給が設定されている場合はそれを使用
+    if (user.hourlyWage && user.hourlyWage > 0) {
+      return user.hourlyWage;
+    }
+    
+    // hourly_wageフィールドが存在する場合（API経由のデータ）
+    if (user.hourly_wage && user.hourly_wage > 0) {
+      return user.hourly_wage;
+    }
+    
+    // フォールバック：スキルレベルベースのデフォルト値
+    const defaultWages = {
       training: 1000,
       regular: 1200,
       veteran: 1500
     };
-    return wages[skillLevel as keyof typeof wages] || 1000;
+    return defaultWages[user.skillLevel as keyof typeof defaultWages] || 1000;
   };
 
   // 週の統計計算
@@ -925,7 +938,7 @@ function ShiftCreatePageInner() {
               
               if (workHours > 0) {
                 totalHours += workHours;
-                totalWage += workHours * calculateHourlyWage(user.skillLevel);
+                totalWage += workHours * getHourlyWage(user);
                 staffCount.add(shift.userId);
               }
             }
@@ -1910,7 +1923,7 @@ function ShiftCreatePageInner() {
                         return `${hours}時間`;
                       })()}
                       <br />
-                      時給: ¥{selectedUser ? calculateHourlyWage(users.find(u => u.id === selectedUser)?.skillLevel || 'training') : 0}
+                      時給: ¥{selectedUser ? getHourlyWage(users.find(u => u.id === selectedUser)) : 0}
                     </div>
                   </div>
                 )}

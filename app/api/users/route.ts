@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone, email, role, skill_level, memo, stores } = body;
+    const { name, phone, email, role, skill_level, hourly_wage, memo, stores } = body;
 
     // バリデーション
     if (!name || !phone || !email || !role || !skill_level) {
@@ -121,6 +121,14 @@ export async function POST(request: NextRequest) {
     if (!['training', 'regular', 'veteran'].includes(skill_level)) {
       return NextResponse.json(
         { error: 'Skill level must be "training", "regular", or "veteran"' },
+        { status: 400 }
+      );
+    }
+
+    // 時給のバリデーション
+    if (hourly_wage !== undefined && (hourly_wage < 800 || hourly_wage > 3000)) {
+      return NextResponse.json(
+        { error: 'Hourly wage must be between 800 and 3000' },
         { status: 400 }
       );
     }
@@ -194,6 +202,11 @@ export async function POST(request: NextRequest) {
         email: email.trim().toLowerCase(),
         role,
         skill_level,
+        hourly_wage: hourly_wage || (() => {
+          // デフォルト時給をスキルレベルに基づいて設定
+          const defaultWages = { training: 1000, regular: 1200, veteran: 1500 };
+          return defaultWages[skill_level as keyof typeof defaultWages] || 1000;
+        })(),
         memo: memo ? memo.trim() : null,
         login_id: loginId
       })
@@ -242,7 +255,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, phone, email, role, skill_level, memo, stores } = body;
+    const { id, name, phone, email, role, skill_level, hourly_wage, memo, stores } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -290,6 +303,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // 時給のバリデーション
+    if (hourly_wage !== undefined && (hourly_wage < 800 || hourly_wage > 3000)) {
+      return NextResponse.json(
+        { error: 'Hourly wage must be between 800 and 3000' },
+        { status: 400 }
+      );
+    }
+
     // ユーザー情報更新
     const updateData: {
       updated_at: string;
@@ -298,6 +319,7 @@ export async function PUT(request: NextRequest) {
       email?: string;
       role?: string;
       skill_level?: string;
+      hourly_wage?: number; // 追加
       memo?: string;
     } = {
       updated_at: new Date().toISOString()
@@ -308,6 +330,7 @@ export async function PUT(request: NextRequest) {
     if (email) updateData.email = email.trim().toLowerCase();
     if (role) updateData.role = role;
     if (skill_level) updateData.skill_level = skill_level;
+    if (hourly_wage !== undefined) updateData.hourly_wage = hourly_wage; // 追加
     if (memo !== undefined) updateData.memo = memo ? memo.trim() : null;
 
     const { data: user, error: userError } = await supabase

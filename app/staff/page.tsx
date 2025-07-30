@@ -17,6 +17,7 @@ interface ApiUser {
   skill_level: 'training' | 'regular' | 'veteran';
   memo?: string;
   login_id?: string;
+  hourly_wage?: number; // 時給（円）
   user_stores?: Array<{
     store_id: string;
     stores: { id: string; name: string };
@@ -36,6 +37,7 @@ interface DisplayUser {
   email: string;
   role: 'manager' | 'staff';
   skillLevel: 'training' | 'regular' | 'veteran';
+  hourlyWage?: number; // 時給（円）
   memo?: string;
   loginId?: string;
   stores: string[];
@@ -69,6 +71,7 @@ export default function StaffPage() {
     phone: '',
     role: 'staff' as 'manager' | 'staff',
     skill_level: 'training' as 'training' | 'regular' | 'veteran',
+    hourly_wage: 1000, // デフォルト時給
     memo: '',
     stores: [] as string[]
   });
@@ -90,6 +93,7 @@ export default function StaffPage() {
         skillLevel: user.skill_level,
         memo: user.memo,
         loginId: user.login_id,
+        hourlyWage: user.hourly_wage,
         stores: user.user_stores?.map(us => us.store_id) || []
       })) || [];
       
@@ -199,6 +203,7 @@ export default function StaffPage() {
         phone: formData.phone,
         role: formData.role,
         skill_level: formData.skill_level,
+        hourly_wage: formData.hourly_wage,
         memo: formData.memo || null,
         stores: formData.stores
       };
@@ -268,6 +273,7 @@ export default function StaffPage() {
       phone: user.phone,
       role: user.role,
       skill_level: user.skillLevel,
+      hourly_wage: user.hourlyWage || 1000,
       memo: user.memo || '',
       stores: user.stores
     });
@@ -287,6 +293,7 @@ export default function StaffPage() {
       phone: '',
       role: 'staff',
       skill_level: 'training',
+      hourly_wage: 1000,
       memo: '',
       stores: []
     });
@@ -675,42 +682,66 @@ export default function StaffPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        所属店舗 *
+                        時給 *
                       </label>
-                      <div className="border border-gray-300 rounded-xl p-3 space-y-2">
-                        {stores.map(store => (
-                          <label key={store.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={formData.stores.includes(store.id)}
-                              onChange={(e) => {
-                                const storeId = store.id;
-                                let newStores: string[];
-                                
-                                if (e.target.checked) {
-                                  // チェックされた場合、配列に追加
-                                  newStores = [...formData.stores, storeId];
-                                } else {
-                                  // チェックが外された場合、配列から削除
-                                  newStores = formData.stores.filter(id => id !== storeId);
-                                }
-                                
-                                setFormData({...formData, stores: newStores});
-                              }}
-                              disabled={saving}
-                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                            />
-                            <span className="text-sm text-gray-700 font-medium">{store.name}</span>
-                          </label>
-                        ))}
-                        {stores.length === 0 && (
-                          <p className="text-sm text-gray-500 py-2">店舗データを読み込み中...</p>
-                        )}
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="800"
+                          max="3000"
+                          value={formData.hourly_wage}
+                          onChange={(e) => setFormData({...formData, hourly_wage: parseInt(e.target.value) || 1000})}
+                          className="pr-12"
+                          required
+                          disabled={saving}
+                        />
+                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                          円/時
+                        </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        複数の店舗を選択可能です（選択済み: {formData.stores.length}店舗）
+                        800〜3000円の範囲で1円単位で設定してください
                       </p>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      所属店舗 *
+                    </label>
+                    <div className="border border-gray-300 rounded-xl p-3 space-y-2">
+                      {stores.map(store => (
+                        <label key={store.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={formData.stores.includes(store.id)}
+                            onChange={(e) => {
+                              const storeId = store.id;
+                              let newStores: string[];
+                              
+                              if (e.target.checked) {
+                                // チェックされた場合、配列に追加
+                                newStores = [...formData.stores, storeId];
+                              } else {
+                                // チェックが外された場合、配列から削除
+                                newStores = formData.stores.filter(id => id !== storeId);
+                              }
+                              
+                              setFormData({...formData, stores: newStores});
+                            }}
+                            disabled={saving}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                          />
+                          <span className="text-sm text-gray-700 font-medium">{store.name}</span>
+                        </label>
+                      ))}
+                      {stores.length === 0 && (
+                        <p className="text-sm text-gray-500 py-2">店舗データを読み込み中...</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      複数の店舗を選択可能です（選択済み: {formData.stores.length}店舗）
+                    </p>
                   </div>
 
                   <div>
