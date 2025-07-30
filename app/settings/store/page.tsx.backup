@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -286,9 +286,9 @@ export default function StoreSettingsPage() {
   };
 
   // 時間帯データ更新コールバック
-  const handleTimeSlotsChange = useCallback((newTimeSlots: TimeSlot[]) => {
+  const handleTimeSlotsChange = (newTimeSlots: TimeSlot[]) => {
     setTimeSlots(newTimeSlots);
-  }, []);
+  };
 
   const getSkillLevelText = (level: string) => {
     switch (level) {
@@ -406,7 +406,6 @@ export default function StoreSettingsPage() {
                     <p className="text-sm">まず上記の「時間帯設定」で時間帯を追加してください</p>
                   </div>
                 ) : (
-                <>
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -419,30 +418,30 @@ export default function StoreSettingsPage() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      {timeSlots.map((timeSlot) => (
-                        <tr key={timeSlot.id} className="border-b border-gray-100">
-                          <td className="p-3 bg-gray-50 font-medium text-gray-900">
-                            {getTimeSlotLabel(timeSlot.id)}
-                          </td>
-                          {dayNames.map((dayName, dayIndex) => {
-                            const currentValue = requiredStaffData[dayName]?.[timeSlot.id] || 0;
-                            return (
-                              <td key={dayIndex} className="p-2 text-center">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="10"
-                                  value={currentValue}
-                                  onChange={(e) => handleRequiredStaffChange(dayName, timeSlot.id, parseInt(e.target.value) || 0)}
-                                  className="w-16 text-center"
-                                  disabled={isSaving}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                                      <tbody>
+                    {timeSlots.map((timeSlot) => (
+                      <tr key={timeSlot.id} className="border-b border-gray-100">
+                        <td className="p-3 bg-gray-50 font-medium text-gray-900">
+                          {getTimeSlotLabel(timeSlot.id)}
+                        </td>
+                        {dayNames.map((dayName, dayIndex) => {
+                          const currentValue = requiredStaffData[dayName]?.[timeSlot.id] || 0;
+                          return (
+                            <td key={dayIndex} className="p-2 text-center">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="10"
+                                value={currentValue}
+                                onChange={(e) => handleRequiredStaffChange(dayName, timeSlot.id, parseInt(e.target.value) || 0)}
+                                className="w-16 text-center"
+                                disabled={isSaving}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
                     </tbody>
                   </table>
                 </div>
@@ -455,8 +454,6 @@ export default function StoreSettingsPage() {
                     <li>• 0を設定すると該当時間帯は営業していないことを表します</li>
                   </ul>
                 </div>
-                </>
-                )}
               </CardContent>
             </Card>
 
@@ -556,6 +553,7 @@ export default function StoreSettingsPage() {
                     </ul>
                   </div>
                 </div>
+                )}
               </CardContent>
             </Card>
 

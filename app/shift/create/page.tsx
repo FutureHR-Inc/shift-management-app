@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import type { Shift, ShiftPattern, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal } from '@/lib/types';
+import type { Shift, ShiftPattern, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot } from '@/lib/types';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface ShiftModalData {
@@ -98,6 +98,7 @@ function ShiftCreatePageInner() {
   const [shiftPatterns, setShiftPatterns] = useState<ShiftPattern[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [approvedTimeOffRequests, setApprovedTimeOffRequests] = useState<TimeOffRequest[]>([]);
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   
   // UI state
   const [selectedStore, setSelectedStore] = useState('');
@@ -197,6 +198,19 @@ function ShiftCreatePageInner() {
       return patterns;
     } catch (error) {
       console.error('Error fetching shift patterns:', error);
+      throw error;
+    }
+  };
+
+  const fetchTimeSlots = async (storeId: string) => {
+    try {
+      const response = await fetch(`/api/time-slots?store_id=${storeId}`);
+      if (!response.ok) throw new Error('時間帯データの取得に失敗しました');
+      const result = await response.json();
+      
+      return result.data || [];
+    } catch (error) {
+      console.error('Error fetching time slots:', error);
       throw error;
     }
   };
@@ -328,6 +342,22 @@ function ShiftCreatePageInner() {
     loadInitialData();
   }, [searchParams]);
 
+  // 店舗変更時に時間帯データを取得
+  useEffect(() => {
+    if (selectedStore) {
+      const loadTimeSlots = async () => {
+        try {
+          const timeSlotsData = await fetchTimeSlots(selectedStore);
+          setTimeSlots(timeSlotsData);
+        } catch (error) {
+          setError(error instanceof Error ? error.message : '時間帯データの読み込みに失敗しました');
+        }
+      };
+
+      loadTimeSlots();
+    }
+  }, [selectedStore]);
+
   // 選択された店舗または週が変更された時にシフトデータを取得
   useEffect(() => {
     if (selectedStore && selectedWeek) {
@@ -409,11 +439,7 @@ function ShiftCreatePageInner() {
   const displayDates = getDisplayDates(selectedWeek, viewMode);
   const selectedStoreData = stores.find(store => store.id === selectedStore);
 
-  const timeSlots = [
-    { id: 'morning', name: 'モーニング', time: '8:00-11:00' },
-    { id: 'lunch', name: 'ランチ', time: '11:00-16:00' },
-    { id: 'evening', name: 'イブニング', time: '16:00-22:00' },
-  ];
+
 
   // 必要人数を取得
   const getRequiredStaff = (dayIndex: number, timeSlot: string) => {
@@ -464,18 +490,14 @@ function ShiftCreatePageInner() {
         const patternStartMinutes = patternStartTime[0] * 60 + patternStartTime[1];
         const patternEndMinutes = patternEndTime[0] * 60 + patternEndTime[1];
 
-        // 時間帯の範囲定義
-        const slotTimeRanges = {
-          morning: { start: [8, 0], end: [11, 0] },
-          lunch: { start: [11, 0], end: [16, 0] },
-          evening: { start: [16, 0], end: [22, 0] }
-        };
+        // 動的な時間帯の範囲定義
+        const currentTimeSlot = timeSlots.find(ts => ts.id === timeSlot);
+        if (!currentTimeSlot) return false;
 
-        const range = slotTimeRanges[timeSlot as keyof typeof slotTimeRanges];
-        if (!range) return false;
-
-        const slotStartMinutes = range.start[0] * 60 + range.start[1];
-        const slotEndMinutes = range.end[0] * 60 + range.end[1];
+        const [slotStartHour, slotStartMin] = currentTimeSlot.start_time.split(':').map(Number);
+        const [slotEndHour, slotEndMin] = currentTimeSlot.end_time.split(':').map(Number);
+        const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+        const slotEndMinutes = slotEndHour * 60 + slotEndMin;
 
         // 時間範囲の重複判定
         // シフトパターンの開始時間が時間帯の終了時間より前で、
@@ -1497,8 +1519,21 @@ function ShiftCreatePageInner() {
           <CardHeader>
             <CardTitle>{selectedStoreData?.name} - シフト表</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="mb-4 p-3 bg-yellow-50 rounded-xl">
+                      <CardContent>
+              {timeSlots.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-lg font-medium mb-2">時間帯が設定されていません</p>
+                  <p className="text-sm mb-4">シフトを作成するには、まず店舗設定で時間帯を追加してください</p>
+                  <Button onClick={() => window.location.href = '/settings/store'}>
+                    店舗設定へ
+                  </Button>
+                </div>
+              ) : (
+                <>
+              <div className="mb-4 p-3 bg-yellow-50 rounded-xl">
               <h4 className="font-medium text-yellow-900 mb-1">操作方法</h4>
               <p className="text-sm text-yellow-800">
                 各セルをクリックしてシフトを追加・編集できます。色分け：🔴不足 / 🟢適正 / 🔵過剰
@@ -1535,7 +1570,7 @@ function ShiftCreatePageInner() {
                     <tr key={timeSlot.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="p-3 bg-gray-50 sticky left-0 z-10">
                         <div className="font-medium text-gray-900">{timeSlot.name}</div>
-                        <div className="text-xs text-gray-500">{timeSlot.time}</div>
+                                                  <div className="text-xs text-gray-500">{timeSlot.start_time}-{timeSlot.end_time}</div>
                       </td>
                       {displayDates.map((date, dayIndex) => {
                         try {
@@ -1693,6 +1728,8 @@ function ShiftCreatePageInner() {
                 </tbody>
               </table>
             </div>
+            </>
+            )}
           </CardContent>
         </Card>
 
@@ -1755,8 +1792,10 @@ function ShiftCreatePageInner() {
                     })}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {timeSlots.find(ts => ts.id === modalData.timeSlot)?.name} 
-                    ({timeSlots.find(ts => ts.id === modalData.timeSlot)?.time})
+                    {(() => {
+                      const slot = timeSlots.find(ts => ts.id === modalData.timeSlot);
+                      return slot ? `${slot.name} (${slot.start_time}-${slot.end_time})` : '';
+                    })()}
                   </p>
                 </div>
 

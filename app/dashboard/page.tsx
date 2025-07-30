@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
 import { supabase } from '@/lib/supabase';
-import { DatabaseUser, DatabaseEmergencyRequest } from '@/lib/types';
+import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot } from '@/lib/types';
 
 // ダッシュボード専用の型定義
 interface DashboardStats {
@@ -85,6 +85,8 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<DatabaseUser[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [shiftPatterns, setShiftPatterns] = useState<DashboardShiftPattern[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [timeSlots, setTimeSlots] = useState<{ [storeId: string]: TimeSlot[] }>({});
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   
@@ -147,7 +149,7 @@ export default function DashboardPage() {
       });
 
       // 時間帯別の枠判定を行うヘルパー関数
-      const getTimeSlotForPattern = (patternId: string): string | null => {
+      const getTimeSlotForPattern = (patternId: string, storeId: string): string | null => {
         const pattern = (shiftPatternsData as DashboardShiftPattern[])?.find(p => p.id === patternId);
         if (!pattern) return null;
 
@@ -156,10 +158,18 @@ export default function DashboardPage() {
 
         const startMinutes = startTime[0] * 60 + startTime[1];
 
-        // 時間帯の判定（開始時間ベース）
-        if (startMinutes >= 480 && startMinutes < 660) return 'morning';   // 8:00-11:00
-        if (startMinutes >= 660 && startMinutes < 960) return 'lunch';     // 11:00-16:00
-        if (startMinutes >= 960 && startMinutes < 1320) return 'evening';  // 16:00-22:00
+        // 動的時間帯の判定（該当店舗の時間帯設定を使用）
+        const storeTimeSlots = timeSlots[storeId] || [];
+        for (const slot of storeTimeSlots) {
+          const [slotStartHour, slotStartMin] = slot.start_time.split(':').map(Number);
+          const [slotEndHour, slotEndMin] = slot.end_time.split(':').map(Number);
+          const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+          const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+          
+          if (startMinutes >= slotStartMinutes && startMinutes < slotEndMinutes) {
+            return slot.id;
+          }
+        }
         
         return null;
       };
@@ -174,20 +184,20 @@ export default function DashboardPage() {
         const todayDayName = dayNames[today.getDay()];
     
         // 各時間帯の必要人数を取得
-        const timeSlots = ['morning', 'lunch', 'evening'];
+        const storeTimeSlots = timeSlots[store.id] || [];
         let totalRequired = 0;
         let allSlotsSufficient = true;
         
         if (store.required_staff && store.required_staff[todayDayName]) {
           const dayRequiredStaff = store.required_staff[todayDayName];
           
-          timeSlots.forEach(slot => {
-            const required = dayRequiredStaff[slot] && typeof dayRequiredStaff[slot] === 'number' 
-              ? dayRequiredStaff[slot] : 0;
+          storeTimeSlots.forEach(slot => {
+            const required = dayRequiredStaff[slot.id] && typeof dayRequiredStaff[slot.id] === 'number' 
+              ? dayRequiredStaff[slot.id] : 0;
             totalRequired += required;
             
             // この時間帯に配置されているシフト数を計算
-            const slotShifts = storeShifts.filter(shift => getTimeSlotForPattern(shift.pattern_id) === slot);
+            const slotShifts = storeShifts.filter(shift => getTimeSlotForPattern(shift.pattern_id, store.id) === slot.id);
             
             // この時間帯が不足している場合
             if (slotShifts.length < required) {

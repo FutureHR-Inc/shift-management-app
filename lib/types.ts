@@ -190,4 +190,24 @@ export interface ApiError {
 
 // フォームイベント用の型定義
 export type FormEvent = React.FormEvent<HTMLFormElement>;
-export type ChangeEvent = React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>; 
+export type ChangeEvent = React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>;
+
+// 時間帯管理用の型定義
+export interface TimeSlot {
+  id: string;
+  store_id: string;
+  name: string;
+  start_time: string; // "HH:MM" format
+  end_time: string;   // "HH:MM" format
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// 時間帯作成・更新用の型
+export interface TimeSlotInput {
+  name: string;
+  start_time: string;
+  end_time: string;
+  display_order?: number;
+} 
