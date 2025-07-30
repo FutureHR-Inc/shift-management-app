@@ -172,7 +172,7 @@ export default function DashboardPage() {
     const today = new Date();
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayDayName = dayNames[today.getDay()];
-        
+    
         // 各時間帯の必要人数を取得
         const timeSlots = ['morning', 'lunch', 'evening'];
         let totalRequired = 0;
@@ -192,7 +192,7 @@ export default function DashboardPage() {
             // この時間帯が不足している場合
             if (slotShifts.length < required) {
               allSlotsSufficient = false;
-            }
+    }
           });
         }
         
@@ -305,22 +305,22 @@ export default function DashboardPage() {
               <CardTitle>今日の店舗別出勤状況</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+                <div className="space-y-4">
                 {storeStaffing.map((staffing, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">{staffing.store}</p>
-                      <p className="text-sm text-gray-500">
-                        {staffing.scheduled} / {staffing.required} 人
-                      </p>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      <div>
+                        <p className="font-medium text-gray-900">{staffing.store}</p>
+                        <p className="text-sm text-gray-500">
+                          {staffing.scheduled} / {staffing.required} 人
+                        </p>
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                       staffing.status === 'sufficient'
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
                       }`}>
                       {staffing.status === 'sufficient' ? '充足' : '不足'}
-                    </div>
+                      </div>
                     </div>
                   ))}
               </div>
@@ -343,13 +343,13 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
+                <Button
+                  variant="ghost"
+                  size="sm"
                 onClick={() => router.push('/shift/create')}
-              >
+                >
                 募集作成
-              </Button>
+                </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -491,25 +491,25 @@ export default function DashboardPage() {
                   })
                 ) : (
                   <p className="text-gray-500 text-center py-4">代打募集はありません</p>
-                )}
-              </div>
+                  )}
+                </div>
             </CardContent>
           </Card>
         </div>
 
         {/* 最近の希望休申請 */}
-        <Card>
+          <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>最近の希望休申請</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
+                <Button
+                  variant="ghost"
+                  size="sm"
               onClick={() => router.push('/requests')}
-            >
+                >
               すべて表示
-            </Button>
-          </CardHeader>
-          <CardContent>
+                </Button>
+            </CardHeader>
+            <CardContent>
             <div className="space-y-3">
               {recentRequests.length > 0 ? (
                 recentRequests.map((request) => {
@@ -519,14 +519,14 @@ export default function DashboardPage() {
                       <div>
                         <p className="font-medium text-gray-900">{user?.name || '不明なユーザー'}</p>
                         <p className="text-sm text-gray-500">{request.date} - {request.reason}</p>
-                      </div>
+                </div>
                       <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                         request.status === 'pending' 
                           ? 'bg-yellow-100 text-yellow-800'
                           : request.status === 'approved'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
-                      }`}>
+                          }`}>
                         {request.status === 'pending' ? '保留' : 
                          request.status === 'approved' ? '承認' : '拒否'}
                       </div>
@@ -535,10 +535,10 @@ export default function DashboardPage() {
                 })
               ) : (
                 <p className="text-gray-500 text-center py-4">申請はありません</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  )}
+                </div>
+            </CardContent>
+          </Card>
 
         {/* クイックアクション */}
         <Card>

@@ -2144,7 +2144,7 @@ function ShiftCreatePageInner() {
       </div>
     </AuthenticatedLayout>
   );
-}
+} 
 
 export default function ShiftCreatePage() {
   return (
