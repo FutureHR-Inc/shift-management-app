@@ -139,8 +139,11 @@ export type Database = {
           user_id: string
           store_id: string
           date: string
-          pattern_id: string
+          pattern_id?: string | null // 旧カラム（段階的削除予定）
+          time_slot_id?: string | null // 新カラム
           status: 'draft' | 'confirmed' | 'completed'
+          custom_start_time?: string | null // カスタム開始時間
+          custom_end_time?: string | null   // カスタム終了時間
           notes: string | null
           created_at: string
           updated_at: string
@@ -150,8 +153,11 @@ export type Database = {
           user_id: string
           store_id: string
           date: string
-          pattern_id: string
+          pattern_id?: string | null
+          time_slot_id?: string | null
           status?: 'draft' | 'confirmed' | 'completed'
+          custom_start_time?: string | null
+          custom_end_time?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -161,8 +167,11 @@ export type Database = {
           user_id?: string
           store_id?: string
           date?: string
-          pattern_id?: string
+          pattern_id?: string | null
+          time_slot_id?: string | null
           status?: 'draft' | 'confirmed' | 'completed'
+          custom_start_time?: string | null
+          custom_end_time?: string | null
           notes?: string | null
           updated_at?: string
         }
@@ -204,7 +213,8 @@ export type Database = {
           original_user_id: string
           store_id: string
           date: string
-          shift_pattern_id: string
+          shift_pattern_id?: string | null // 旧カラム（段階的削除予定）
+          time_slot_id?: string | null // 新カラム
           reason: string
           status: 'open' | 'filled' | 'cancelled'
           created_at: string
@@ -214,7 +224,8 @@ export type Database = {
           original_user_id: string
           store_id: string
           date: string
-          shift_pattern_id: string
+          shift_pattern_id?: string | null
+          time_slot_id?: string | null
           reason: string
           status?: 'open' | 'filled' | 'cancelled'
           created_at?: string
@@ -224,7 +235,8 @@ export type Database = {
           original_user_id?: string
           store_id?: string
           date?: string
-          shift_pattern_id?: string
+          shift_pattern_id?: string | null
+          time_slot_id?: string | null
           reason?: string
           status?: 'open' | 'filled' | 'cancelled'
         }

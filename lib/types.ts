@@ -36,8 +36,10 @@ export interface Shift {
   userId: string;
   storeId: string;
   date: string;
-  patternId: string;
+  timeSlotId: string; // pattern_id から time_slot_id に変更
   status: 'draft' | 'confirmed' | 'completed';
+  customStartTime?: string; // カスタム開始時間 "HH:MM"
+  customEndTime?: string;   // カスタム終了時間 "HH:MM"
   notes?: string;
 }
 
@@ -84,14 +86,16 @@ export interface DatabaseShift {
   user_id: string;
   store_id: string;
   date: string;
-  shift_pattern_id: string;
+  time_slot_id: string; // shift_pattern_id から time_slot_id に変更
   status: 'draft' | 'confirmed' | 'completed';
+  custom_start_time?: string; // カスタム開始時間
+  custom_end_time?: string;   // カスタム終了時間
   notes?: string;
   created_at: string;
   updated_at: string;
   users?: DatabaseUser;
   stores?: DatabaseStore;
-  shift_patterns?: ShiftPattern;
+  time_slots?: TimeSlot; // shift_patterns から time_slots に変更
 }
 
 // データベースから取得する店舗情報
@@ -108,20 +112,22 @@ export interface DatabaseStore {
   updated_at: string;
 }
 
-// データベースから取得する緊急要請情報
+// データベースから取得する緊急募集リクエスト詳細情報
 export interface DatabaseEmergencyRequest {
   id: string;
   original_user_id: string;
   store_id: string;
   date: string;
-  shift_pattern_id: string;
+  shift_pattern_id?: string; // 旧フィールド（移行期間のため）
+  time_slot_id?: string; // 新フィールド
   reason: string;
   status: 'open' | 'filled' | 'cancelled';
   created_at: string;
   emergency_volunteers?: EmergencyVolunteer[];
   users?: DatabaseUser;
   stores?: DatabaseStore;
-  shift_patterns?: ShiftPattern;
+  shift_patterns?: ShiftPattern; // 旧フィールド
+  time_slots?: TimeSlot; // 新フィールド
 }
 
 // ダッシュボード用の型定義

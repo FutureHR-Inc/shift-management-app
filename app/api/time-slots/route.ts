@@ -32,7 +32,7 @@ function normalizeTimeFormat(timeString: string): string {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const storeId = searchParams.get('store_id');
+    const storeId = searchParams.get('store_id') || searchParams.get('storeId');
 
     if (!storeId) {
       return NextResponse.json(

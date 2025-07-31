@@ -1,323 +1,242 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// GET - シフト取得
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('user_id');
-    const storeId = searchParams.get('store_id');
-    const dateFrom = searchParams.get('date_from');
-    const dateTo = searchParams.get('date_to');
-    const status = searchParams.get('status');
+// GET: シフト一覧取得
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const storeId = searchParams.get('storeId');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
 
+  if (!storeId || !startDate) {
+    return NextResponse.json(
+      { error: 'storeIdとstartDateは必須です' }, 
+      { status: 400 }
+    );
+  }
+
+  try {
     let query = supabase
       .from('shifts')
       .select(`
         *,
-        users(id, name, role, skill_level),
+        users(id, name, email, phone, role, skill_level, hourly_wage),
         stores(id, name),
-        shift_patterns(id, name, start_time, end_time, color, break_time)
-      `);
+        time_slots(id, name, start_time, end_time)
+      `)
+      .eq('store_id', storeId)
+      .gte('date', startDate);
 
-    // フィルタリング条件を適用
-    if (userId) {
-      query = query.eq('user_id', userId);
+    if (endDate) {
+      query = query.lte('date', endDate);
     }
 
-    if (storeId) {
-      query = query.eq('store_id', storeId);
-    }
-
-    if (dateFrom) {
-      query = query.gte('date', dateFrom);
-    }
-
-    if (dateTo) {
-      query = query.lte('date', dateTo);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    query = query.order('date').order('created_at');
+    query = query.order('date', { ascending: true });
 
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching shifts:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('Database error:', error);
+      return NextResponse.json(
+        { error: 'シフトデータの取得に失敗しました' }, 
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json({ data: data || [] });
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('API error:', error);
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' }, 
+      { status: 500 }
+    );
   }
 }
 
-// POST - 新規シフト作成
-export async function POST(request: NextRequest) {
+// POST: 新しいシフト作成
+export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { user_id, store_id, date, pattern_id, status, notes } = body;
+    const {
+      user_id,
+      store_id,
+      date,
+      pattern_id, // 旧フィールド（移行期間）
+      time_slot_id, // 新フィールド
+      custom_start_time,
+      custom_end_time,
+      status = 'draft',
+      notes
+    } = await request.json();
 
-    // バリデーション
-    if (!user_id || !store_id || !date || !pattern_id) {
+    // 必須フィールドの検証
+    if (!user_id || !store_id || !date) {
       return NextResponse.json(
-        { error: 'Required fields: user_id, store_id, date, pattern_id' },
+        { error: 'user_id, store_id, dateは必須です' }, 
         { status: 400 }
       );
     }
 
-    // 日付の妥当性チェック
-    const shiftDate = new Date(date);
-    if (isNaN(shiftDate.getTime())) {
+    // time_slot_id または pattern_id のいずれかが必要
+    const finalTimeSlotId = time_slot_id || pattern_id;
+    if (!finalTimeSlotId) {
       return NextResponse.json(
-        { error: 'Invalid date format' },
+        { error: 'time_slot_idまたはpattern_idが必要です' }, 
         { status: 400 }
       );
     }
 
-    // ステータスの有効性チェック
-    if (status && !['draft', 'confirmed', 'completed'].includes(status)) {
+    // カスタム時間のバリデーション
+    if (custom_start_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
       return NextResponse.json(
-        { error: 'Status must be "draft", "confirmed", or "completed"' },
+        { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    // 重複チェック（同じユーザー・日付）- 確定済みシフトの優先度を考慮
-    const { data: existingShifts } = await supabase
-      .from('shifts')
-      .select(`
-        id,
-        store_id,
-        status,
-        stores(id, name)
-      `)
-      .eq('user_id', user_id)
-      .eq('date', date);
-
-    if (existingShifts && existingShifts.length > 0) {
-      // 確定済みシフトがある場合は完全に阻止
-      const confirmedShift = existingShifts.find(shift => shift.status === 'confirmed');
-      if (confirmedShift) {
-        const storeData = confirmedShift.stores as { name?: string } | null;
+    if (custom_end_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
       return NextResponse.json(
-        { 
-            error: 'Cannot create shift: User has a confirmed shift on this date',
-          conflictingStore: storeData?.name || '不明な店舗',
-            conflictingStoreId: confirmedShift.store_id,
-            conflictType: 'confirmed'
-        },
-        { status: 409 }
+        { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
+        { status: 400 }
       );
-      }
+    }
 
-      // 新規シフトが確定の場合、既存の下書きシフトを削除
-      if (status === 'confirmed') {
-        const draftShifts = existingShifts.filter(shift => shift.status === 'draft');
-        if (draftShifts.length > 0) {
-          // 下書きシフトを削除
-          const { error: deleteError } = await supabase
-            .from('shifts')
-            .delete()
-            .in('id', draftShifts.map(shift => shift.id));
-
-          if (deleteError) {
-            console.error('Error deleting draft shifts:', deleteError);
-            return NextResponse.json({ error: 'Failed to replace draft shifts' }, { status: 500 });
-          }
-
-          console.log(`Deleted ${draftShifts.length} draft shifts for user ${user_id} on ${date}`);
-        }
-      } else {
-        // 新規シフトが下書きの場合、既存の下書きシフトがあれば阻止
-        const draftShift = existingShifts[0];
-        const storeData = draftShift.stores as { name?: string } | null;
+    // カスタム時間が設定されている場合の論理チェック
+    if (custom_start_time && custom_end_time) {
+      const startMinutes = parseTimeToMinutes(custom_start_time);
+      const endMinutes = parseTimeToMinutes(custom_end_time);
+      
+      if (startMinutes >= endMinutes) {
         return NextResponse.json(
-          { 
-            error: 'Cannot create shift: User already has a shift on this date',
-            conflictingStore: storeData?.name || '不明な店舗',
-            conflictingStoreId: draftShift.store_id,
-            conflictType: 'draft'
-          },
-          { status: 409 }
+          { error: '終了時間は開始時間より後である必要があります' }, 
+          { status: 400 }
         );
       }
     }
 
+    // データベースに挿入
     const { data, error } = await supabase
       .from('shifts')
       .insert({
         user_id,
         store_id,
         date,
-        pattern_id,
-        status: status || 'draft',
-        notes: notes ? notes.trim() : null
+        time_slot_id: finalTimeSlotId, // time_slot_idを使用
+        custom_start_time,
+        custom_end_time,
+        status,
+        notes
       })
-      .select(`
-        *,
-        users(id, name, role, skill_level),
-        stores(id, name),
-        shift_patterns(id, name, start_time, end_time, color, break_time)
-      `)
+      .select()
       .single();
 
     if (error) {
-      console.error('Error creating shift:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('Database error:', error);
+      return NextResponse.json(
+        { error: 'シフトの作成に失敗しました' }, 
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('API error:', error);
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' }, 
+      { status: 500 }
+    );
   }
 }
 
-// PUT - シフト更新
-export async function PUT(request: NextRequest) {
+// PUT: シフトの更新
+export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id, user_id, store_id, date, pattern_id, status, notes } = body;
+    const {
+      id,
+      user_id,
+      store_id,
+      date,
+      pattern_id, // 旧フィールド（移行期間）
+      time_slot_id, // 新フィールド
+      custom_start_time,
+      custom_end_time,
+      status,
+      notes
+    } = await request.json();
 
     if (!id) {
-      return NextResponse.json({ error: 'Shift ID is required' }, { status: 400 });
-    }
-
-    // バリデーション
-    if (!user_id || !store_id || !date || !pattern_id) {
       return NextResponse.json(
-        { error: 'Required fields: user_id, store_id, date, pattern_id' },
+        { error: 'idは必須です' }, 
         { status: 400 }
       );
     }
 
-    // 日付の妥当性チェック
-    const shiftDate = new Date(date);
-    if (isNaN(shiftDate.getTime())) {
+    // time_slot_id または pattern_id のいずれかが必要（更新の場合）
+    const finalTimeSlotId = time_slot_id || pattern_id;
+
+    // カスタム時間のバリデーション
+    if (custom_start_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
       return NextResponse.json(
-        { error: 'Invalid date format' },
+        { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    // ステータスの有効性チェック
-    if (status && !['draft', 'confirmed', 'completed'].includes(status)) {
+    if (custom_end_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
       return NextResponse.json(
-        { error: 'Status must be "draft", "confirmed", or "completed"' },
+        { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    // 現在のシフトを取得
-    const { data: currentShift, error: currentShiftError } = await supabase
-      .from('shifts')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (currentShiftError) {
-      return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
-    }
-
-    // 重複チェック（ユーザー・日付・店舗が変更される場合）
-    if (currentShift.user_id !== user_id || currentShift.date !== date || currentShift.store_id !== store_id) {
-      const { data: conflictingShifts } = await supabase
-        .from('shifts')
-        .select(`
-          id,
-          store_id,
-          status,
-          stores(id, name)
-        `)
-        .eq('user_id', user_id)
-        .eq('date', date)
-        .neq('id', id); // 現在のシフトは除外
-
-      if (conflictingShifts && conflictingShifts.length > 0) {
-        // 確定済みシフトがある場合は完全に阻止
-        const confirmedConflict = conflictingShifts.find(shift => shift.status === 'confirmed');
-        if (confirmedConflict) {
-          const storeData = confirmedConflict.stores as { name?: string } | null;
-          return NextResponse.json(
-            { 
-              error: 'Cannot modify shift: User has a confirmed shift on this date',
-              conflictingStore: storeData?.name || '不明な店舗',
-              conflictingStoreId: confirmedConflict.store_id,
-              conflictType: 'confirmed'
-            },
-            { status: 409 }
-          );
-        }
-
-        // 更新シフトが確定の場合、既存の下書きシフトを削除
-        if (status === 'confirmed') {
-          const draftConflicts = conflictingShifts.filter(shift => shift.status === 'draft');
-          if (draftConflicts.length > 0) {
-            // 下書きシフトを削除
-            const { error: deleteError } = await supabase
-              .from('shifts')
-              .delete()
-              .in('id', draftConflicts.map(shift => shift.id));
-
-            if (deleteError) {
-              console.error('Error deleting conflicting draft shifts:', deleteError);
-              return NextResponse.json({ error: 'Failed to replace draft shifts' }, { status: 500 });
-            }
-
-            console.log(`Deleted ${draftConflicts.length} conflicting draft shifts for user ${user_id} on ${date}`);
-          }
-        } else {
-          // 更新シフトが下書きの場合、既存の下書きシフトがあれば阻止
-          const draftConflict = conflictingShifts[0];
-          const storeData = draftConflict.stores as { name?: string } | null;
-          return NextResponse.json(
-            { 
-              error: 'Cannot modify shift: User already has a shift on this date',
-              conflictingStore: storeData?.name || '不明な店舗',
-              conflictingStoreId: draftConflict.store_id,
-              conflictType: 'draft'
-            },
-            { status: 409 }
-          );
-        }
+    // カスタム時間が設定されている場合の論理チェック
+    if (custom_start_time && custom_end_time) {
+      const startMinutes = parseTimeToMinutes(custom_start_time);
+      const endMinutes = parseTimeToMinutes(custom_end_time);
+      
+      if (startMinutes >= endMinutes) {
+        return NextResponse.json(
+          { error: '終了時間は開始時間より後である必要があります' }, 
+          { status: 400 }
+        );
       }
     }
 
+    // 更新データオブジェクトを構築
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (user_id !== undefined) updateData.user_id = user_id;
+    if (store_id !== undefined) updateData.store_id = store_id;
+    if (date !== undefined) updateData.date = date;
+    if (finalTimeSlotId !== undefined) updateData.time_slot_id = finalTimeSlotId; // time_slot_idを使用
+    if (custom_start_time !== undefined) updateData.custom_start_time = custom_start_time;
+    if (custom_end_time !== undefined) updateData.custom_end_time = custom_end_time;
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+
     const { data, error } = await supabase
       .from('shifts')
-      .update({
-        user_id,
-        store_id,
-        date,
-        pattern_id,
-        status,
-        notes: notes || null,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
-      .select(`
-        *,
-        users(id, name, role, skill_level),
-        stores(id, name),
-        shift_patterns(id, name, start_time, end_time, color, break_time)
-      `)
+      .select()
       .single();
 
     if (error) {
-      console.error('Error updating shift:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('Database error:', error);
+      return NextResponse.json(
+        { error: 'シフトの更新に失敗しました' }, 
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json({ data });
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('API error:', error);
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' }, 
+      { status: 500 }
+    );
   }
 }
 
@@ -435,4 +354,10 @@ export async function PATCH(request: NextRequest) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+} 
+
+// ヘルパー関数: 時間文字列を分に変換
+function parseTimeToMinutes(timeString: string): number {
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return hours * 60 + minutes;
 } 
