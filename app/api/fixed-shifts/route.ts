@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import type { DatabaseFixedShift } from '@/lib/types';
 
 // 固定シフト取得
 export async function GET(request: NextRequest) {

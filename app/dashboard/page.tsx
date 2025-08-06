@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
 import { supabase } from '@/lib/supabase';
-import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot, DatabaseShiftRequest } from '@/lib/types';
+import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot } from '@/lib/types';
 import { getSubmissionPeriods } from '@/lib/utils';
 
 // ダッシュボード専用の型定義

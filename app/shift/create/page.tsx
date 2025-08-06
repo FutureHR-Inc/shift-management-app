@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
 import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
-import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot } from '@/lib/types';
+import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot, DatabaseFixedShift } from '@/lib/types';
 
 interface ShiftModalData {
   date: string;
@@ -101,7 +101,7 @@ function ShiftCreatePageInner() {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]); // shiftPatterns から timeSlots に変更
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [approvedTimeOffRequests, setApprovedTimeOffRequests] = useState<TimeOffRequest[]>([]);
-  const [fixedShifts, setFixedShifts] = useState<any[]>([]);
+  const [fixedShifts, setFixedShifts] = useState<DatabaseFixedShift[]>([]);
   
   // UI state
   const [selectedStore, setSelectedStore] = useState('');
@@ -868,7 +868,7 @@ function ShiftCreatePageInner() {
         !isNaN(start[0]) && !isNaN(start[1]) && 
         !isNaN(end[0]) && !isNaN(end[1])) {
       
-      let startMinutes = start[0] * 60 + start[1];
+      const startMinutes = start[0] * 60 + start[1];
       let endMinutes = end[0] * 60 + end[1];
       
       // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
@@ -932,7 +932,7 @@ function ShiftCreatePageInner() {
       }
 
       // 期間内シフトのフィルタリング
-      let periodShifts: any[] = [];
+      let periodShifts: Shift[] = [];
       try {
         periodShifts = shifts.filter(shift => {
           try {
@@ -2320,7 +2320,7 @@ function ShiftCreatePageInner() {
                           const start = startTime.split(':').map(Number);
                           const end = endTime.split(':').map(Number);
                           
-                          let startMinutes = start[0] * 60 + start[1];
+                          const startMinutes = start[0] * 60 + start[1];
                           let endMinutes = end[0] * 60 + end[1];
                           
                           // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
