@@ -267,11 +267,11 @@ const Navigation = () => {
               </svg>
             </button>
           </div>
+          </div>
         </div>
-      </div>
 
       {/* モバイルメニュー - 改善されたレイアウト */}
-      {isMobileMenuOpen && (
+        {isMobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white shadow-lg">
           {/* ユーザー情報セクション */}
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
@@ -292,17 +292,17 @@ const Navigation = () => {
 
           {/* ナビゲーションメニュー */}
           <div className="py-2">
-            {navItems.map((item) => (
-              <Link
+              {navItems.map((item) => (
+                <Link
                 key={item.href}
-                href={item.href}
+                  href={item.href}
                 className={`flex items-center space-x-3 px-4 py-3 text-base font-medium transition-colors duration-200 min-h-[52px] relative ${
-                  pathname === item.href
+                    pathname === item.href
                     ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500'
                     : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50 active:bg-gray-100'
                 }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
                 <div className="flex-shrink-0 relative">
                   {renderIcon(item.icon)}
                   <NotificationBadge count={item.badge} />
@@ -321,18 +321,18 @@ const Navigation = () => {
 
           {/* ログアウトボタン */}
           <div className="border-t border-gray-200 py-2">
-            <button
-              onClick={handleLogout}
+                <button
+                  onClick={handleLogout}
               className="flex items-center space-x-3 px-4 py-3 text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors duration-200 w-full min-h-[52px]"
-            >
+                >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>ログアウト</span>
-            </button>
+                </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </nav>
   );
 };

@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 // GET: シフト一覧取得
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId') || searchParams.get('store_id');
   const userId = searchParams.get('user_id') || searchParams.get('userId');
   const startDate = searchParams.get('startDate') || searchParams.get('date_from');

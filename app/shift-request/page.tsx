@@ -63,30 +63,129 @@ export default function ShiftRequestPage() {
   const initializePage = async () => {
     try {
       setLoading(true);
-      
-      // ユーザー情報と所属店舗を取得
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      
-      const { data: userStoreData } = await fetch(`/api/user-stores/flexible?userId=${user.id}`).then(res => res.json());
-      setUserStores(userStoreData || []);
-      
-      if (userStoreData && userStoreData.length > 0) {
-        setSelectedStore(userStoreData[0].stores.id);
+      setError(null);
+
+      // ユーザー情報を安全に取得
+      const userInfo = localStorage.getItem('currentUser');
+      if (!userInfo) {
+        setError('ユーザー情報が見つかりません。再ログインしてください。');
+        return;
       }
 
-      // 提出期間を設定
+      let user;
+      try {
+        user = JSON.parse(userInfo);
+      } catch (parseError) {
+        console.error('User info parse error:', parseError);
+        setError('ユーザー情報の解析に失敗しました。再ログインしてください。');
+        return;
+      }
+
+      if (!user || !user.id) {
+        setError('ユーザーIDが見つかりません。再ログインしてください。');
+        return;
+      }
+
+      console.log('User info:', user); // デバッグログ
+
+      // 提出期間を生成
       const submissionPeriods = getSubmissionPeriods();
       setPeriods(submissionPeriods);
-      
-      // 提出可能な最初の期間を選択
-      const openPeriod = submissionPeriods.find(p => p.isSubmissionOpen);
-      if (openPeriod) {
-        setSelectedPeriod(openPeriod);
+
+      // デフォルトで最初の提出可能期間を選択
+      const defaultPeriod = submissionPeriods.find(p => p.isSubmissionOpen);
+      if (defaultPeriod) {
+        setSelectedPeriod(defaultPeriod);
+      }
+
+      // ユーザーの所属店舗を取得
+      try {
+        // まずユーザー情報から店舗を確認
+        if (user.stores && user.stores.length > 0) {
+          // 店舗情報を取得
+          const storesResponse = await fetch('/api/stores');
+          if (storesResponse.ok) {
+            const storesResult = await storesResponse.json();
+            const allStores = storesResult.data || [];
+            
+            // ユーザーが所属する店舗のリストを作成
+            const userStoreList = user.stores.map((storeId: string) => {
+              const store = allStores.find((s: any) => s.id === storeId);
+              return {
+                store_id: storeId,
+                stores: { id: storeId, name: store?.name || storeId }
+              };
+            });
+            
+            setUserStores(userStoreList);
+
+            // デフォルトで最初の店舗を選択
+            if (userStoreList.length > 0) {
+              setSelectedStore(userStoreList[0].store_id);
+            }
+          } else {
+            // 店舗名取得に失敗した場合は、IDのみで進行
+            const userStoreList = user.stores.map((storeId: string) => ({
+              store_id: storeId,
+              stores: { id: storeId, name: storeId }
+            }));
+            
+            setUserStores(userStoreList);
+            if (userStoreList.length > 0) {
+              setSelectedStore(userStoreList[0].store_id);
+            }
+          }
+        } else {
+          // ユーザーのstores情報がない場合、APIから取得を試みる
+          console.log('User stores not found in localStorage, fetching from API...');
+          const userResponse = await fetch(`/api/users?id=${user.id}`);
+          if (userResponse.ok) {
+            const userResult = await userResponse.json();
+            const userData = userResult.data;
+            
+            if (userData && userData.length > 0) {
+              const userInfo = userData[0];
+              
+              if (userInfo.stores && userInfo.stores.length > 0) {
+                // 店舗情報を取得
+                const storesResponse = await fetch('/api/stores');
+                if (storesResponse.ok) {
+                  const storesResult = await storesResponse.json();
+                  const allStores = storesResult.data || [];
+                  
+                  const userStoreList = userInfo.stores.map((storeId: string) => {
+                    const store = allStores.find((s: any) => s.id === storeId);
+                    return {
+                      store_id: storeId,
+                      stores: { id: storeId, name: store?.name || storeId }
+                    };
+                  });
+                  
+                  setUserStores(userStoreList);
+                  if (userStoreList.length > 0) {
+                    setSelectedStore(userStoreList[0].store_id);
+                  }
+                } else {
+                  setError('店舗情報の取得に失敗しました');
+                }
+              } else {
+                setError('所属店舗が設定されていません。管理者にお問い合わせください。');
+              }
+            } else {
+              setError('ユーザー情報が見つかりません');
+            }
+          } else {
+            setError('ユーザー情報の取得に失敗しました');
+          }
+        }
+      } catch (fetchError) {
+        console.error('Store fetch error:', fetchError);
+        setError('店舗情報の取得に失敗しました');
       }
 
     } catch (error) {
-      setError('初期化に失敗しました');
-      console.error('Initialization error:', error);
+      console.error('Initialize page error:', error);
+      setError('ページの初期化に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -97,62 +196,106 @@ export default function ShiftRequestPage() {
 
     try {
       setLoading(true);
+      setError(null);
 
-      // 時間帯情報を取得
-      const timeSlotsResponse = await fetch(`/api/time-slots?store_id=${selectedStore}`);
-      const timeSlotsData = await timeSlotsResponse.json();
-      setTimeSlots(timeSlotsData.data || []);
+      // ユーザー情報を安全に取得
+      const userInfo = localStorage.getItem('currentUser');
+      if (!userInfo) {
+        setError('ユーザー情報が見つかりません。再ログインしてください。');
+        return;
+      }
 
-      // 既存の提出データを取得
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const existingResponse = await fetch(
-        `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&submission_period=${selectedPeriod.id}`
-      );
-      const existingData = await existingResponse.json();
-      setExistingRequests(existingData.data || []);
+      let user;
+      try {
+        user = JSON.parse(userInfo);
+      } catch (parseError) {
+        console.error('User info parse error:', parseError);
+        setError('ユーザー情報の解析に失敗しました。再ログインしてください。');
+        return;
+      }
 
-      // 日付データを生成
+      // 選択期間の日付範囲を生成
       const dateRange = generateDateRange(selectedPeriod.startDate, selectedPeriod.endDate);
-      const dateData: DateData[] = dateRange.map(date => ({
+      const dateData = dateRange.map(date => ({
         date,
         dayOfWeek: getJapaneseDayOfWeek(date),
-        requests: existingData.data?.filter((req: DatabaseShiftRequest) => req.date === date)
-          .map((req: DatabaseShiftRequest) => ({
-            date: req.date,
-            timeSlotId: req.time_slot_id,
-            preferredStartTime: req.preferred_start_time,
-            preferredEndTime: req.preferred_end_time,
-            priority: req.priority as 1 | 2 | 3,
-            notes: req.notes || ''
-          })) || []
+        requests: []
       }));
-
       setDates(dateData);
 
+      // 時間帯を取得
+      try {
+        const timeSlotsResponse = await fetch(`/api/time-slots?store_id=${selectedStore}`);
+        if (!timeSlotsResponse.ok) {
+          throw new Error('時間帯の取得に失敗しました');
+        }
+        const timeSlotsResult = await timeSlotsResponse.json();
+        setTimeSlots(timeSlotsResult.data || []);
+      } catch (fetchError) {
+        console.error('Time slots fetch error:', fetchError);
+        setError('時間帯情報の取得に失敗しました');
+      }
+
+      // 既存の提出データを取得
+      try {
+        const existingResponse = await fetch(
+          `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&submission_period=${selectedPeriod.id}`
+        );
+        if (!existingResponse.ok) {
+          throw new Error('既存データの取得に失敗しました');
+        }
+        const existingResult = await existingResponse.json();
+        const existingData = existingResult.data || [];
+        setExistingRequests(existingData);
+
+        // 既存データを日付データに反映
+        const updatedDates = dateData.map(d => ({
+          ...d,
+          requests: existingData
+            .filter((req: DatabaseShiftRequest) => req.date === d.date)
+            .map((req: DatabaseShiftRequest) => ({
+              date: req.date,
+              timeSlotId: req.time_slot_id,
+              preferredStartTime: req.preferred_start_time,
+              preferredEndTime: req.preferred_end_time,
+              priority: req.priority as 1 | 2 | 3,
+              notes: req.notes || ''
+            }))
+        }));
+        setDates(updatedDates);
+
+      } catch (fetchError) {
+        console.error('Existing requests fetch error:', fetchError);
+        // 既存データの取得エラーは致命的ではないので、警告のみ表示
+        console.warn('既存のシフト希望データの取得に失敗しました');
+        setDates(dateData);
+      }
+
     } catch (error) {
-      setError('データの読み込みに失敗しました');
       console.error('Load period data error:', error);
+      setError('期間データの読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddRequest = (date: string) => {
-    setDates(prev => prev.map(d => 
-      d.date === date 
-        ? {
-            ...d,
-            requests: [...d.requests, {
-              date,
-              timeSlotId: null,
-              preferredStartTime: null,
-              preferredEndTime: null,
-              priority: 2,
-              notes: ''
-            }]
-          }
+    const newRequest: ShiftRequestData = {
+      date,
+      timeSlotId: null,
+      preferredStartTime: null,
+      preferredEndTime: null,
+      priority: 2, // デフォルトは「希望」
+      notes: ''
+    };
+
+    setDates(prev => prev.map(d =>
+      d.date === date
+        ? { ...d, requests: [...d.requests, newRequest] }
         : d
     ));
+
+    // 追加後、その日付を展開表示
     setExpandedDate(date);
   };
 
@@ -181,13 +324,35 @@ export default function ShiftRequestPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedPeriod || !selectedStore) return;
+    if (!selectedPeriod || !selectedStore) {
+      setError('提出期間と店舗を選択してください');
+      return;
+    }
 
     try {
       setSaving(true);
       setError(null);
 
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      // ユーザー情報を安全に取得
+      const userInfo = localStorage.getItem('currentUser');
+      if (!userInfo) {
+        setError('ユーザー情報が見つかりません。再ログインしてください。');
+        return;
+      }
+
+      let user;
+      try {
+        user = JSON.parse(userInfo);
+      } catch (parseError) {
+        console.error('User info parse error:', parseError);
+        setError('ユーザー情報の解析に失敗しました。再ログインしてください。');
+        return;
+      }
+
+      if (!user || !user.id) {
+        setError('ユーザーIDが見つかりません。再ログインしてください。');
+        return;
+      }
       
       // 全ての希望を配列に変換
       const allRequests = dates.flatMap(dateData =>
@@ -200,6 +365,12 @@ export default function ShiftRequestPage() {
           notes: req.notes
         }))
       );
+
+      // 空の希望がある場合は警告
+      if (allRequests.length === 0) {
+        setError('少なくとも1つのシフト希望を入力してください');
+        return;
+      }
 
       const response = await fetch('/api/shift-requests', {
         method: 'POST',
@@ -215,17 +386,35 @@ export default function ShiftRequestPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'シフト希望の提出に失敗しました');
+        let errorMessage = 'シフト希望の提出に失敗しました';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (jsonError) {
+          console.error('Error response parse error:', jsonError);
+          errorMessage = `サーバーエラー (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
-      const result = await response.json();
-      setSuccessMessage(result.message);
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.error('Success response parse error:', jsonError);
+        result = { message: 'シフト希望を提出しました' };
+      }
+
+      setSuccessMessage(result.message || 'シフト希望を提出しました');
       
       // 3秒後にメッセージを消す
       setTimeout(() => setSuccessMessage(null), 3000);
 
+      // 提出後、既存データを再取得
+      loadPeriodData();
+
     } catch (error) {
+      console.error('Submit error:', error);
       setError(error instanceof Error ? error.message : 'シフト希望の提出に失敗しました');
     } finally {
       setSaving(false);
@@ -248,6 +437,12 @@ export default function ShiftRequestPage() {
       case 3: return '可能';
       default: return '希望';
     }
+  };
+
+  const hasValidRequests = () => {
+    return dates.some(dateData =>
+      dateData.requests.some(req => req.timeSlotId !== null)
+    );
   };
 
   if (loading) {
@@ -480,7 +675,7 @@ export default function ShiftRequestPage() {
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
             <Button
               onClick={handleSubmit}
-              disabled={saving || dates.every(d => d.requests.length === 0)}
+              disabled={saving || !hasValidRequests()}
               className="w-full"
             >
               {saving ? '提出中...' : 'シフト希望を提出'}

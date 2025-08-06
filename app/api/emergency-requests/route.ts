@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 // GET: 緊急募集リクエスト一覧取得
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
   
   // パラメータ名の統一：フロントエンドの呼び出しに合わせる
   const storeId = searchParams.get('store_id') || searchParams.get('storeId');
@@ -147,11 +147,11 @@ export async function POST(request: Request) {
 
     // データ挿入
     const insertData: Record<string, unknown> = {
-      original_user_id,
-      store_id,
-      date,
+        original_user_id,
+        store_id,
+        date,
       reason: reason.trim(),
-      status: 'open'
+        status: 'open'
     };
 
     // time_slot_id を優先使用
@@ -255,7 +255,7 @@ export async function PATCH(request: Request) {
 
     // 応募データを取得
     const { data: volunteer, error: volunteerError } = await supabase
-      .from('emergency_volunteers')
+        .from('emergency_volunteers')
       .select(`
         *,
         emergency_requests(*)
@@ -276,7 +276,7 @@ export async function PATCH(request: Request) {
     if (action === 'accept') {
       // 重複シフトチェック
       const { data: existingShifts } = await supabase
-        .from('shifts')
+      .from('shifts')
         .select(`
           id,
           date,
@@ -292,7 +292,7 @@ export async function PATCH(request: Request) {
           { error: 'この日にすでに他のシフトが存在します' }, 
           { status: 409 }
         );
-      }
+    }
 
       // 承認処理：新しいシフトを作成
       const insertData: Record<string, unknown> = {
@@ -320,12 +320,12 @@ export async function PATCH(request: Request) {
           { error: 'シフトの作成に失敗しました' }, 
           { status: 500 }
         );
-      }
+    }
 
       // 緊急募集リクエストのステータスを更新
       await supabase
-        .from('emergency_requests')
-        .update({ status: 'filled' })
+      .from('emergency_requests')
+      .update({ status: 'filled' })
         .eq('id', emergency_request_id);
     }
 

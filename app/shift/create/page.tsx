@@ -532,13 +532,13 @@ function ShiftCreatePageInner() {
   const handleAddShift = async () => {
     if (!selectedUser || !selectedTimeSlot || !modalData) return;
 
-    setSaving(true);
+      setSaving(true);
     try {
       // カスタム時間の値を検証
       const validateTime = (time: string) => {
         return time && time.trim() !== '' && /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time) ? time : null;
       };
-
+      
       const shiftData = {
         user_id: selectedUser,
         store_id: selectedStore,
@@ -572,7 +572,7 @@ function ShiftCreatePageInner() {
         const errorData = await response.json();
         console.error('シフト作成エラー:', errorData);
         throw new Error(errorData.error || 'シフトの追加に失敗しました');
-      }
+        }
 
       // シフトデータを再取得
       if (selectedStore && selectedWeek) {
@@ -889,9 +889,9 @@ function ShiftCreatePageInner() {
     try {
       // 基本的な初期値
       const defaultResult = {
-        totalHours: 0,
-        totalWage: 0,
-        uniqueStaff: 0,
+          totalHours: 0,
+          totalWage: 0,
+          uniqueStaff: 0,
         averageHours: 0,
         fixedShiftHours: 0,
         fixedShiftWage: 0,
@@ -911,15 +911,15 @@ function ShiftCreatePageInner() {
       try {
         periodStart = new Date(selectedWeek);
         periodEnd = new Date(selectedWeek);
-        
-        if (viewMode === 'week') {
-          periodEnd.setDate(periodStart.getDate() + 6);
-        } else if (viewMode === 'half-month') {
-          periodEnd.setDate(periodStart.getDate() + 13);
-        } else if (viewMode === 'month') {
-          periodStart.setDate(1);
-          periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
-        }
+      
+      if (viewMode === 'week') {
+        periodEnd.setDate(periodStart.getDate() + 6);
+      } else if (viewMode === 'half-month') {
+        periodEnd.setDate(periodStart.getDate() + 13);
+      } else if (viewMode === 'month') {
+        periodStart.setDate(1);
+        periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+      }
 
         // 日付が有効かチェック
         if (isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
@@ -935,15 +935,15 @@ function ShiftCreatePageInner() {
       let periodShifts: Shift[] = [];
       try {
         periodShifts = shifts.filter(shift => {
-          try {
+        try {
             if (!shift || !shift.date || shift.storeId !== selectedStore) return false;
-            const shiftDate = new Date(shift.date);
+          const shiftDate = new Date(shift.date);
             return shiftDate >= periodStart && shiftDate <= periodEnd;
           } catch (filterError) {
             console.error('Error filtering shift:', filterError, { shift });
-            return false;
-          }
-        });
+          return false;
+        }
+      });
       } catch (filterError) {
         console.error('Error filtering period shifts:', filterError);
         periodShifts = [];
@@ -955,11 +955,11 @@ function ShiftCreatePageInner() {
 
       // 通常シフトの統計計算
       try {
-        periodShifts.forEach(shift => {
-          try {
+      periodShifts.forEach(shift => {
+        try {
             const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
-            const user = users.find(u => u.id === shift.userId);
-            
+          const user = users.find(u => u.id === shift.userId);
+          
             if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
               const { workHours } = getActualWorkTime(shift, timeSlot);
                 
@@ -1035,7 +1035,7 @@ function ShiftCreatePageInner() {
                         fixedShiftHours += workHours;
                         fixedShiftWage += workHours * getHourlyWage(user);
                         staffCount.add(fixedShift.user_id);
-                      }
+        }
                     }
                   }
                 } catch (fixedShiftError) {
@@ -1686,7 +1686,7 @@ function ShiftCreatePageInner() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </Button>
-                    <input
+                <input
                       type="month"
                       value={selectedWeek.substring(0, 7)}
                       onChange={(e) => setSelectedWeek(e.target.value + '-01')}
@@ -1795,9 +1795,9 @@ function ShiftCreatePageInner() {
                     type="date"
                     value={selectedWeek}
                     onChange={(e) => setSelectedWeek(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={loading}
-                  />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={loading}
+                />
                 )}
               </div>
               <div className="flex items-end">
@@ -2311,7 +2311,7 @@ function ShiftCreatePageInner() {
                       <div className="flex items-center space-x-4">
                         <span>勤務時間: {(() => {
                           const pattern = timeSlots.find(p => p.id === selectedTimeSlot);
-                          if (!pattern) return '0時間';
+                        if (!pattern) return '0時間';
                           
                           // カスタム時間が設定されている場合はそれを使用
                           const startTime = isCustomTime && customStartTime ? customStartTime : pattern.start_time;
