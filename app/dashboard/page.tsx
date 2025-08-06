@@ -61,16 +61,7 @@ interface DashboardShiftPattern {
   break_time: number;
 }
 
-interface DashboardEmergencyRequest {
-  id: string;
-  original_user_id: string;
-  store_id: string;
-  date: string;
-  shift_pattern_id: string;
-  reason: string;
-  status: 'open' | 'filled' | 'cancelled';
-  created_at: string;
-}
+// DatabaseEmergencyRequestを使用するため、この型定義は削除
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -92,7 +83,7 @@ export default function DashboardPage() {
   
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const loadDashboardData = async () => {
       try {
@@ -102,25 +93,14 @@ export default function DashboardPage() {
       const [
         { data: shiftsData },
         { data: requestsData },
-        { data: emergencyData },
+        emergencyResponse, // APIルート経由に変更
         { data: usersData },
         { data: storesData },
         { data: shiftPatternsData }
       ] = await Promise.all([
         supabase.from('shifts').select('*'),
         supabase.from('time_off_requests').select('*'),
-        supabase.from('emergency_requests').select(`
-          *,
-          original_user:users!emergency_requests_original_user_id_fkey(id, name, role),
-          stores(id, name),
-          shift_patterns(id, name, start_time, end_time),
-          emergency_volunteers(
-            id,
-            user_id,
-            responded_at,
-            users(id, name, role, skill_level)
-          )
-        `),
+        fetch('/api/emergency-requests'), // APIルート経由に変更
         supabase.from('users').select(`
           *,
           user_stores (
@@ -132,13 +112,22 @@ export default function DashboardPage() {
         supabase.from('shift_patterns').select('*')
       ]);
 
+      // emergency_requestsはAPIレスポンスから取得
+      let emergencyData = [];
+      if (emergencyResponse.ok) {
+        const emergencyResult = await emergencyResponse.json();
+        emergencyData = emergencyResult.data || [];
+      } else {
+        console.error('Emergency requests API error:', await emergencyResponse.text());
+      }
+
       // 今日の日付
       const today = new Date().toISOString().split('T')[0];
       const todayShifts = (shiftsData as DashboardShift[])?.filter(shift => 
         shift.date === today && shift.status === 'confirmed'
       ) || [];
       const pendingRequests = (requestsData as DashboardTimeOffRequest[])?.filter(req => req.status === 'pending') || [];
-      const openEmergencies = (emergencyData as DashboardEmergencyRequest[])?.filter(req => req.status === 'open') || [];
+      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => req.status === 'open') || [];
 
       // 統計情報を設定
       setStats({

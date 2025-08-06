@@ -4,16 +4,10 @@ import { supabase } from '@/lib/supabase';
 // GET: シフト一覧取得
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const storeId = searchParams.get('storeId');
-  const startDate = searchParams.get('startDate');
-  const endDate = searchParams.get('endDate');
-
-  if (!storeId || !startDate) {
-    return NextResponse.json(
-      { error: 'storeIdとstartDateは必須です' }, 
-      { status: 400 }
-    );
-  }
+  const storeId = searchParams.get('storeId') || searchParams.get('store_id');
+  const userId = searchParams.get('user_id') || searchParams.get('userId');
+  const startDate = searchParams.get('startDate') || searchParams.get('date_from');
+  const endDate = searchParams.get('endDate') || searchParams.get('date_to');
 
   try {
     let query = supabase
@@ -23,9 +17,20 @@ export async function GET(request: Request) {
         users(id, name, email, phone, role, skill_level, hourly_wage),
         stores(id, name),
         time_slots(id, name, start_time, end_time)
-      `)
-      .eq('store_id', storeId)
-      .gte('date', startDate);
+      `);
+
+    // フィルタリング条件を適用
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    if (startDate) {
+      query = query.gte('date', startDate);
+    }
 
     if (endDate) {
       query = query.lte('date', endDate);
@@ -85,47 +90,40 @@ export async function POST(request: Request) {
       );
     }
 
-    // カスタム時間のバリデーション
-    if (custom_start_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
+    // カスタム時間のバリデーション（フォーマットのみ）
+    if (custom_start_time && custom_start_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
+      console.error('無効なcustom_start_time:', custom_start_time);
       return NextResponse.json(
         { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    if (custom_end_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
+    if (custom_end_time && custom_end_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
+      console.error('無効なcustom_end_time:', custom_end_time);
       return NextResponse.json(
         { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    // カスタム時間が設定されている場合の論理チェック
-    if (custom_start_time && custom_end_time) {
-      const startMinutes = parseTimeToMinutes(custom_start_time);
-      const endMinutes = parseTimeToMinutes(custom_end_time);
-      
-      if (startMinutes >= endMinutes) {
-        return NextResponse.json(
-          { error: '終了時間は開始時間より後である必要があります' }, 
-          { status: 400 }
-        );
-      }
-    }
+    // 時間の論理チェックは削除 - 柔軟な時間設定を許可
 
-    // データベースに挿入
+    // データ挿入オブジェクトを構築
+    const insertData: Record<string, unknown> = {
+      user_id,
+      store_id,
+      date,
+      time_slot_id: finalTimeSlotId,
+      custom_start_time: custom_start_time && custom_start_time.trim() !== '' ? custom_start_time : null,
+      custom_end_time: custom_end_time && custom_end_time.trim() !== '' ? custom_end_time : null,
+      status,
+      notes
+    };
+
     const { data, error } = await supabase
       .from('shifts')
-      .insert({
-        user_id,
-        store_id,
-        date,
-        time_slot_id: finalTimeSlotId, // time_slot_idを使用
-        custom_start_time,
-        custom_end_time,
-        status,
-        notes
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -173,36 +171,27 @@ export async function PUT(request: Request) {
     // time_slot_id または pattern_id のいずれかが必要（更新の場合）
     const finalTimeSlotId = time_slot_id || pattern_id;
 
-    // カスタム時間のバリデーション
-    if (custom_start_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
+    // カスタム時間のバリデーション（フォーマットのみ）
+    if (custom_start_time && custom_start_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
+      console.error('無効なcustom_start_time（更新）:', custom_start_time);
       return NextResponse.json(
         { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    if (custom_end_time && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
+    if (custom_end_time && custom_end_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
+      console.error('無効なcustom_end_time（更新）:', custom_end_time);
       return NextResponse.json(
         { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
         { status: 400 }
       );
     }
 
-    // カスタム時間が設定されている場合の論理チェック
-    if (custom_start_time && custom_end_time) {
-      const startMinutes = parseTimeToMinutes(custom_start_time);
-      const endMinutes = parseTimeToMinutes(custom_end_time);
-      
-      if (startMinutes >= endMinutes) {
-        return NextResponse.json(
-          { error: '終了時間は開始時間より後である必要があります' }, 
-          { status: 400 }
-        );
-      }
-    }
+    // 時間の論理チェックは削除 - 柔軟な時間設定を許可
 
     // 更新データオブジェクトを構築
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString()
     };
 
@@ -210,8 +199,8 @@ export async function PUT(request: Request) {
     if (store_id !== undefined) updateData.store_id = store_id;
     if (date !== undefined) updateData.date = date;
     if (finalTimeSlotId !== undefined) updateData.time_slot_id = finalTimeSlotId; // time_slot_idを使用
-    if (custom_start_time !== undefined) updateData.custom_start_time = custom_start_time;
-    if (custom_end_time !== undefined) updateData.custom_end_time = custom_end_time;
+    if (custom_start_time !== undefined) updateData.custom_start_time = custom_start_time && custom_start_time.trim() !== '' ? custom_start_time : null;
+    if (custom_end_time !== undefined) updateData.custom_end_time = custom_end_time && custom_end_time.trim() !== '' ? custom_end_time : null;
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
 
@@ -336,7 +325,7 @@ export async function PATCH(request: NextRequest) {
         *,
         users(id, name, role, skill_level),
         stores(id, name),
-        shift_patterns(id, name, start_time, end_time, color, break_time)
+        time_slots(id, name, start_time, end_time)
       `);
 
     if (updateError) {
@@ -354,10 +343,4 @@ export async function PATCH(request: NextRequest) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
-
-// ヘルパー関数: 時間文字列を分に変換
-function parseTimeToMinutes(timeString: string): number {
-  const [hours, minutes] = timeString.split(':').map(Number);
-  return hours * 60 + minutes;
 } 

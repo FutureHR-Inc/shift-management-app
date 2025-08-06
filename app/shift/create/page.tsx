@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
-import { TimeSlider } from '@/components/ui/TimeSlider';
-import type { Shift, ShiftPattern, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot } from '@/lib/types';
 import { useRouter, useSearchParams } from 'next/navigation';
+import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
+import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
+import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot } from '@/lib/types';
 
 interface ShiftModalData {
   date: string;
@@ -290,11 +289,19 @@ function ShiftCreatePageInner() {
         return weekEnd.toISOString().split('T')[0];
       })();
       
-      const response = await fetch(
-        `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}`
-      );
-      if (!response.ok) throw new Error('代打募集データの取得に失敗しました');
+      const url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}`;
+      console.log('Fetching emergency requests from:', url);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API response error:', response.status, errorText);
+        throw new Error(`代打募集データの取得に失敗しました (${response.status})`);
+      }
+      
       const result = await response.json();
+      console.log('Emergency requests fetched:', result);
       
       return result.data || [];
     } catch (error) {
@@ -508,16 +515,31 @@ function ShiftCreatePageInner() {
 
     setSaving(true);
     try {
+      // カスタム時間の値を検証
+      const validateTime = (time: string) => {
+        return time && time.trim() !== '' && /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time) ? time : null;
+      };
+
       const shiftData = {
         user_id: selectedUser,
         store_id: selectedStore,
         date: modalData.date,
         time_slot_id: selectedTimeSlot, // pattern_id から time_slot_id に変更
         status: 'draft' as const,
-        custom_start_time: isCustomTime ? customStartTime : null,
-        custom_end_time: isCustomTime ? customEndTime : null,
+        custom_start_time: isCustomTime ? validateTime(customStartTime) : null,
+        custom_end_time: isCustomTime ? validateTime(customEndTime) : null,
         notes: null
       };
+
+      // デバッグ用ログ
+      console.log('シフト作成データ:', {
+        isCustomTime,
+        customStartTime,
+        customEndTime,
+        validatedStart: shiftData.custom_start_time,
+        validatedEnd: shiftData.custom_end_time,
+        shiftData
+      });
 
       const response = await fetch('/api/shifts', {
         method: 'POST',
@@ -529,6 +551,7 @@ function ShiftCreatePageInner() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('シフト作成エラー:', errorData);
         throw new Error(errorData.error || 'シフトの追加に失敗しました');
       }
 
@@ -539,12 +562,7 @@ function ShiftCreatePageInner() {
       }
 
       // モーダルを閉じる
-      setIsModalOpen(false);
-      setSelectedUser('');
-      setSelectedTimeSlot('');
-      setIsCustomTime(false);
-      setCustomStartTime('');
-      setCustomEndTime('');
+      handleCloseModal();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'シフトの追加に失敗しました');
     } finally {
@@ -772,7 +790,7 @@ function ShiftCreatePageInner() {
 
     let consecutiveDays = 1;
     let maxConsecutive = 1;
-    
+
     for (let i = 1; i < allShifts.length; i++) {
       const prevDate = new Date(allShifts[i-1].date);
       const currentDate = new Date(allShifts[i].date);
@@ -798,24 +816,24 @@ function ShiftCreatePageInner() {
   const availableStaff = selectedStore ? users.filter(user => user.stores.includes(selectedStore)) : [];
 
   // 時給計算（個別給与ベース）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getHourlyWage = (user: any) => {
-    // 個別時給が設定されている場合はそれを使用
-    if (user.hourlyWage && user.hourlyWage > 0) {
-      return user.hourlyWage;
-    }
+    if (!user) return 0;
     
-    // hourly_wageフィールドが存在する場合（API経由のデータ）
+    // 個別時給が設定されている場合はそれを使用
     if (user.hourly_wage && user.hourly_wage > 0) {
       return user.hourly_wage;
     }
     
     // フォールバック：スキルレベルベースのデフォルト値
-    const defaultWages = {
-      training: 1000,
-      regular: 1200,
-      veteran: 1500
+    const defaultWages: Record<string, number> = {
+      'training': 900,
+      'regular': 1000,
+      'veteran': 1200
     };
-    return defaultWages[user.skillLevel as keyof typeof defaultWages] || 1000;
+    
+    const skillLevel = user.skill_level || user.skillLevel || 'regular';
+    return defaultWages[skillLevel] || 1000;
   };
 
   // シフトの実際の勤務時間を取得（カスタム時間を考慮）
@@ -831,9 +849,15 @@ function ShiftCreatePageInner() {
         !isNaN(start[0]) && !isNaN(start[1]) && 
         !isNaN(end[0]) && !isNaN(end[1])) {
       
-      const hours = (end[0] * 60 + end[1] - start[0] * 60 - start[1]) / 60;
-      // TimeSlotには休憩時間がないため0として計算
-      const workHours = Math.max(0, hours);
+      let startMinutes = start[0] * 60 + start[1];
+      let endMinutes = end[0] * 60 + end[1];
+      
+      // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
+      if (endMinutes <= startMinutes) {
+        endMinutes += 24 * 60; // 24時間（1440分）を加算
+      }
+      
+      const workHours = Math.max(0, (endMinutes - startMinutes) / 60);
       
       return { startTime, endTime, workHours };
     }
@@ -887,11 +911,11 @@ function ShiftCreatePageInner() {
           
           if (timeSlot && user) {
             const { workHours } = getActualWorkTime(shift, timeSlot);
-            
-            if (workHours > 0) {
-              totalHours += workHours;
+              
+              if (workHours > 0) {
+                totalHours += workHours;
               totalWage += workHours * getHourlyWage(user);
-              staffCount.add(shift.userId);
+                staffCount.add(shift.userId);
             }
           }
         } catch (error) {
@@ -1122,14 +1146,27 @@ function ShiftCreatePageInner() {
   // 代打募集管理画面を開く
   const handleEmergencyManagement = async (emergencyRequestId: string) => {
     try {
-      const response = await fetch(`/api/emergency-requests?id=${emergencyRequestId}`);
-      if (!response.ok) throw new Error('代打募集データの取得に失敗しました');
+      const url = `/api/emergency-requests?id=${emergencyRequestId}`;
+      console.log('Fetching emergency request details from:', url);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API response error:', response.status, errorText);
+        throw new Error(`代打募集データの取得に失敗しました (${response.status})`);
+      }
+      
       const result = await response.json();
+      console.log('Emergency request details fetched:', result);
       
       if (result.data) {
         setEmergencyManagement({ show: true, request: result.data });
+      } else {
+        throw new Error('代打募集データが見つかりませんでした');
       }
     } catch (error) {
+      console.error('Error in handleEmergencyManagement:', error);
       setError(error instanceof Error ? error.message : '代打募集データの取得に失敗しました');
     }
   };
@@ -1253,16 +1290,21 @@ function ShiftCreatePageInner() {
     );
   }
 
-  // パターン選択時にカスタム時間をデフォルト設定
+  // パターン変更時の処理
   const handlePatternChange = (patternId: string) => {
     setSelectedTimeSlot(patternId);
     
-    if (patternId && !isCustomTime) {
+    if (patternId && isCustomTime) {
+      // カスタムモードの場合のみ、パターンの時間を初期値として設定
       const pattern = timeSlots.find(p => p.id === patternId);
       if (pattern) {
         setCustomStartTime(pattern.start_time);
         setCustomEndTime(pattern.end_time);
       }
+    } else {
+      // カスタムモードでない場合はカスタム時間をクリア
+      setCustomStartTime('');
+      setCustomEndTime('');
     }
   };
 
@@ -1278,6 +1320,16 @@ function ShiftCreatePageInner() {
         setCustomEndTime(pattern.end_time);
       }
     }
+  };
+
+  // モーダルを閉じる共通関数
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedUser('');
+    setSelectedTimeSlot('');
+    setIsCustomTime(false);
+    setCustomStartTime('');
+    setCustomEndTime('');
   };
 
   return (
@@ -1474,7 +1526,7 @@ function ShiftCreatePageInner() {
           <CardHeader>
             <CardTitle>{selectedStoreData?.name} - シフト表</CardTitle>
           </CardHeader>
-                      <CardContent>
+          <CardContent>
               {timeSlots.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1488,7 +1540,7 @@ function ShiftCreatePageInner() {
                 </div>
               ) : (
                 <>
-              <div className="mb-4 p-3 bg-yellow-50 rounded-xl">
+            <div className="mb-4 p-3 bg-yellow-50 rounded-xl">
               <h4 className="font-medium text-yellow-900 mb-1">操作方法</h4>
               <p className="text-sm text-yellow-800">
                 各セルをクリックしてシフトを追加・編集できます。色分け：🔴不足 / 🟢適正 / 🔵過剰
@@ -1606,7 +1658,7 @@ function ShiftCreatePageInner() {
                                         },
                                         time_slots: timeSlot
                                       };
-
+                                      
                                       return (
                                         <div key={shift.id} className="relative group">
                                           <div
@@ -1743,7 +1795,7 @@ function ShiftCreatePageInner() {
         {isModalOpen && modalData && (
           <div 
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={() => setIsModalOpen(false)}
+            onClick={handleCloseModal}
           >
             <div 
               className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
@@ -1752,7 +1804,7 @@ function ShiftCreatePageInner() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">シフト追加</h3>
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1864,12 +1916,12 @@ function ShiftCreatePageInner() {
                       ${isCustomTime ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
                     `}>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
-                        <TimeSlider
+                        <CompactTimeSlider
                           value={customStartTime}
                           onChange={setCustomStartTime}
                           label="開始時間"
                         />
-                        <TimeSlider
+                        <CompactTimeSlider
                           value={customEndTime}
                           onChange={setCustomEndTime}
                           label="終了時間"
@@ -1915,7 +1967,7 @@ function ShiftCreatePageInner() {
                     </h4>
                     <div className="text-sm text-blue-800 space-y-1">
                       <div className="font-medium">
-                        {users.find(u => u.id === selectedUser)?.name} - {' '}
+                      {users.find(u => u.id === selectedUser)?.name} - {' '}
                         {timeSlots.find(p => p.id === selectedTimeSlot)?.name}
                       </div>
                       <div className="flex items-center space-x-4">
@@ -1929,7 +1981,16 @@ function ShiftCreatePageInner() {
                           
                           const start = startTime.split(':').map(Number);
                           const end = endTime.split(':').map(Number);
-                          const hours = (end[0] * 60 + end[1] - start[0] * 60 - start[1]) / 60;
+                          
+                          let startMinutes = start[0] * 60 + start[1];
+                          let endMinutes = end[0] * 60 + end[1];
+                          
+                          // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
+                          if (endMinutes <= startMinutes) {
+                            endMinutes += 24 * 60; // 24時間（1440分）を加算
+                          }
+                          
+                          const hours = Math.max(0, (endMinutes - startMinutes) / 60);
                           
                           return `${startTime}-${endTime} (${hours}時間)`;
                         })()}</span>
@@ -1949,7 +2010,7 @@ function ShiftCreatePageInner() {
                 <div className="flex justify-end space-x-3 pt-4">
                   <Button
                     variant="secondary"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={handleCloseModal}
                     disabled={saving}
                   >
                     キャンセル
@@ -2220,4 +2281,4 @@ export default function ShiftCreatePage() {
       <ShiftCreatePageInner />
     </Suspense>
   );
-}
+} 

@@ -693,7 +693,7 @@ export default function StaffPage() {
                           onChange={(e) => setFormData({...formData, hourly_wage: parseInt(e.target.value) || 1000})}
                           className="pr-12"
                           required
-                          disabled={saving}
+                        disabled={saving}
                         />
                         <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
                           円/時
