@@ -28,6 +28,14 @@ interface RequestSummary {
   };
 }
 
+interface PersonRequestGroup {
+  user: DatabaseUser;
+  submissionPeriod: string;
+  submittedAt: string;
+  requests: DatabaseShiftRequest[];
+  totalDays: number;
+}
+
 export default function ShiftRequestsPage() {
   const router = useRouter();
   
@@ -42,12 +50,11 @@ export default function ShiftRequestsPage() {
   const [selectedStore, setSelectedStore] = useState('');
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [requests, setRequests] = useState<DatabaseShiftRequest[]>([]);
-  const [summary, setSummary] = useState<RequestSummary[]>([]);
+  const [personGroups, setPersonGroups] = useState<PersonRequestGroup[]>([]);
   const [users, setUsers] = useState<DatabaseUser[]>([]);
 
   // UI states
-  const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
 
   useEffect(() => {
     initializePage();
@@ -61,7 +68,7 @@ export default function ShiftRequestsPage() {
 
   useEffect(() => {
     if (requests.length > 0 && timeSlots.length > 0) {
-      generateSummary();
+      // generateSummary(); // 個人カード表示なので不要
     }
   }, [requests, timeSlots]);
 
@@ -105,112 +112,107 @@ export default function ShiftRequestsPage() {
 
     try {
       setLoading(true);
-
-      // 時間帯情報を取得
-      const timeSlotsResponse = await fetch(`/api/time-slots?store_id=${selectedStore}`);
-      const timeSlotsData = await timeSlotsResponse.json();
-      setTimeSlots(timeSlotsData.data || []);
+      setError(null);
 
       // シフト希望データを取得
-      const requestsResponse = await fetch(
-        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}&status=submitted`
+      const response = await fetch(
+        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}`
       );
-      const requestsData = await requestsResponse.json();
-      setRequests(requestsData.data || []);
+      
+      if (!response.ok) {
+        throw new Error('データの取得に失敗しました');
+      }
+
+      const result = await response.json();
+      const requestsData = result.data || [];
+      setRequests(requestsData);
+
+      // 個人ごとにグループ化
+      const groupedByPerson: { [userId: string]: PersonRequestGroup } = {};
+      
+      requestsData.forEach((request: DatabaseShiftRequest) => {
+        const userId = request.user_id;
+        
+        if (!groupedByPerson[userId]) {
+          groupedByPerson[userId] = {
+            user: request.users!,
+            submissionPeriod: request.submission_period,
+            submittedAt: request.submitted_at || request.created_at,
+            requests: [],
+            totalDays: 0
+          };
+        }
+        
+        groupedByPerson[userId].requests.push(request);
+      });
+
+      // 各グループの日数を計算
+      Object.values(groupedByPerson).forEach(group => {
+        const uniqueDates = new Set(group.requests.map(r => r.date));
+        group.totalDays = uniqueDates.size;
+      });
+
+      // 提出日時順でソート
+      const sortedGroups = Object.values(groupedByPerson).sort((a, b) => 
+        new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+      );
+
+      setPersonGroups(sortedGroups);
 
     } catch (error) {
+      console.error('Period data loading error:', error);
       setError('データの読み込みに失敗しました');
-      console.error('Load period data error:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const generateSummary = () => {
-    if (!selectedPeriod) return;
-
-    const dateRange = generateDateRange(selectedPeriod.startDate, selectedPeriod.endDate);
-    
-    const summaryData: RequestSummary[] = dateRange.map(date => {
-      const dayRequests = requests.filter(req => req.date === date);
-      
-      const timeSlotData: RequestSummary['timeSlots'] = {};
-      
-      timeSlots.forEach(timeSlot => {
-        const timeSlotRequests = dayRequests.filter(req => req.time_slot_id === timeSlot.id);
-        
-        timeSlotData[timeSlot.id] = {
-          timeSlot,
-          requests: {
-            priority1: timeSlotRequests.filter(req => req.priority === 1),
-            priority2: timeSlotRequests.filter(req => req.priority === 2),
-            priority3: timeSlotRequests.filter(req => req.priority === 3)
-          }
-        };
-      });
-
-      return {
-        date,
-        dayOfWeek: getJapaneseDayOfWeek(date),
-        timeSlots: timeSlotData
-      };
-    });
-
-    setSummary(summaryData);
+    // 個人ごとのカード表示なので、従来のサマリー生成は不要
+    // データは loadPeriodData で処理済み
   };
 
-  const handleCreateShifts = async (date: string, timeSlotId: string, selectedRequests: string[]) => {
+  const handleCreateShifts = async (date: string, timeSlotId: string, requestIds: string[]) => {
     try {
-      setLoading(true);
-
-      const createPromises = selectedRequests.map(async (requestId) => {
-        const request = requests.find(r => r.id === requestId);
-        if (!request) return;
-
-        const shiftData = {
-          user_id: request.user_id,
-          store_id: selectedStore,
-          date: request.date,
-          time_slot_id: request.time_slot_id,
-          custom_start_time: request.preferred_start_time,
-          custom_end_time: request.preferred_end_time,
-          status: 'draft',
-          notes: request.notes
-        };
-
-        const response = await fetch('/api/shifts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(shiftData),
-        });
-
-        if (response.ok) {
-          // リクエストのステータスを更新
-          await fetch('/api/shift-requests', {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              id: requestId,
-              status: 'converted_to_shift'
-            }),
-          });
-        }
+      const response = await fetch('/api/shift-requests/convert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          request_ids: requestIds,
+          date,
+          time_slot_id: timeSlotId,
+          store_id: selectedStore
+        }),
       });
 
-      await Promise.all(createPromises);
-      
-      // データを再読み込み
-      await loadPeriodData();
+      if (!response.ok) {
+        throw new Error('シフト作成に失敗しました');
+      }
 
+      // データを再読み込み
+      loadPeriodData();
+      
     } catch (error) {
+      console.error('Shift creation error:', error);
       setError('シフト作成に失敗しました');
-      console.error('Create shifts error:', error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const handleCreateAllPersonShifts = async (person: PersonRequestGroup) => {
+    try {
+      const requestIds = person.requests.map(r => r.id);
+      
+      for (const request of person.requests) {
+        await handleCreateShifts(request.date, request.time_slot_id!, [request.id]);
+      }
+      
+      setExpandedPersonId(null);
+      
+    } catch (error) {
+      console.error('Bulk shift creation error:', error);
+      setError('一括シフト作成に失敗しました');
     }
   };
 
@@ -314,168 +316,123 @@ export default function ShiftRequestsPage() {
           </Card>
         </div>
 
-        {/* 表示モード切替 */}
-        <div className="flex justify-between items-center">
-          <div className="flex space-x-2">
-            <Button
-              variant={viewMode === 'summary' ? 'primary' : 'secondary'}
-              onClick={() => setViewMode('summary')}
-            >
-              📊 サマリー表示
-            </Button>
-            <Button
-              variant={viewMode === 'detailed' ? 'primary' : 'secondary'}
-              onClick={() => setViewMode('detailed')}
-            >
-              📋 詳細表示
-            </Button>
-          </div>
-          
-          {requests.length > 0 && (
-            <div className="text-sm text-gray-600">
-              総希望件数: {requests.length}件
-            </div>
-          )}
-        </div>
-
-        {/* サマリー表示 */}
-        {viewMode === 'summary' && summary.length > 0 && (
+        {/* シフト希望一覧 */}
+        {loading ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <p className="text-gray-500">読み込み中...</p>
+            </CardContent>
+          </Card>
+        ) : personGroups.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <p className="text-gray-500">提出されたシフト希望がありません</p>
+            </CardContent>
+          </Card>
+        ) : (
           <div className="space-y-4">
-            {summary.map(dayData => (
-              <Card key={dayData.date}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">
-                    {new Date(dayData.date).getDate()}日 ({dayData.dayOfWeek})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.values(dayData.timeSlots).map(({ timeSlot, requests: timeSlotRequests }) => {
-                      const totalRequests = 
-                        timeSlotRequests.priority1.length +
-                        timeSlotRequests.priority2.length +
-                        timeSlotRequests.priority3.length;
-
-                      if (totalRequests === 0) return null;
-
-                      return (
-                        <div key={timeSlot.id} className="border border-gray-200 rounded-lg p-4">
-                          <h4 className="font-medium text-gray-900 mb-2">
-                            {timeSlot.name}
-                          </h4>
-                          <p className="text-sm text-gray-600 mb-3">
-                            {formatTime(timeSlot.start_time)} - {formatTime(timeSlot.end_time)}
-                          </p>
-                          
-                          <div className="space-y-2 mb-3">
-                            {timeSlotRequests.priority1.length > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-red-600 font-medium">最優先</span>
-                                <span>{timeSlotRequests.priority1.length}名</span>
-                              </div>
-                            )}
-                            {timeSlotRequests.priority2.length > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-blue-600 font-medium">希望</span>
-                                <span>{timeSlotRequests.priority2.length}名</span>
-                              </div>
-                            )}
-                            {timeSlotRequests.priority3.length > 0 && (
-                              <div className="flex justify-between text-sm">
-                                <span className="text-gray-600 font-medium">可能</span>
-                                <span>{timeSlotRequests.priority3.length}名</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <Button
-                            variant="secondary"
-                            className="w-full text-sm"
-                            onClick={() => {
-                              setSelectedDate(dayData.date);
-                              setViewMode('detailed');
-                            }}
-                          >
-                            詳細確認
-                          </Button>
-                        </div>
-                      );
-                    })}
+            {personGroups.map(person => (
+              <Card key={person.user.id} className="hover:shadow-md transition-shadow">
+                <CardHeader 
+                  className="pb-3 cursor-pointer"
+                  onClick={() => setExpandedPersonId(
+                    expandedPersonId === person.user.id ? null : person.user.id
+                  )}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-lg flex items-center space-x-2">
+                        <span>{person.user.name}</span>
+                        <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded-full">
+                          {person.totalDays}日間
+                        </span>
+                      </CardTitle>
+                      <p className="text-sm text-gray-600 mt-1">
+                        提出日時: {new Date(person.submittedAt).toLocaleDateString('ja-JP', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="primary"
+                        className="text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCreateAllPersonShifts(person);
+                        }}
+                      >
+                        一括シフト作成
+                      </Button>
+                      <svg 
+                        className={`w-5 h-5 transition-transform ${
+                          expandedPersonId === person.user.id ? 'rotate-180' : ''
+                        }`} 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
-                </CardContent>
+                </CardHeader>
+
+                {/* 展開された詳細情報 */}
+                {expandedPersonId === person.user.id && (
+                  <CardContent className="pt-0">
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {person.requests.map(request => (
+                          <div key={request.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-start">
+                                <h4 className="font-medium text-gray-900">
+                                  {new Date(request.date).getDate()}日 ({getJapaneseDayOfWeek(request.date)})
+                                </h4>
+                                <span className={`text-xs px-2 py-1 rounded-full border ${getPriorityColor(request.priority)}`}>
+                                  {getPriorityLabel(request.priority)}
+                                </span>
+                              </div>
+                              
+                              {request.time_slots && (
+                                <p className="text-sm text-gray-600">
+                                  {request.time_slots.name} ({formatTime(request.time_slots.start_time)} - {formatTime(request.time_slots.end_time)})
+                                </p>
+                              )}
+
+                              {(request.preferred_start_time || request.preferred_end_time) && (
+                                <p className="text-sm text-orange-600">
+                                  希望時間: {request.preferred_start_time} - {request.preferred_end_time}
+                                </p>
+                              )}
+
+                              {request.notes && (
+                                <p className="text-sm text-gray-600">
+                                  メモ: {request.notes}
+                                </p>
+                              )}
+
+                              <Button
+                                variant="secondary"
+                                className="w-full text-sm mt-3"
+                                onClick={() => handleCreateShifts(request.date, request.time_slot_id!, [request.id])}
+                              >
+                                個別シフト作成
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
               </Card>
             ))}
-          </div>
-        )}
-
-        {/* 詳細表示 */}
-        {viewMode === 'detailed' && (
-          <div className="space-y-6">
-            {requests.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-gray-500">提出されたシフト希望がありません</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {requests.map(request => (
-                  <Card key={request.id}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <h3 className="font-medium">{request.users?.name}</h3>
-                            <span className={`text-xs px-2 py-1 rounded-full border ${getPriorityColor(request.priority)}`}>
-                              {getPriorityLabel(request.priority)}
-                            </span>
-                          </div>
-                          
-                          <p className="text-sm text-gray-600">
-                            {new Date(request.date).getDate()}日 ({getJapaneseDayOfWeek(request.date)})
-                          </p>
-                          
-                          {request.time_slots && (
-                            <p className="text-sm">
-                              {request.time_slots.name} ({formatTime(request.time_slots.start_time)} - {formatTime(request.time_slots.end_time)})
-                            </p>
-                          )}
-
-                          {(request.preferred_start_time || request.preferred_end_time) && (
-                            <p className="text-sm text-orange-600">
-                              希望時間: {request.preferred_start_time} - {request.preferred_end_time}
-                            </p>
-                          )}
-
-                          {request.notes && (
-                            <p className="text-sm text-gray-600">
-                              メモ: {request.notes}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="primary"
-                            className="text-sm"
-                            onClick={() => handleCreateShifts(request.date, request.time_slot_id!, [request.id])}
-                          >
-                            シフト作成
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            className="text-sm"
-                            onClick={() => {/* 詳細表示モーダル */}}
-                          >
-                            詳細
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>
