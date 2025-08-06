@@ -86,8 +86,6 @@ export default function ShiftRequestPage() {
         return;
       }
 
-      console.log('User info:', user); // デバッグログ
-
       // 提出期間を生成
       const submissionPeriods = getSubmissionPeriods();
       setPeriods(submissionPeriods);
@@ -100,22 +98,25 @@ export default function ShiftRequestPage() {
 
       // ユーザーの所属店舗を取得
       try {
-        // まずユーザー情報から店舗を確認
-        if (user.stores && user.stores.length > 0) {
-          // 店舗情報を取得
-          const storesResponse = await fetch('/api/stores');
-          if (storesResponse.ok) {
-            const storesResult = await storesResponse.json();
-            const allStores = storesResult.data || [];
-            
+        const userResponse = await fetch(`/api/users?id=${user.id}`);
+        if (!userResponse.ok) {
+          throw new Error('ユーザー情報の取得に失敗しました');
+        }
+        const userResult = await userResponse.json();
+        const userData = userResult.data;
+        
+        if (userData && userData.length > 0) {
+          const userInfo = userData[0];
+          
+          if (userInfo.user_stores && userInfo.user_stores.length > 0) {
             // ユーザーが所属する店舗のリストを作成
-            const userStoreList = user.stores.map((storeId: string) => {
-              const store = allStores.find((s: any) => s.id === storeId);
-              return {
-                store_id: storeId,
-                stores: { id: storeId, name: store?.name || storeId }
-              };
-            });
+            const userStoreList = userInfo.user_stores.map((userStore: any) => ({
+              store_id: userStore.store_id,
+              stores: { 
+                id: userStore.stores.id, 
+                name: userStore.stores.name 
+              }
+            }));
             
             setUserStores(userStoreList);
 
@@ -124,63 +125,14 @@ export default function ShiftRequestPage() {
               setSelectedStore(userStoreList[0].store_id);
             }
           } else {
-            // 店舗名取得に失敗した場合は、IDのみで進行
-            const userStoreList = user.stores.map((storeId: string) => ({
-              store_id: storeId,
-              stores: { id: storeId, name: storeId }
-            }));
-            
-            setUserStores(userStoreList);
-            if (userStoreList.length > 0) {
-              setSelectedStore(userStoreList[0].store_id);
-            }
+            setError('所属店舗が設定されていません。管理者にお問い合わせください。');
           }
         } else {
-          // ユーザーのstores情報がない場合、APIから取得を試みる
-          console.log('User stores not found in localStorage, fetching from API...');
-          const userResponse = await fetch(`/api/users?id=${user.id}`);
-          if (userResponse.ok) {
-            const userResult = await userResponse.json();
-            const userData = userResult.data;
-            
-            if (userData && userData.length > 0) {
-              const userInfo = userData[0];
-              
-              if (userInfo.stores && userInfo.stores.length > 0) {
-                // 店舗情報を取得
-                const storesResponse = await fetch('/api/stores');
-                if (storesResponse.ok) {
-                  const storesResult = await storesResponse.json();
-                  const allStores = storesResult.data || [];
-                  
-                  const userStoreList = userInfo.stores.map((storeId: string) => {
-                    const store = allStores.find((s: any) => s.id === storeId);
-                    return {
-                      store_id: storeId,
-                      stores: { id: storeId, name: store?.name || storeId }
-                    };
-                  });
-                  
-                  setUserStores(userStoreList);
-                  if (userStoreList.length > 0) {
-                    setSelectedStore(userStoreList[0].store_id);
-                  }
-                } else {
-                  setError('店舗情報の取得に失敗しました');
-                }
-              } else {
-                setError('所属店舗が設定されていません。管理者にお問い合わせください。');
-              }
-            } else {
-              setError('ユーザー情報が見つかりません');
-            }
-          } else {
-            setError('ユーザー情報の取得に失敗しました');
-          }
+          setError('ユーザー情報が見つかりません');
         }
       } catch (fetchError) {
-        console.error('Store fetch error:', fetchError);
-        setError('店舗情報の取得に失敗しました');
+        console.error('User fetch error:', fetchError);
+        setError('ユーザー情報の取得に失敗しました');
       }
 
     } catch (error) {

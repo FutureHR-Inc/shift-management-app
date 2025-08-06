@@ -8,31 +8,7 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('store_id');
     const role = searchParams.get('role');
     const loginId = searchParams.get('login_id');
-    const id = searchParams.get('id');
-
-    // login_idが指定されている場合は、そのユーザーのみを取得
-    if (loginId) {
-      const query = supabase
-        .from('users')
-        .select(`
-          *,
-          user_stores(
-            store_id,
-            is_flexible,
-            stores(id, name)
-          )
-        `)
-        .eq('login_id', loginId);
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching user by login_id:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ data }, { status: 200 });
-    }
+    const id = searchParams.get('id'); // ID指定での取得を追加
 
     // idが指定されている場合は、そのユーザーのみを取得
     if (id) {
@@ -58,14 +34,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data }, { status: 200 });
     }
 
+    // login_idが指定されている場合は、そのユーザーのみを取得
+    if (loginId) {
+      const query = supabase
+        .from('users')
+        .select(`
+          *,
+          user_stores(
+            store_id,
+            is_flexible,
+            stores(id, name)
+          )
+        `)
+        .eq('login_id', loginId);
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching user by login_id:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ data }, { status: 200 });
+    }
+
     // 通常のユーザー一覧取得
     let query = supabase
       .from('users')
       .select(`
         *,
-        user_stores(
+        user_stores!inner(
           store_id,
-          is_flexible,
           stores(id, name)
         )
       `);
