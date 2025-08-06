@@ -102,14 +102,88 @@ export interface DatabaseShift {
 export interface DatabaseStore {
   id: string;
   name: string;
-  required_staff: Record<string, Record<string, number>>;
-  work_rules?: {
-    max_weekly_hours?: number;
-    max_consecutive_days?: number;
-    min_rest_hours?: number;
-  } | null;
+  address: string;
+  phone: string;
+  required_staff: {
+    [timeSlotId: string]: number;
+  };
   created_at: string;
   updated_at: string;
+}
+
+// シフト希望提出関連の型定義
+export interface ShiftRequest {
+  id: string;
+  userId: string;
+  storeId: string;
+  submissionPeriod: string; // '2024-01-first', '2024-01-second'
+  date: string;
+  timeSlotId?: string;
+  preferredStartTime?: string;
+  preferredEndTime?: string;
+  priority: 1 | 2 | 3; // 1:最優先, 2:希望, 3:可能
+  notes?: string;
+  status: 'submitted' | 'approved' | 'rejected' | 'converted_to_shift';
+  submittedAt: string;
+  createdAt: string;
+}
+
+export interface DatabaseShiftRequest {
+  id: string;
+  user_id: string;
+  store_id: string;
+  submission_period: string;
+  date: string;
+  time_slot_id: string | null;
+  preferred_start_time: string | null;
+  preferred_end_time: string | null;
+  priority: number;
+  notes: string | null;
+  status: 'submitted' | 'approved' | 'rejected' | 'converted_to_shift';
+  submitted_at: string;
+  created_at: string;
+  users?: DatabaseUser;
+  stores?: DatabaseStore;
+  time_slots?: TimeSlot;
+}
+
+export interface SubmissionPeriod {
+  id: string;
+  label: string; // '2024年1月前半', '2024年1月後半'
+  startDate: string;
+  endDate: string;
+  submissionDeadline: string;
+  isSubmissionOpen: boolean;
+  isCurrentPeriod: boolean;
+}
+
+// 固定シフト（固定出勤）
+export interface FixedShift {
+  id: string;
+  userId: string;
+  storeId: string;
+  dayOfWeek: number; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  timeSlotId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user?: User;
+  store?: Store;
+  timeSlot?: TimeSlot;
+}
+
+export interface DatabaseFixedShift {
+  id: string;
+  user_id: string;
+  store_id: string;
+  day_of_week: number;
+  time_slot_id: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  users?: DatabaseUser;
+  stores?: DatabaseStore;
+  time_slots?: TimeSlot;
 }
 
 // データベースから取得する緊急募集リクエスト詳細情報

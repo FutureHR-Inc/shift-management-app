@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -101,6 +101,7 @@ function ShiftCreatePageInner() {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]); // shiftPatterns から timeSlots に変更
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [approvedTimeOffRequests, setApprovedTimeOffRequests] = useState<TimeOffRequest[]>([]);
+  const [fixedShifts, setFixedShifts] = useState<any[]>([]);
   
   // UI state
   const [selectedStore, setSelectedStore] = useState('');
@@ -197,6 +198,20 @@ function ShiftCreatePageInner() {
     } catch (error) {
       console.error('Error fetching time slots:', error);
       throw error;
+    }
+  };
+
+  const fetchFixedShifts = async (storeId: string) => {
+    try {
+      const response = await fetch(`/api/fixed-shifts?store_id=${storeId}&is_active=true`);
+      if (!response.ok) throw new Error('固定シフトデータの取得に失敗しました');
+      const result = await response.json();
+      
+      return result.data || [];
+    } catch (error) {
+      console.error('Error fetching fixed shifts:', error);
+      // 固定シフトのエラーは致命的ではないので、空配列を返す
+      return [];
     }
   };
 
@@ -346,13 +361,17 @@ function ShiftCreatePageInner() {
     loadInitialData();
   }, [searchParams]);
 
-  // 店舗変更時に時間帯データを取得
+  // 店舗変更時に時間帯データと固定シフトを取得
   useEffect(() => {
     const loadStoreData = async () => {
       if (selectedStore) {
         try {
-          const timeSlotsData = await fetchTimeSlots(selectedStore);
+          const [timeSlotsData, fixedShiftsData] = await Promise.all([
+            fetchTimeSlots(selectedStore),
+            fetchFixedShifts(selectedStore)
+          ]);
           setTimeSlots(timeSlotsData);
+          setFixedShifts(fixedShiftsData);
         } catch (error) {
           console.error('Error loading store data:', error);
           setError('店舗データの読み込みに失敗しました');
@@ -866,81 +885,202 @@ function ShiftCreatePageInner() {
   };
 
   // 週の統計計算
-  const calculateWeeklyStats = () => {
+  const weeklyStats = useMemo(() => {
     try {
+      // 基本的な初期値
+      const defaultResult = {
+        totalHours: 0,
+        totalWage: 0,
+        uniqueStaff: 0,
+        averageHours: 0,
+        fixedShiftHours: 0,
+        fixedShiftWage: 0,
+        regularShiftHours: 0,
+        regularShiftWage: 0
+      };
+
+      // 必要なデータが揃っているかチェック
       if (!shifts || !selectedStore || !timeSlots || !users) {
-        return {
-          totalHours: 0,
-          totalWage: 0,
-          uniqueStaff: 0,
-          averageHours: 0
-        };
+        return defaultResult;
       }
 
-      // 表示期間に応じて期間の開始・終了日を計算
-      const periodStart = new Date(selectedWeek);
-      let periodEnd = new Date(selectedWeek);
+      // 期間計算の安全性確保
+      let periodStart: Date;
+      let periodEnd: Date;
       
-      if (viewMode === 'week') {
-        periodEnd.setDate(periodStart.getDate() + 6);
-      } else if (viewMode === 'half-month') {
-        periodEnd.setDate(periodStart.getDate() + 13);
-      } else if (viewMode === 'month') {
-        periodStart.setDate(1);
-        periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+      try {
+        periodStart = new Date(selectedWeek);
+        periodEnd = new Date(selectedWeek);
+        
+        if (viewMode === 'week') {
+          periodEnd.setDate(periodStart.getDate() + 6);
+        } else if (viewMode === 'half-month') {
+          periodEnd.setDate(periodStart.getDate() + 13);
+        } else if (viewMode === 'month') {
+          periodStart.setDate(1);
+          periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+        }
+
+        // 日付が有効かチェック
+        if (isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
+          console.error('Invalid date range:', { selectedWeek, viewMode });
+          return defaultResult;
+        }
+      } catch (dateError) {
+        console.error('Error calculating period dates:', dateError);
+        return defaultResult;
       }
 
-      const periodShifts = shifts.filter(shift => {
-        try {
-          const shiftDate = new Date(shift.date);
-          return shiftDate >= periodStart && shiftDate <= periodEnd && shift.storeId === selectedStore;
-        } catch (error) {
-          console.error('Error filtering period shifts:', error);
-          return false;
-        }
-      });
+      // 期間内シフトのフィルタリング
+      let periodShifts: any[] = [];
+      try {
+        periodShifts = shifts.filter(shift => {
+          try {
+            if (!shift || !shift.date || shift.storeId !== selectedStore) return false;
+            const shiftDate = new Date(shift.date);
+            return shiftDate >= periodStart && shiftDate <= periodEnd;
+          } catch (filterError) {
+            console.error('Error filtering shift:', filterError, { shift });
+            return false;
+          }
+        });
+      } catch (filterError) {
+        console.error('Error filtering period shifts:', filterError);
+        periodShifts = [];
+      }
 
       let totalHours = 0;
       let totalWage = 0;
       const staffCount = new Set();
 
-      periodShifts.forEach(shift => {
-        try {
-          const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
-          const user = users.find(u => u.id === shift.userId);
-          
-          if (timeSlot && user) {
-            const { workHours } = getActualWorkTime(shift, timeSlot);
-              
-              if (workHours > 0) {
+      // 通常シフトの統計計算
+      try {
+        periodShifts.forEach(shift => {
+          try {
+            const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
+            const user = users.find(u => u.id === shift.userId);
+            
+            if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
+              const { workHours } = getActualWorkTime(shift, timeSlot);
+                
+              if (workHours > 0 && !isNaN(workHours)) {
                 totalHours += workHours;
-              totalWage += workHours * getHourlyWage(user);
+                totalWage += workHours * getHourlyWage(user);
                 staffCount.add(shift.userId);
+              }
+            }
+          } catch (shiftError) {
+            console.error('Error calculating shift stats:', shiftError);
+          }
+        });
+      } catch (regularShiftError) {
+        console.error('Error in regular shift calculation:', regularShiftError);
+      }
+
+      // 固定シフトの統計計算
+      let fixedShiftHours = 0;
+      let fixedShiftWage = 0;
+
+      try {
+        if (fixedShifts && Array.isArray(fixedShifts) && fixedShifts.length > 0) {
+          const diffTime = Math.abs(periodEnd.getTime() - periodStart.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const maxDays = Math.min(31, diffDays + 1);
+          
+          for (let dayOffset = 0; dayOffset < maxDays; dayOffset++) {
+            try {
+              const currentDate = new Date(periodStart);
+              currentDate.setDate(periodStart.getDate() + dayOffset);
+              
+              if (currentDate > periodEnd || isNaN(currentDate.getTime())) break;
+              
+              const dayOfWeek = currentDate.getDay();
+              const dateString = currentDate.toISOString().split('T')[0];
+              
+              const dayFixedShifts = fixedShifts.filter(fixedShift => 
+                fixedShift && 
+                fixedShift.day_of_week === dayOfWeek && 
+                fixedShift.is_active &&
+                fixedShift.store_id === selectedStore
+              );
+              
+              for (const fixedShift of dayFixedShifts) {
+                try {
+                  if (!fixedShift.user_id || !fixedShift.time_slot_id) continue;
+
+                  const hasExistingShift = periodShifts.some(shift => 
+                    shift && shift.userId === fixedShift.user_id && shift.date === dateString
+                  );
+                  
+                  if (!hasExistingShift) {
+                    const timeSlot = timeSlots.find(ts => ts.id === fixedShift.time_slot_id);
+                    const user = users.find(u => u.id === fixedShift.user_id);
+                    
+                    if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
+                      const pseudoShift = {
+                        id: `fixed-${fixedShift.id}-${dateString}`,
+                        userId: fixedShift.user_id,
+                        storeId: fixedShift.store_id,
+                        date: dateString,
+                        timeSlotId: fixedShift.time_slot_id,
+                        customStartTime: undefined,
+                        customEndTime: undefined,
+                        status: 'confirmed' as const,
+                        notes: '固定シフト'
+                      };
+                      
+                      const { workHours } = getActualWorkTime(pseudoShift, timeSlot);
+                      
+                      if (workHours > 0 && !isNaN(workHours)) {
+                        fixedShiftHours += workHours;
+                        fixedShiftWage += workHours * getHourlyWage(user);
+                        staffCount.add(fixedShift.user_id);
+                      }
+                    }
+                  }
+                } catch (fixedShiftError) {
+                  console.error('Fixed shift processing error:', fixedShiftError);
+                }
+              }
+            } catch (dayError) {
+              console.error('Day processing error:', dayError);
             }
           }
-        } catch (error) {
-          console.error('Error calculating shift stats:', error);
         }
-      });
+      } catch (fixedShiftCalculationError) {
+        console.error('Fixed shift calculation error:', fixedShiftCalculationError);
+      }
+
+      // 最終結果の計算と検証
+      const combinedTotalHours = (totalHours || 0) + (fixedShiftHours || 0);
+      const combinedTotalWage = (totalWage || 0) + (fixedShiftWage || 0);
+      const uniqueStaffCount = staffCount.size || 0;
 
       return {
-        totalHours: Math.round(totalHours * 10) / 10,
-        totalWage: Math.round(totalWage),
-        uniqueStaff: staffCount.size,
-        averageHours: staffCount.size > 0 ? Math.round((totalHours / staffCount.size) * 10) / 10 : 0
+        totalHours: Math.round((combinedTotalHours || 0) * 10) / 10,
+        totalWage: Math.round(combinedTotalWage || 0),
+        uniqueStaff: uniqueStaffCount,
+        averageHours: uniqueStaffCount > 0 ? Math.round((combinedTotalHours / uniqueStaffCount) * 10) / 10 : 0,
+        fixedShiftHours: Math.round((fixedShiftHours || 0) * 10) / 10,
+        fixedShiftWage: Math.round(fixedShiftWage || 0),
+        regularShiftHours: Math.round((totalHours || 0) * 10) / 10,
+        regularShiftWage: Math.round(totalWage || 0)
       };
+
     } catch (error) {
-      console.error('Error in calculateWeeklyStats:', error);
+      console.error('Critical error in calculateWeeklyStats:', error);
       return {
         totalHours: 0,
         totalWage: 0,
         uniqueStaff: 0,
-        averageHours: 0
+        averageHours: 0,
+        fixedShiftHours: 0,
+        fixedShiftWage: 0,
+        regularShiftHours: 0,
+        regularShiftWage: 0
       };
     }
-  };
-
-  const weeklyStats = calculateWeeklyStats();
+  }, [shifts, selectedStore, timeSlots, users, fixedShifts, selectedWeek, viewMode]);
 
   // 週のシフト確定状況を確認
   const weekShiftStatus = () => {
@@ -1006,6 +1146,25 @@ function ShiftCreatePageInner() {
       console.error('Error checking staff shift status:', error);
       return { hasConflict: false, conflicts: [] };
     }
+  };
+
+  // 固定シフトを取得する関数
+  const getFixedShiftForSlot = (dayOfWeek: number, timeSlotId: string = '') => {
+    return fixedShifts.filter(fixedShift => 
+      fixedShift.day_of_week === dayOfWeek && 
+      (timeSlotId === '' || fixedShift.time_slot_id === timeSlotId) &&
+      fixedShift.is_active
+    );
+  };
+
+  // 特定の日・ユーザーの固定シフトをチェック
+  const checkUserFixedShift = (userId: string, dayOfWeek: number, timeSlotId: string) => {
+    return fixedShifts.find(fixedShift => 
+      fixedShift.user_id === userId &&
+      fixedShift.day_of_week === dayOfWeek && 
+      fixedShift.time_slot_id === timeSlotId &&
+      fixedShift.is_active
+    );
   };
 
   // スタッフ選択時の競合チェック（下書き・確定関係なく制限）
@@ -1395,6 +1554,12 @@ function ShiftCreatePageInner() {
                  viewMode === 'half-month' ? '半月勤務時間' : 
                  '月間勤務時間'}
               </p>
+              {/* 固定シフト詳細を小さく表示 */}
+              {(weeklyStats.fixedShiftHours || 0) > 0 && (
+                <div className="text-xs text-purple-600 mt-1">
+                  📌 固定: {weeklyStats.fixedShiftHours || 0}h
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -1405,6 +1570,12 @@ function ShiftCreatePageInner() {
                  viewMode === 'half-month' ? '半月人件費' : 
                  '月間人件費'}
               </p>
+              {/* 固定シフト詳細を小さく表示 */}
+              {(weeklyStats.fixedShiftWage || 0) > 0 && (
+                <div className="text-xs text-purple-600 mt-1">
+                  📌 固定: ¥{(weeklyStats.fixedShiftWage || 0).toLocaleString()}
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -1420,6 +1591,8 @@ function ShiftCreatePageInner() {
             </CardContent>
           </Card>
         </div>
+
+
 
         {/* 店舗・週選択 */}
         <Card>
@@ -1495,19 +1668,137 @@ function ShiftCreatePageInner() {
                    viewMode === 'half-month' ? '半月選択（開始日）' : 
                    '月選択'}
                 </label>
-                <input
-                  type={viewMode === 'month' ? 'month' : 'date'}
-                  value={viewMode === 'month' ? selectedWeek.substring(0, 7) : selectedWeek}
-                  onChange={(e) => {
-                    if (viewMode === 'month') {
-                      setSelectedWeek(e.target.value + '-01');
-                    } else {
-                      setSelectedWeek(e.target.value);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={loading}
-                />
+                {viewMode === 'month' ? (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setMonth(currentDate.getMonth() - 1);
+                        const newMonth = currentDate.getFullYear() + '-' + 
+                          String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
+                        setSelectedWeek(newMonth);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </Button>
+                    <input
+                      type="month"
+                      value={selectedWeek.substring(0, 7)}
+                      onChange={(e) => setSelectedWeek(e.target.value + '-01')}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={loading}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setMonth(currentDate.getMonth() + 1);
+                        const newMonth = currentDate.getFullYear() + '-' + 
+                          String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
+                        setSelectedWeek(newMonth);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Button>
+                  </div>
+                ) : viewMode === 'week' ? (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setDate(currentDate.getDate() - 7);
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                      title="前週"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </Button>
+                    <input
+                      type="date"
+                      value={selectedWeek}
+                      onChange={(e) => setSelectedWeek(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={loading}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setDate(currentDate.getDate() + 7);
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                      title="次週"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Button>
+                  </div>
+                ) : viewMode === 'half-month' ? (
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setDate(currentDate.getDate() - 14);
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                      title="前半月"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </Button>
+                    <input
+                      type="date"
+                      value={selectedWeek}
+                      onChange={(e) => setSelectedWeek(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={loading}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const currentDate = new Date(selectedWeek);
+                        currentDate.setDate(currentDate.getDate() + 14);
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2"
+                      title="次半月"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Button>
+                  </div>
+                ) : (
+                  <input
+                    type="date"
+                    value={selectedWeek}
+                    onChange={(e) => setSelectedWeek(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={loading}
+                  />
+                )}
               </div>
               <div className="flex items-end">
                 <Button variant="secondary" fullWidth disabled={loading || saving}>
@@ -1735,6 +2026,37 @@ function ShiftCreatePageInner() {
                                       return null;
                                     }
                                   })}
+                                  
+                                  {/* 固定シフト表示 */}
+                                  {(() => {
+                                    const dayFixedShifts = getFixedShiftForSlot(date.getDay(), timeSlot.id);
+                                    return dayFixedShifts.map((fixedShift) => {
+                                      const user = users.find(u => u.id === fixedShift.user_id);
+                                      if (!user) return null;
+                                      
+                                      // 既存シフトがある場合は固定シフトを表示しない
+                                      const hasExistingShift = dayShifts && dayShifts.some(shift => shift.userId === fixedShift.user_id);
+                                      if (hasExistingShift) return null;
+                                      
+                                      return (
+                                        <div key={`fixed-${fixedShift.id}`} className="relative">
+                                          <div
+                                            className="text-xs p-1.5 rounded-lg text-white font-medium flex items-center justify-between bg-gradient-to-r from-purple-500 to-purple-600 border-2 border-purple-300 border-dashed opacity-80"
+                                          >
+                                            <span className="truncate flex items-center">
+                                              {user.name || '不明'}
+                                              <span className="ml-1 text-purple-200">📌</span>
+                                            </span>
+                                          </div>
+                                          
+                                          {/* 固定シフトバッジ */}
+                                          <div className="absolute -top-1 -right-1 bg-purple-500 text-white text-xs px-1 py-0.5 rounded-full">
+                                            固定
+                                          </div>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
                                 </div>
                                 
                                 {/* 追加ボタン */}
@@ -1852,6 +2174,7 @@ function ShiftCreatePageInner() {
                       .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
                       .map(user => {
                       const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
+                      const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
                         
                       return (
                         <option 
@@ -1862,6 +2185,7 @@ function ShiftCreatePageInner() {
                         >
                           {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
                           {isOnTimeOff && ' [希望休承認済み]'}
+                          {fixedShift && ' [固定シフト]'}
                         </option>
                       );
                     })}
@@ -1877,6 +2201,20 @@ function ShiftCreatePageInner() {
                         </svg>
                         <p className="text-sm text-yellow-700">
                           この日は希望休が承認されているスタッフがいます
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 固定シフトスタッフの情報表示 */}
+                  {selectedTimeSlot && availableStaff.some(user => checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot)) && (
+                    <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <p className="text-sm text-purple-700">
+                          📌 この時間帯に固定シフトが設定されているスタッフがいます
                         </p>
                       </div>
                     </div>

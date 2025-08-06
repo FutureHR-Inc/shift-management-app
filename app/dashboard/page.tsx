@@ -7,7 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
 import { supabase } from '@/lib/supabase';
-import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot } from '@/lib/types';
+import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot, DatabaseShiftRequest } from '@/lib/types';
+import { getSubmissionPeriods } from '@/lib/utils';
 
 // ダッシュボード専用の型定義
 interface DashboardStats {
@@ -24,13 +25,18 @@ interface StoreStaffing {
   status: 'sufficient' | 'insufficient';
 }
 
-interface DashboardTimeOffRequest {
+interface DashboardShiftRequest {
   id: string;
   user_id: string;
+  submission_period: string;
   date: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  priority: number;
+  status: string;
   created_at: string;
+  submitted_at: string;
+  users?: DatabaseUser;
+  stores?: { id: string; name: string };
+  time_slots?: TimeSlot;
 }
 
 interface DashboardShift {
@@ -53,10 +59,10 @@ interface DashboardStore {
 }
 
 interface DashboardShiftPattern {
-  id: string;
-  name: string;
-  start_time: string;
-  end_time: string;
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
   color: string;
   break_time: number;
 }
@@ -71,7 +77,7 @@ export default function DashboardPage() {
     totalStaff: 0
   });
   const [storeStaffing, setStoreStaffing] = useState<StoreStaffing[]>([]);
-  const [recentRequests, setRecentRequests] = useState<DashboardTimeOffRequest[]>([]);
+  const [recentRequests, setRecentRequests] = useState<DashboardShiftRequest[]>([]);
   const [emergencyRequests, setEmergencyRequests] = useState<DatabaseEmergencyRequest[]>([]);
   const [users, setUsers] = useState<DatabaseUser[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -92,14 +98,14 @@ export default function DashboardPage() {
       // 並列でデータを取得
       const [
         { data: shiftsData },
-        { data: requestsData },
+        shiftRequestsResponse, // APIルート経由に変更
         emergencyResponse, // APIルート経由に変更
         { data: usersData },
         { data: storesData },
         { data: shiftPatternsData }
       ] = await Promise.all([
         supabase.from('shifts').select('*'),
-        supabase.from('time_off_requests').select('*'),
+        fetch('/api/shift-requests?status=submitted'), // シフト希望APIルート経由
         fetch('/api/emergency-requests'), // APIルート経由に変更
         supabase.from('users').select(`
           *,
@@ -121,12 +127,21 @@ export default function DashboardPage() {
         console.error('Emergency requests API error:', await emergencyResponse.text());
       }
 
+      // shift_requestsはAPIレスポンスから取得
+      let requestsData = [];
+      if (shiftRequestsResponse.ok) {
+        const shiftRequestsResult = await shiftRequestsResponse.json();
+        requestsData = shiftRequestsResult.data || [];
+      } else {
+        console.error('Shift requests API error:', await shiftRequestsResponse.text());
+      }
+
       // 今日の日付
       const today = new Date().toISOString().split('T')[0];
       const todayShifts = (shiftsData as DashboardShift[])?.filter(shift => 
         shift.date === today && shift.status === 'confirmed'
       ) || [];
-      const pendingRequests = (requestsData as DashboardTimeOffRequest[])?.filter(req => req.status === 'pending') || [];
+      const pendingRequests = (requestsData as DashboardShiftRequest[])?.filter(req => req.status === 'submitted') || [];
       const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => req.status === 'open') || [];
 
       // 統計情報を設定
@@ -157,7 +172,7 @@ export default function DashboardPage() {
           
           if (startMinutes >= slotStartMinutes && startMinutes < slotEndMinutes) {
             return slot.id;
-          }
+      }
         }
         
         return null;
@@ -209,7 +224,7 @@ export default function DashboardPage() {
       });
 
       setStoreStaffing(staffingData);
-      setRecentRequests((requestsData as DashboardTimeOffRequest[])?.slice(0, 3) || []);
+      setRecentRequests((requestsData as DashboardShiftRequest[])?.slice(0, 3) || []);
       setEmergencyRequests(openEmergencies.slice(0, 3) || []);
       setUsers((usersData as DatabaseUser[]) || []);
       setShiftPatterns((shiftPatternsData as DashboardShiftPattern[]) || []);
@@ -263,14 +278,14 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 保留中の希望休申請 */}
+          {/* 新しいシフト希望 */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">保留中の申請</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">新しいシフト希望</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-orange-600">{stats.pendingRequests}</div>
-              <p className="text-sm text-gray-500 mt-1">件の希望休申請</p>
+              <p className="text-sm text-gray-500 mt-1">件のシフト希望</p>
             </CardContent>
           </Card>
 
@@ -496,14 +511,14 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* 最近の希望休申請 */}
+        {/* 最近のシフト希望 */}
           <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>最近の希望休申請</CardTitle>
+            <CardTitle>最近のシフト希望</CardTitle>
                 <Button
                   variant="ghost"
                   size="sm"
-              onClick={() => router.push('/requests')}
+              onClick={() => router.push('/shift-requests')}
                 >
               すべて表示
                 </Button>
@@ -513,29 +528,35 @@ export default function DashboardPage() {
               {recentRequests.length > 0 ? (
                 recentRequests.map((request) => {
                   const user = users.find(u => u.id === request.user_id);
+                  const submissionPeriods = getSubmissionPeriods();
+                  const period = submissionPeriods.find(p => p.id === request.submission_period);
+                  
                   return (
                     <div key={request.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                       <div>
                         <p className="font-medium text-gray-900">{user?.name || '不明なユーザー'}</p>
-                        <p className="text-sm text-gray-500">{request.date} - {request.reason}</p>
-                </div>
-                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        request.status === 'pending' 
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : request.status === 'approved'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                          }`}>
-                        {request.status === 'pending' ? '保留' : 
-                         request.status === 'approved' ? '承認' : '拒否'}
+                        <p className="text-sm text-gray-500">
+                          {request.date} - {period?.label || request.submission_period} 
+                          (優先度: {request.priority === 1 ? '最優先' : request.priority === 2 ? '希望' : '可能'})
+                        </p>
                       </div>
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        request.status === 'submitted' 
+                          ? 'bg-blue-100 text-blue-800'
+                          : request.status === 'converted_to_shift'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                        }`}>
+                        {request.status === 'submitted' ? '提出済み' : 
+                         request.status === 'converted_to_shift' ? 'シフト化済み' : request.status}
+                        </div>
                     </div>
                   );
                 })
               ) : (
-                <p className="text-gray-500 text-center py-4">申請はありません</p>
-                  )}
-                </div>
+                <p className="text-gray-500 text-center py-4">シフト希望はありません</p>
+              )}
+            </div>
             </CardContent>
           </Card>
 

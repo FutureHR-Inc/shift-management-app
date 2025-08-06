@@ -261,6 +261,121 @@ export type Database = {
           responded_at?: string
         }
       }
+      time_slots: {
+        Row: {
+          id: string
+          store_id: string
+          name: string
+          start_time: string // HH:MM format
+          end_time: string // HH:MM format
+          break_minutes: number
+          hourly_wage: number
+          color: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          name: string
+          start_time: string
+          end_time: string
+          break_minutes?: number
+          hourly_wage: number
+          color: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          store_id?: string
+          name?: string
+          start_time?: string
+          end_time?: string
+          break_minutes?: number
+          hourly_wage?: number
+          color?: string
+          updated_at?: string
+        }
+      }
+      fixed_shifts: {
+        Row: {
+          id: string
+          user_id: string
+          store_id: string
+          day_of_week: number // 0=Sunday, 1=Monday, ..., 6=Saturday
+          time_slot_id: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          store_id: string
+          day_of_week: number
+          time_slot_id: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          store_id?: string
+          day_of_week?: number
+          time_slot_id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+      }
+      shift_requests: {
+        Row: {
+          id: string
+          user_id: string
+          store_id: string
+          submission_period: string // '2024-01-first', '2024-01-second'
+          date: string
+          time_slot_id: string | null
+          preferred_start_time: string | null
+          preferred_end_time: string | null
+          priority: number // 1:最優先, 2:希望, 3:可能
+          notes: string | null
+          status: 'submitted' | 'approved' | 'rejected' | 'converted_to_shift'
+          submitted_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          store_id: string
+          submission_period: string
+          date: string
+          time_slot_id?: string | null
+          preferred_start_time?: string | null
+          preferred_end_time?: string | null
+          priority?: number
+          notes?: string | null
+          status?: 'submitted' | 'approved' | 'rejected' | 'converted_to_shift'
+          submitted_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          store_id?: string
+          submission_period?: string
+          date?: string
+          time_slot_id?: string | null
+          preferred_start_time?: string | null
+          preferred_end_time?: string | null
+          priority?: number
+          notes?: string | null
+          status?: 'submitted' | 'approved' | 'rejected' | 'converted_to_shift'
+          submitted_at?: string
+          created_at?: string
+        }
+      }
     }
   }
 } 

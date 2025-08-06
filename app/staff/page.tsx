@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { FixedShiftManager } from '@/components/ui/FixedShiftManager';
 // import type { User, Store } from '@/lib/types'; // 未使用のため削除
 
 // APIから取得するデータ用の型
@@ -757,6 +758,17 @@ export default function StaffPage() {
                       disabled={saving}
                     />
                   </div>
+
+                  {/* 固定シフト設定セクション（編集時のみ表示） */}
+                  {editingUser && (
+                    <div className="pt-6 border-t border-gray-200">
+                      <FixedShiftManager
+                        userId={editingUser.id}
+                        userStores={formData.stores}
+                        onUpdate={fetchUsers}
+                      />
+                    </div>
+                  )}
 
                   <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
                     <Button

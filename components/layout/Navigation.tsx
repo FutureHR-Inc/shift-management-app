@@ -15,7 +15,6 @@ interface CurrentUser {
 
 interface NotificationData {
   emergencyRequestsCount: number;
-  timeOffRequestsCount: number;
 }
 
 const Navigation = () => {
@@ -24,8 +23,7 @@ const Navigation = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [notifications, setNotifications] = useState<NotificationData>({
-    emergencyRequestsCount: 0,
-    timeOffRequestsCount: 0
+    emergencyRequestsCount: 0
   });
 
   // ログインユーザー情報を取得
@@ -84,15 +82,7 @@ const Navigation = () => {
             }));
           }
         } else if (currentUser.role === 'manager') {
-          // 管理者用：承認待ち希望休申請件数を取得
-          const requestsResponse = await fetch('/api/time-off-requests?status=pending');
-          if (requestsResponse.ok) {
-            const requestsResult = await requestsResponse.json();
-            setNotifications(prev => ({
-              ...prev,
-              timeOffRequestsCount: requestsResult.data?.length || 0
-            }));
-          }
+          // 管理者用通知（将来的に他の通知を追加する場合のために残す）
         }
       } catch (error) {
         console.error('通知データの取得に失敗:', error);
@@ -125,15 +115,15 @@ const Navigation = () => {
   const managerNavItems = [
     { href: '/dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
     { href: '/shift/create', label: 'シフト作成', icon: 'calendar', badge: 0 },
+    { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard', badge: 0 },
     { href: '/staff', label: 'スタッフ管理', icon: 'users', badge: 0 },
-    { href: '/requests', label: '希望休申請', icon: 'clock', badge: notifications.timeOffRequestsCount },
     { href: '/settings/store', label: '店舗設定', icon: 'settings', badge: 0 },
   ];
 
   const staffNavItems = [
     { href: '/staff-dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
     { href: '/my-shift', label: 'マイシフト', icon: 'calendar', badge: 0 },
-    { href: '/request-off', label: '希望休申請', icon: 'clock', badge: 0 },
+    { href: '/shift-request', label: 'シフト希望提出', icon: 'clipboard', badge: 0 },
     { href: '/emergency', label: '代打募集', icon: 'alert', badge: notifications.emergencyRequestsCount },
   ];
 
@@ -194,6 +184,12 @@ const Navigation = () => {
         return (
           <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        );
+      case 'clipboard':
+        return (
+          <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
         );
       default:
