@@ -176,7 +176,12 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('emergency_requests')
       .insert(insertData)
-      .select()
+      .select(`
+        *,
+        original_user:users!original_user_id(id, name, email),
+        stores(id, name),
+        time_slots(id, name, start_time, end_time)
+      `)
       .single();
 
     if (error) {
@@ -185,6 +190,55 @@ export async function POST(request: Request) {
         { error: '緊急募集リクエストの作成に失敗しました' }, 
         { status: 500 }
       );
+    }
+
+    // メール送信処理：該当店舗の関連スタッフに通知
+    try {
+      // 該当店舗に所属するスタッフ（代打募集者以外）のメールアドレスを取得
+      const { data: staffData } = await supabase
+        .from('user_stores')
+        .select(`
+          users(id, name, email, role)
+        `)
+        .eq('store_id', store_id)
+        .neq('user_id', original_user_id); // 募集者以外
+
+      if (staffData && staffData.length > 0) {
+        const staffEmails = staffData
+          .map((item: any) => item.users?.email)
+          .filter((email: any) => email) as string[];
+
+        if (staffEmails.length > 0) {
+          // メール送信
+          const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'emergency-request',
+              userEmails: staffEmails,
+              details: {
+                storeName: data.stores?.name || '不明な店舗',
+                date: new Date(data.date).toLocaleDateString('ja-JP'),
+                shiftPattern: data.time_slots?.name || '不明なシフト',
+                startTime: data.time_slots?.start_time || '00:00',
+                endTime: data.time_slots?.end_time || '00:00',
+                reason: data.reason
+              }
+            }),
+          });
+
+          if (!emailResponse.ok) {
+            console.warn('代打募集メール送信に失敗しましたが、募集は作成されました');
+          } else {
+            console.log(`代打募集メールを${staffEmails.length}人に送信しました`);
+          }
+        }
+      }
+    } catch (emailError) {
+      console.error('代打募集メール送信エラー:', emailError);
+      // メール送信失敗でも募集作成は成功とする
     }
 
     return NextResponse.json({ data }, { status: 201 });
@@ -375,6 +429,47 @@ export async function PATCH(request: Request) {
         .delete()
         .eq('emergency_request_id', emergency_request_id)
         .neq('id', volunteer_id);
+
+      // 代打採用メール送信処理
+      try {
+        // 必要なデータを取得
+        const approvedUser = volunteer.users;
+        const originalUser = (emergencyRequest as any).original_user;
+        const store = (emergencyRequest as any).stores;
+        const timeSlot = (emergencyRequest as any).time_slots;
+
+        if (approvedUser?.email && originalUser?.email && store && timeSlot) {
+          const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'substitute-approved',
+              approvedUserEmail: approvedUser.email,
+              approvedUserName: approvedUser.name || '不明',
+              originalUserEmail: originalUser.email,
+              originalUserName: originalUser.name || '不明',
+              details: {
+                storeName: store.name || '不明な店舗',
+                date: new Date(emergencyRequest.date as string).toLocaleDateString('ja-JP'),
+                timeSlot: timeSlot.name || '不明なシフト',
+                startTime: custom_start_time || timeSlot.start_time || '00:00',
+                endTime: custom_end_time || timeSlot.end_time || '00:00'
+              }
+            }),
+          });
+
+          if (!emailResponse.ok) {
+            console.warn('代打採用メール送信に失敗しましたが、採用処理は完了しました');
+          } else {
+            console.log('代打採用メールを送信しました');
+          }
+        }
+      } catch (emailError) {
+        console.error('代打採用メール送信エラー:', emailError);
+        // メール送信失敗でも採用処理は成功とする
+      }
 
       return NextResponse.json({ 
         message: '承認が完了しました。シフトが自動更新されました。',

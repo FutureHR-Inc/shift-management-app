@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { 
   sendEmail,
   sendShiftConfirmationEmail,
-  sendTimeOffRequestResponseEmail,
   sendEmergencyShiftRequestEmail,
   sendNotificationEmail,
-  sendTodayShiftNotificationEmail
+  sendTodayShiftNotificationEmail,
+  sendSubstituteApprovedEmail,
+  sendShiftRequestConfirmationEmail,
+  sendShiftRequestReminderEmail
 } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -22,23 +24,6 @@ export async function POST(request: NextRequest) {
       case 'shift-confirmation':
         const { userEmail: shiftEmail, userName: shiftUser, shifts } = emailData;
         await sendShiftConfirmationEmail(shiftEmail, shiftUser, shifts);
-        break;
-
-      case 'time-off-response':
-        const { 
-          userEmail: timeOffEmail, 
-          userName: timeOffUser, 
-          requestDate, 
-          status, 
-          reason 
-        } = emailData;
-        await sendTimeOffRequestResponseEmail(
-          timeOffEmail, 
-          timeOffUser, 
-          requestDate, 
-          status, 
-          reason
-        );
         break;
 
       case 'emergency-request':
@@ -71,6 +56,53 @@ export async function POST(request: NextRequest) {
           todayEmail, 
           todayUser, 
           todayShifts
+        );
+        break;
+
+      case 'substitute-approved':
+        const {
+          approvedUserEmail,
+          approvedUserName,
+          originalUserEmail,
+          originalUserName,
+          details: substituteDetails
+        } = emailData;
+        await sendSubstituteApprovedEmail(
+          approvedUserEmail,
+          approvedUserName,
+          originalUserEmail,
+          originalUserName,
+          substituteDetails
+        );
+        break;
+
+      case 'shift-request-confirmation':
+        const {
+          userEmail: confirmationEmail,
+          userName: confirmationUser,
+          submissionPeriod,
+          submittedRequestsCount
+        } = emailData;
+        await sendShiftRequestConfirmationEmail(
+          confirmationEmail,
+          confirmationUser,
+          submissionPeriod,
+          submittedRequestsCount
+        );
+        break;
+
+      case 'shift-request-reminder':
+        const {
+          userEmail: reminderEmail,
+          userName: reminderUser,
+          submissionPeriod: reminderPeriod,
+          deadline
+        } = emailData;
+        await sendShiftRequestReminderEmail(
+          reminderEmail,
+          reminderUser,
+          reminderPeriod,
+          deadline
         );
         break;
 

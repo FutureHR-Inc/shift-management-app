@@ -1234,25 +1234,7 @@ function ShiftCreatePageInner() {
         throw new Error(errorData.error || '緊急募集の作成に失敗しました');
       }
 
-      // メール送信処理
-      const staffEmailResponse = await fetch('/api/email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'emergency-request',
-          storeId: selectedStore,
-          date: shift.date,
-          timeSlotId: shift.time_slot_id, // shift_pattern_id から time_slot_id に変更
-          originalUserName: shift.users?.name || '不明',
-          reason: emergencyReason.trim()
-        }),
-      });
-
-      if (!staffEmailResponse.ok) {
-        console.warn('メール送信に失敗しましたが、緊急募集は作成されました');
-      }
+      // メール送信は、emergency-requests APIで自動的に処理されるため削除
 
       // データを再取得
       if (selectedStore && selectedWeek) {
@@ -1266,7 +1248,7 @@ function ShiftCreatePageInner() {
 
       setEmergencyModal({ show: false, shift: null });
       setEmergencyReason('');
-      alert('緊急募集を作成し、スタッフにメールを送信しました。');
+      alert('緊急募集を作成しました。スタッフにメールが自動送信されます。');
     } catch (error) {
       setError(error instanceof Error ? error.message : '緊急募集の作成に失敗しました');
     } finally {

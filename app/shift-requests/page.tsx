@@ -340,14 +340,14 @@ export default function ShiftRequestsPage() {
     <AuthenticatedLayout>
       <div className="space-y-6">
         {/* ヘッダー */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">📅 シフト希望確認・管理</CardTitle>
-            <p className="text-gray-600">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">📅 シフト希望確認・管理</h1>
+            <p className="text-gray-600 mt-2">
               スタッフから提出されたシフト希望を確認し、シフトを作成できます
             </p>
-          </CardHeader>
-        </Card>
+          </div>
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">

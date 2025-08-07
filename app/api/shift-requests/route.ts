@@ -120,6 +120,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // シフト希望提出確認メール送信処理
+    try {
+      // ユーザー情報を取得
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name, email')
+        .eq('id', user_id)
+        .single();
+
+      if (userData?.email) {
+        const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'shift-request-confirmation',
+            userEmail: userData.email,
+            userName: userData.name || '不明',
+            submissionPeriod: submission_period,
+            submittedRequestsCount: data.length
+          }),
+        });
+
+        if (!emailResponse.ok) {
+          console.warn('シフト希望提出確認メール送信に失敗しましたが、提出は完了しました');
+        } else {
+          console.log('シフト希望提出確認メールを送信しました');
+        }
+      }
+    } catch (emailError) {
+      console.error('シフト希望提出確認メール送信エラー:', emailError);
+      // メール送信失敗でも提出は成功とする
+    }
+
     return NextResponse.json({ 
       data,
       message: `${data.length}件のシフト希望を提出しました`

@@ -424,4 +424,295 @@ export async function sendNotificationEmail(
     subject: title,
     html,
   });
+}
+
+/**
+ * 代打採用通知メールを送信
+ */
+export async function sendSubstituteApprovedEmail(
+  approvedUserEmail: string,
+  approvedUserName: string,
+  originalUserEmail: string,
+  originalUserName: string,
+  details: {
+    storeName: string;
+    date: string;
+    timeSlot: string;
+    startTime: string;
+    endTime: string;
+  }
+) {
+  // 採用されたスタッフへのメール
+  const approvedHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>代打採用のお知らせ</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #10b981; border-bottom: 2px solid #10b981; padding-bottom: 10px;">
+          🎉 代打採用のお知らせ
+        </h1>
+        
+        <p>お疲れ様です、${approvedUserName}さん。</p>
+        
+        <p>ご応募いただいた代打が採用されましたので、お知らせいたします。</p>
+        
+        <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <h3 style="margin: 0 0 15px 0; color: #10b981;">採用シフト詳細</h3>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>シフト:</strong> ${details.timeSlot}</p>
+          <p style="margin: 5px 0;"><strong>時間:</strong> ${details.startTime} - ${details.endTime}</p>
+        </div>
+        
+        <p>シフトが自動的に更新されておりますので、マイシフトページでご確認ください。</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/my-shift" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            マイシフトを確認
+          </a>
+        </div>
+        
+        <p>当日はよろしくお願いいたします！</p>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // 元のスタッフへのメール
+  const originalHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>代打が決定しました</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+          ✅ 代打が決定しました
+        </h1>
+        
+        <p>お疲れ様です、${originalUserName}さん。</p>
+        
+        <p>ご依頼いただいていた代打が決定いたしましたので、お知らせいたします。</p>
+        
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+          <h3 style="margin: 0 0 15px 0; color: #3b82f6;">代打決定詳細</h3>
+          <p style="margin: 5px 0;"><strong>代打スタッフ:</strong> ${approvedUserName}さん</p>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>シフト:</strong> ${details.timeSlot}</p>
+          <p style="margin: 5px 0;"><strong>時間:</strong> ${details.startTime} - ${details.endTime}</p>
+        </div>
+        
+        <p>シフトが自動的に更新されており、${approvedUserName}さんが担当となります。</p>
+        <p>ご協力いただき、ありがとうございました。</p>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // 両方のメールを送信
+  return Promise.all([
+    sendEmail({
+      to: approvedUserEmail,
+      subject: `【代打採用】${details.date} ${details.storeName}のシフトが確定しました`,
+      html: approvedHtml,
+    }),
+    sendEmail({
+      to: originalUserEmail,
+      subject: `【代打決定】${details.date} ${details.storeName}の代打が決定しました`,
+      html: originalHtml,
+    })
+  ]);
+}
+
+/**
+ * シフト希望提出確認メールを送信
+ */
+export async function sendShiftRequestConfirmationEmail(
+  userEmail: string,
+  userName: string,
+  submissionPeriod: string,
+  submittedRequestsCount: number
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>シフト希望提出確認</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #10b981; border-bottom: 2px solid #10b981; padding-bottom: 10px;">
+          📋 シフト希望提出確認
+        </h1>
+        
+        <p>お疲れ様です、${userName}さん。</p>
+        
+        <p>${submissionPeriod}のシフト希望の提出を確認いたしました。</p>
+        
+        <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <h3 style="margin: 0 0 15px 0; color: #10b981;">提出内容</h3>
+          <p style="margin: 5px 0;"><strong>対象期間:</strong> ${submissionPeriod}</p>
+          <p style="margin: 5px 0;"><strong>提出日数:</strong> ${submittedRequestsCount}日分</p>
+          <p style="margin: 5px 0;"><strong>提出日時:</strong> ${new Date().toLocaleString('ja-JP')}</p>
+        </div>
+        
+        <p>店長がシフト希望を確認し、シフトを作成いたします。シフトが確定次第、別途お知らせいたします。</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/shift-request" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            シフト希望を確認・修正
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `【確認】${submissionPeriod}のシフト希望を受け付けました`,
+    html,
+  });
+}
+
+/**
+ * シフト希望提出締切リマインダーメールを送信（未提出者のみ）
+ */
+export async function sendShiftRequestReminderEmail(
+  userEmail: string,
+  userName: string,
+  submissionPeriod: string,
+  deadline: string
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>シフト希望提出期限のお知らせ</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 10px;">
+          ⏰ シフト希望提出期限のお知らせ
+        </h1>
+        
+        <p>お疲れ様です、${userName}さん。</p>
+        
+        <p>${submissionPeriod}のシフト希望がまだ提出されていません。</p>
+        
+        <div style="background-color: #fffbeb; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+          <h3 style="margin: 0 0 15px 0; color: #f59e0b;">⚠️ 提出期限について</h3>
+          <p style="margin: 5px 0;"><strong>対象期間:</strong> ${submissionPeriod}</p>
+          <p style="margin: 5px 0;"><strong>提出期限:</strong> ${deadline}</p>
+          <p style="margin: 15px 0 5px 0; color: #92400e;"><strong>期限までにご提出をお願いいたします。</strong></p>
+        </div>
+        
+        <p>シフト希望の提出がない場合、シフト作成に支障をきたす可能性があります。</p>
+        <p>お早めにシフト管理システムからご提出ください。</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/shift-request" 
+             style="background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            今すぐシフト希望を提出
+          </a>
+        </div>
+        
+        <p>ご不明な点がございましたら、お気軽にお問い合わせください。</p>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `【重要】${submissionPeriod}のシフト希望提出期限が近づいています`,
+    html,
+  });
+}
+
+/**
+ * バッチ処理で複数ユーザーに締切リマインダーを送信
+ */
+export async function sendBatchShiftRequestReminders(
+  reminders: Array<{
+    userEmail: string;
+    userName: string;
+    submissionPeriod: string;
+    deadline: string;
+  }>
+) {
+  const results = {
+    success: 0,
+    failed: 0,
+    errors: [] as string[]
+  };
+
+  // バッチ処理で並列実行（制限付き）
+  const batchSize = 5; // 同時送信数を制限
+  
+  for (let i = 0; i < reminders.length; i += batchSize) {
+    const batch = reminders.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (reminder) => {
+      try {
+        await sendShiftRequestReminderEmail(
+          reminder.userEmail,
+          reminder.userName,
+          reminder.submissionPeriod,
+          reminder.deadline
+        );
+        
+        results.success++;
+        return { success: true, email: reminder.userEmail };
+      } catch (error) {
+        results.failed++;
+        const errorMessage = `Failed to send to ${reminder.userEmail}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        results.errors.push(errorMessage);
+        return { success: false, email: reminder.userEmail, error: errorMessage };
+      }
+    });
+
+    // バッチを並列実行
+    await Promise.all(batchPromises);
+    
+    // 次のバッチまで少し待機（レート制限対策）
+    if (i + batchSize < reminders.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待機
+    }
+  }
+
+  console.log(`Batch reminder sending completed: ${results.success} success, ${results.failed} failed`);
+  
+  return results;
 } 
