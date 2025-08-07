@@ -136,6 +136,14 @@ function ShiftCreatePageInner() {
     request: any;
   }>({ show: false, request: null });
   const [processingVolunteer, setProcessingVolunteer] = useState('');
+  
+  // カスタム時間設定用のstate
+  const [customApprovalTime, setCustomApprovalTime] = useState({
+    volunteerId: '',
+    startTime: '',
+    endTime: '',
+    showCustomTime: false
+  });
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1331,7 +1339,7 @@ function ShiftCreatePageInner() {
   };
 
   // 応募者承認・却下処理
-  const handleVolunteerAction = async (requestId: string, volunteerId: string, action: 'accept' | 'reject') => {
+  const handleVolunteerAction = async (requestId: string, volunteerId: string, action: 'accept' | 'reject', customStartTime?: string, customEndTime?: string) => {
     setProcessingVolunteer(volunteerId);
     
     try {
@@ -1343,7 +1351,9 @@ function ShiftCreatePageInner() {
         body: JSON.stringify({
           emergency_request_id: requestId,
           volunteer_id: volunteerId,
-          action: action
+          action: action,
+          custom_start_time: customStartTime || null,
+          custom_end_time: customEndTime || null
         }),
       });
 
@@ -2511,8 +2521,8 @@ function ShiftCreatePageInner() {
                   <div>
                     <p className="text-gray-600">シフト</p>
                     <p className="font-medium">
-                      {emergencyManagement.request.shift_patterns?.name || '不明なシフト'} 
-                      ({emergencyManagement.request.shift_patterns?.start_time || '00:00'}-{emergencyManagement.request.shift_patterns?.end_time || '00:00'})
+                      {emergencyManagement.request.time_slots?.name || '不明なシフト'} 
+                      ({emergencyManagement.request.time_slots?.start_time || '00:00'}-{emergencyManagement.request.time_slots?.end_time || '00:00'})
                     </p>
                   </div>
                   <div>
@@ -2553,25 +2563,113 @@ function ShiftCreatePageInner() {
                               <p className="text-xs text-gray-400">
                                 応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
                               </p>
+                              {volunteer.notes && (
+                                <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                                  <p className="text-gray-600 font-medium">応募メモ:</p>
+                                  <p className="text-gray-700">{volunteer.notes}</p>
+                                </div>
+                              )}
                             </div>
                           </div>
                           
                           <div className="flex space-x-2">
+                            {/* カスタム時間設定フォーム */}
+                            {customApprovalTime.volunteerId === volunteer.id && customApprovalTime.showCustomTime && (
+                              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                <div className="bg-white p-6 rounded-lg w-96">
+                                  <h3 className="text-lg font-semibold mb-4">勤務時間設定</h3>
+                                  <div className="space-y-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        開始時間
+                                      </label>
+                                      <input
+                                        type="time"
+                                        value={customApprovalTime.startTime}
+                                        onChange={(e) => setCustomApprovalTime(prev => ({
+                                          ...prev,
+                                          startTime: e.target.value
+                                        }))}
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        終了時間
+                                      </label>
+                                      <input
+                                        type="time"
+                                        value={customApprovalTime.endTime}
+                                        onChange={(e) => setCustomApprovalTime(prev => ({
+                                          ...prev,
+                                          endTime: e.target.value
+                                        }))}
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                      />
+                                    </div>
+                                    <div className="flex space-x-2">
+                                      <Button
+                                        onClick={() => {
+                                          handleVolunteerAction(
+                                            emergencyManagement.request.id, 
+                                            volunteer.id, 
+                                            'accept',
+                                            customApprovalTime.startTime,
+                                            customApprovalTime.endTime
+                                          );
+                                          setCustomApprovalTime({
+                                            volunteerId: '',
+                                            startTime: '',
+                                            endTime: '',
+                                            showCustomTime: false
+                                          });
+                                        }}
+                                        className="bg-green-600 hover:bg-green-700"
+                                      >
+                                        {processingVolunteer === volunteer.id ? (
+                                          <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                            確定中...
+                                          </>
+                                        ) : (
+                                          'そのまま採用'
+                                        )}
+                                      </Button>
+                                      <Button
+                                        variant="secondary"
+                                        onClick={() => setCustomApprovalTime({
+                                          volunteerId: '',
+                                          startTime: '',
+                                          endTime: '',
+                                          showCustomTime: false
+                                        })}
+                                      >
+                                        キャンセル
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
                             <Button
                               size="sm"
-                              onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'accept')}
+                              onClick={() => {
+                                const originalStartTime = emergencyManagement.request.time_slots?.start_time || '09:00';
+                                const originalEndTime = emergencyManagement.request.time_slots?.end_time || '17:00';
+                                setCustomApprovalTime({
+                                  volunteerId: volunteer.id,
+                                  startTime: originalStartTime,
+                                  endTime: originalEndTime,
+                                  showCustomTime: true
+                                });
+                              }}
                               disabled={processingVolunteer === volunteer.id}
-                              className="bg-green-600 hover:bg-green-700"
+                              className="bg-blue-600 hover:bg-blue-700"
                             >
-                              {processingVolunteer === volunteer.id ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  確定中...
-                                </>
-                              ) : (
-                                '採用'
-                              )}
+                              時間設定して採用
                             </Button>
+                            
                             <Button
                               size="sm"
                               variant="secondary"

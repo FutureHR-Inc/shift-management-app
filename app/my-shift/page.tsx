@@ -159,9 +159,9 @@ export default function MyShiftPage() {
         if (startTime && endTime) {
           const start = new Date(`2000-01-01T${startTime}`);
           const end = new Date(`2000-01-01T${endTime}`);
-          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
           const breakHours = breakMinutes / 60; // 分を時間に変換
-          totalHours += Math.max(0, hours - breakHours);
+        totalHours += Math.max(0, hours - breakHours);
         }
       }
     });

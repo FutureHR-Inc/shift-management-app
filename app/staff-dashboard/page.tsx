@@ -55,10 +55,16 @@ interface EmergencyRequest {
     start_time: string;
     end_time: string;
   };
+  time_slots?: {
+    name: string;
+    start_time: string;
+    end_time: string;
+  };
   emergency_volunteers?: {
     user_id: string;
     responded_at: string;
   }[];
+  original_user_id?: string; // 自分が作成した代打募集の場合に設定
 }
 
 export default function StaffDashboardPage() {
@@ -69,7 +75,6 @@ export default function StaffDashboardPage() {
   const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [applyingTo, setApplyingTo] = useState<string | null>(null);
   const router = useRouter();
 
   // 認証チェックとユーザー情報取得
@@ -132,11 +137,15 @@ export default function StaffDashboardPage() {
           setMyShiftRequests(shiftRequestsResult.data || []);
         }
 
-        // 代打募集を取得
+        // 代打募集を取得（自分が作成したもの以外）
         const emergencyResponse = await fetch('/api/emergency-requests?status=open');
         if (emergencyResponse.ok) {
           const emergencyResult = await emergencyResponse.json();
-          setEmergencyRequests(emergencyResult.data || []);
+          // 自分が作成した代打募集を除外
+          const filteredEmergencyRequests = (emergencyResult.data || []).filter((req: EmergencyRequest) => 
+            req.original_user_id !== currentUser.id
+          );
+          setEmergencyRequests(filteredEmergencyRequests);
         }
 
       } catch (error) {
@@ -158,54 +167,6 @@ export default function StaffDashboardPage() {
         const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       return total + hours;
     }, 0);
-  };
-
-  // 代打募集への応募
-  const handleApplyEmergency = async (emergencyRequestId: string) => {
-    if (!currentUser) return;
-
-    try {
-      setApplyingTo(emergencyRequestId);
-      setError(null);
-
-      // 事前チェック: 同じ日にシフトがあるかどうか確認
-      const emergencyRequest = emergencyRequests.find(req => req.id === emergencyRequestId);
-      if (emergencyRequest) {
-        // その日にシフトがあるかチェック
-        const existingShift = weeklyShifts.find(shift => shift.date === emergencyRequest.date);
-        if (existingShift) {
-          setError(`${emergencyRequest.date}は既に${existingShift.stores?.name || '他店舗'}でシフトが入っています`);
-          return;
-        }
-      }
-
-      const response = await fetch('/api/emergency-volunteers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          emergency_request_id: emergencyRequestId,
-          user_id: currentUser.id,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '応募に失敗しました');
-      }
-
-      // 成功メッセージ
-      alert('代打募集に応募しました。結果をお待ちください。');
-      
-      // データを再取得（簡易版）
-      window.location.reload();
-
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '応募に失敗しました');
-    } finally {
-      setApplyingTo(null);
-    }
   };
 
   // 既に応募済みかチェック
@@ -457,7 +418,17 @@ export default function StaffDashboardPage() {
           {/* 代打募集 - モバイル最適化 */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg sm:text-xl">代打募集</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg sm:text-xl">代打募集</CardTitle>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={() => router.push('/emergency')}
+                  className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 h-auto"
+                >
+                  代打募集
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {emergencyRequests.length === 0 ? (
@@ -500,18 +471,22 @@ export default function StaffDashboardPage() {
                             ) : (
                               <Button 
                                 size="sm" 
-                                onClick={() => handleApplyEmergency(request.id)}
-                                disabled={applyingTo === request.id}
-                                  className="text-xs px-3 py-1 h-auto min-h-[32px] min-w-[60px]"
+                                onClick={() => router.push(`/emergency?apply=${request.id}`)}
+                                className="text-xs px-3 py-1 h-auto min-h-[32px] min-w-[60px]"
                               >
-                                {applyingTo === request.id ? '応募中...' : '参加'}
+                                参加
                               </Button>
                             )}
                             </div>
                           </div>
                           <div className="space-y-1">
                             <p className="text-xs sm:text-sm text-gray-600">
-                              {request.shift_patterns?.name} ({request.shift_patterns?.start_time} - {request.shift_patterns?.end_time})
+                              {request.time_slots 
+                                ? `${request.time_slots.name} (${request.time_slots.start_time} - ${request.time_slots.end_time})`
+                                : request.shift_patterns 
+                                  ? `${request.shift_patterns.name} (${request.shift_patterns.start_time} - ${request.shift_patterns.end_time})`
+                                  : '時間未設定'
+                              }
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
                               {request.stores?.name}

@@ -85,11 +85,45 @@ export default function DashboardPage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [timeSlots, setTimeSlots] = useState<{ [storeId: string]: TimeSlot[] }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<DatabaseUser | null>(null);
   const router = useRouter();
   
   useEffect(() => {
+    // ローカルストレージからcurrentUserを取得
+    const user = localStorage.getItem('currentUser');
+    if (user) {
+      setCurrentUser(JSON.parse(user));
+    }
     loadDashboardData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 代打募集に応募する関数
+  const handleApplyEmergency = async (requestId: string) => {
+    if (!currentUser) return;
+
+    try {
+      const response = await fetch('/api/emergency-volunteers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emergency_request_id: requestId,
+          user_id: currentUser.id
+        })
+      });
+
+      if (response.ok) {
+        // データを再読み込み
+        loadDashboardData();
+        alert('代打募集に応募しました');
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || '応募に失敗しました');
+      }
+    } catch (error) {
+      console.error('応募エラー:', error);
+      alert('応募に失敗しました');
+    }
+  };
 
     const loadDashboardData = async () => {
       try {
@@ -142,7 +176,9 @@ export default function DashboardPage() {
         shift.date === today && shift.status === 'confirmed'
       ) || [];
       const pendingRequests = (requestsData as DashboardShiftRequest[])?.filter(req => req.status === 'submitted') || [];
-      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => req.status === 'open') || [];
+      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => 
+        req.status === 'open' && req.original_user_id !== currentUser?.id
+      ) || [];
 
       // 統計情報を設定
       setStats({
@@ -485,7 +521,21 @@ export default function DashboardPage() {
                           <Button
                             size="sm"
                             variant={volunteerCount > 0 ? "primary" : "secondary"}
-                            onClick={() => router.push(`/shift/create?emergency=${request.id}`)}
+                            onClick={() => {
+                              if (currentUser?.role === 'manager') {
+                                router.push(`/shift/create?emergency=${request.id}`);
+                              } else {
+                                // スタッフの場合は応募処理
+                                const hasApplied = request.emergency_volunteers?.some(
+                                  volunteer => volunteer.user_id === currentUser?.id
+                                );
+                                if (hasApplied) {
+                                  alert('既に応募済みです');
+                                } else {
+                                  handleApplyEmergency(request.id);
+                                }
+                              }
+                            }}
                             className={`${
                               volunteerCount > 0 
                                 ? 'bg-blue-600 hover:bg-blue-700 text-white relative' 
@@ -497,7 +547,11 @@ export default function DashboardPage() {
                                 {volunteerCount}
                               </div>
                             )}
-                            管理
+                            {currentUser?.role === 'manager' ? '管理' : (
+                              request.emergency_volunteers?.some(volunteer => volunteer.user_id === currentUser?.id) 
+                                ? '応募済み' 
+                                : '応募'
+                            )}
                           </Button>
                         </div>
                       </div>

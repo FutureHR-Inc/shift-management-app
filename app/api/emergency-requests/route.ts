@@ -13,17 +13,18 @@ export async function GET(request: Request) {
   const id = searchParams.get('id'); // 単一リクエスト取得用
 
   try {
-    // まず基本的なクエリから開始
+    // まず基本的なクエリから開始（時間帯情報は別途取得）
     let query = supabase
       .from('emergency_requests')
       .select(`
         *,
-        users(id, name, email, phone),
+        original_user:users!original_user_id(id, name, email, phone),
         stores(id, name),
         emergency_volunteers(
           id,
           user_id,
           responded_at,
+          notes,
           users(id, name, email, phone)
         )
       `);
@@ -62,9 +63,10 @@ export async function GET(request: Request) {
       );
     }
 
-    // データ処理: time_slot_idがある場合は別途time_slotsを取得
+    // データ処理: time_slot_idがある場合は別途取得
     if (data && data.length > 0) {
       for (const request of data) {
+        // time_slot_idがある場合は必ず別途取得
         if (request.time_slot_id) {
           try {
             const { data: timeSlotData } = await supabase
@@ -76,11 +78,29 @@ export async function GET(request: Request) {
             if (timeSlotData) {
               request.time_slots = timeSlotData;
             }
-          } catch {
-            console.warn('Time slot data not found for:', request.time_slot_id);
+          } catch (error) {
+            console.warn('Time slot data not found for:', request.time_slot_id, error);
             // time_slotが見つからない場合は無視して続行
           }
         }
+        
+        // shift_pattern_idの処理は一時的に無効化（DBに存在しない可能性）
+        // if (request.shift_pattern_id) {
+        //   try {
+        //     const { data: shiftPatternData } = await supabase
+        //       .from('shift_patterns')
+        //       .select('id, name, start_time, end_time, color')
+        //       .eq('id', request.shift_pattern_id)
+        //       .single();
+        //     
+        //     if (shiftPatternData) {
+        //       request.shift_patterns = shiftPatternData;
+        //     }
+        //   } catch (error) {
+        //     console.warn('Shift pattern data not found for:', request.shift_pattern_id, error);
+        //     // shift_patternが見つからない場合は無視して続行
+        //   }
+        // }
       }
     }
 
@@ -106,8 +126,7 @@ export async function POST(request: Request) {
       original_user_id,
       store_id,
       date,
-      shift_pattern_id, // 旧フィールド（移行期間）
-      time_slot_id, // 新フィールド
+      time_slot_id, // time_slot_idのみ使用
       reason
     } = await request.json();
 
@@ -119,11 +138,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // time_slot_id または shift_pattern_id のいずれかが必要
-    const finalTimeSlotId = time_slot_id || shift_pattern_id;
-    if (!finalTimeSlotId) {
+    // time_slot_idが必要
+    if (!time_slot_id) {
       return NextResponse.json(
-        { error: 'time_slot_idまたはshift_pattern_idが必要です' }, 
+        { error: 'time_slot_idが必要です' }, 
         { status: 400 }
       );
     }
@@ -145,21 +163,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // データ挿入
+    // データ挿入（time_slot_idのみ）
     const insertData: Record<string, unknown> = {
         original_user_id,
         store_id,
         date,
+        time_slot_id, // time_slot_idのみ設定
       reason: reason.trim(),
         status: 'open'
     };
-
-    // time_slot_id を優先使用
-    if (time_slot_id) {
-      insertData.time_slot_id = time_slot_id;
-    } else {
-      insertData.shift_pattern_id = shift_pattern_id;
-    }
 
     const { data, error } = await supabase
       .from('emergency_requests')
@@ -203,7 +215,7 @@ export async function PUT(request: Request) {
       .eq('id', id)
       .select(`
         *,
-        users(id, name, email, phone),
+        original_user:users!original_user_id(id, name, email, phone),
         stores(id, name),
         time_slots(id, name, start_time, end_time),
         emergency_volunteers(
@@ -237,7 +249,7 @@ export async function PUT(request: Request) {
 // PATCH: 緊急募集応募者の承認・却下
 export async function PATCH(request: Request) {
   try {
-    const { emergency_request_id, volunteer_id, action } = await request.json();
+    const { emergency_request_id, volunteer_id, action, custom_start_time, custom_end_time } = await request.json();
 
     if (!emergency_request_id || !volunteer_id || !action) {
       return NextResponse.json(
@@ -274,16 +286,10 @@ export async function PATCH(request: Request) {
     const emergencyRequest = volunteer.emergency_requests as Record<string, unknown>;
 
     if (action === 'accept') {
-      // 重複シフトチェック
+      // 既存シフトとの重複チェック（承認時のみ）
       const { data: existingShifts } = await supabase
-      .from('shifts')
-        .select(`
-          id,
-          date,
-          status,
-          users(name),
-          stores(name)
-        `)
+        .from('shifts')
+        .select('id')
         .eq('user_id', volunteer.user_id)
         .eq('date', emergencyRequest.date);
 
@@ -294,58 +300,108 @@ export async function PATCH(request: Request) {
         );
     }
 
-      // 承認処理：新しいシフトを作成
+      // 承認処理：元のシフトを削除して新しいシフトを作成
+      console.log('元のシフト削除開始:', { original_user_id: emergencyRequest.original_user_id, date: emergencyRequest.date, store_id: emergencyRequest.store_id });
+      
+      // 1. 元のシフトを削除
+      const { error: deleteError } = await supabase
+        .from('shifts')
+        .delete()
+        .eq('user_id', emergencyRequest.original_user_id)
+        .eq('date', emergencyRequest.date)
+        .eq('store_id', emergencyRequest.store_id);
+
+      if (deleteError) {
+        console.error('元のシフト削除エラー:', deleteError);
+        return NextResponse.json(
+          { error: '元のシフトの削除に失敗しました' }, 
+          { status: 500 }
+        );
+      }
+
+      console.log('元のシフト削除完了');
+
+      // 2. 新しいシフトを作成
       const insertData: Record<string, unknown> = {
         user_id: volunteer.user_id,
         store_id: emergencyRequest.store_id,
         date: emergencyRequest.date,
         status: 'confirmed' as const,
-        notes: '代打承認により自動作成'
+        notes: `代打承認により自動作成（元: ${(emergencyRequest as any).original_user?.name || '不明'}）`
       };
 
-      // time_slot_id を優先使用
+      // time_slot_idを使用
       if (emergencyRequest.time_slot_id) {
         insertData.time_slot_id = emergencyRequest.time_slot_id;
-      } else if (emergencyRequest.shift_pattern_id) {
-        insertData.shift_pattern_id = emergencyRequest.shift_pattern_id;
       }
 
-      const { error: shiftCreateError } = await supabase
+      // カスタム時間が指定されている場合は設定
+      if (custom_start_time && custom_end_time) {
+        insertData.custom_start_time = custom_start_time;
+        insertData.custom_end_time = custom_end_time;
+      }
+
+      console.log('新しいシフト作成開始:', insertData);
+
+      const { data: newShift, error: shiftCreateError } = await supabase
         .from('shifts')
-        .insert(insertData);
+        .insert(insertData)
+        .select('*')
+        .single();
 
       if (shiftCreateError) {
-        console.error('Shift creation error:', shiftCreateError);
+        console.error('シフト作成エラー:', shiftCreateError);
         return NextResponse.json(
           { error: 'シフトの作成に失敗しました' }, 
           { status: 500 }
         );
-    }
+      }
 
-      // 緊急募集リクエストのステータスを更新
-      await supabase
-      .from('emergency_requests')
-      .update({ status: 'filled' })
+      console.log('新しいシフト作成完了:', newShift);
+
+      // 3. 緊急募集リクエストのステータスを更新
+      const { error: requestUpdateError } = await supabase
+        .from('emergency_requests')
+        .update({ status: 'filled' })
         .eq('id', emergency_request_id);
+
+      if (requestUpdateError) {
+        console.error('緊急募集リクエスト更新エラー:', requestUpdateError);
+      }
+
+      // 採用された応募者以外を削除
+      await supabase
+        .from('emergency_volunteers')
+        .delete()
+        .eq('emergency_request_id', emergency_request_id)
+        .neq('id', volunteer_id);
+
+      return NextResponse.json({ 
+        message: '承認が完了しました。シフトが自動更新されました。',
+        data: {
+          volunteer,
+          emergency_request: emergencyRequest,
+          new_shift: newShift,
+          action
+        }
+      });
+    } else {
+      // 却下された応募者を削除
+      await supabase
+        .from('emergency_volunteers')
+        .delete()
+        .eq('id', volunteer_id);
+
+      return NextResponse.json({ 
+        message: '却下が完了しました',
+        data: {
+          volunteer,
+          emergency_request: emergencyRequest,
+          new_shift: null,
+          action
+        }
+      });
     }
-
-    // 応募ステータスを更新
-    const { error: updateError } = await supabase
-      .from('emergency_volunteers')
-      .update({ status: action === 'accept' ? 'accepted' : 'rejected' })
-      .eq('id', volunteer_id);
-
-    if (updateError) {
-      console.error('Volunteer update error:', updateError);
-      return NextResponse.json(
-        { error: '応募ステータスの更新に失敗しました' }, 
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ 
-      message: action === 'accept' ? '承認が完了しました' : '却下が完了しました' 
-    });
 
   } catch (error) {
     console.error('API error:', error);

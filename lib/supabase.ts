@@ -247,18 +247,21 @@ export type Database = {
           emergency_request_id: string
           user_id: string
           responded_at: string
+          notes: string | null
         }
         Insert: {
           id?: string
           emergency_request_id: string
           user_id: string
           responded_at?: string
+          notes?: string | null
         }
         Update: {
           id?: string
           emergency_request_id?: string
           user_id?: string
           responded_at?: string
+          notes?: string | null
         }
       }
       time_slots: {

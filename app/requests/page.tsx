@@ -555,13 +555,13 @@ export default function RequestsPage() {
 
                       return (
                         <div key={`group-${firstRequest.id}`} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold">
                                   {firstRequest.userName.charAt(0)}
-                                </div>
-                                <div>
+                          </div>
+                          <div>
                                   <div className="flex items-center space-x-2">
                                     <h3 className="text-lg font-semibold text-gray-900">{firstRequest.userName}</h3>
                                     {isMultipleDay && (
@@ -570,24 +570,24 @@ export default function RequestsPage() {
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-sm text-gray-500">
+                            <p className="text-sm text-gray-500">
                                     申請日時: {new Date(firstRequest.createdAt).toLocaleDateString('ja-JP', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-700">希望休日</p>
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">希望休日</p>
                                   {isMultipleDay ? (
                                     <div>
-                                      <p className="text-lg font-semibold text-gray-900">
+                            <p className="text-lg font-semibold text-gray-900">
                                         {formatDate(sortedGroup[0].date)} 〜 {formatDate(sortedGroup[sortedGroup.length - 1].date)}
                                       </p>
                                       <p className="text-sm text-gray-600">
@@ -597,15 +597,15 @@ export default function RequestsPage() {
                                   ) : (
                                     <p className="text-lg font-semibold text-gray-900">
                                       {formatDate(firstRequest.date)}
-                                    </p>
+                            </p>
                                   )}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-gray-700">理由</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">理由</p>
                                   <p className="text-gray-900">{firstRequest.reason}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-gray-700">ステータス</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">ステータス</p>
                                   {allSameStatus ? (
                                     <span className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(firstRequest.status)}`}>
                                       {getStatusText(firstRequest.status)}
@@ -638,70 +638,70 @@ export default function RequestsPage() {
                                           })}
                                         </span>
                                         <span className={`px-1 py-0.5 text-xs font-medium rounded ${getStatusColor(request.status)}`}>
-                                          {getStatusText(request.status)}
-                                        </span>
+                              {getStatusText(request.status)}
+                            </span>
                                       </div>
                                     ))}
-                                  </div>
-                                </div>
+                          </div>
+                        </div>
                               )}
 
                               {firstRequest.status !== 'pending' && firstRequest.respondedAt && allSameStatus && (
-                                <div className="p-3 bg-gray-50 rounded-lg">
-                                  <p className="text-sm text-gray-600">
+                          <div className="p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-600">
                                     <span className="font-medium">{firstRequest.respondedByName || '管理者'}</span>により
                                     {new Date(firstRequest.respondedAt).toLocaleDateString('ja-JP', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
                                     })}に{getStatusText(firstRequest.status)}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
+                            </p>
+                          </div>
+                        )}
+                      </div>
 
-                            {/* アクションボタン */}
+                      {/* アクションボタン */}
                             {pendingRequests.length > 0 && (
                               <div className="flex flex-col space-y-2 ml-4">
                                 {/* 一括承認ボタン */}
-                                <Button
-                                  size="sm"
+                          <Button
+                            size="sm"
                                   onClick={() => handleBulkApprove(pendingRequests.map(r => r.id))}
-                                  className="bg-green-500 hover:bg-green-600"
+                            className="bg-green-500 hover:bg-green-600"
                                   disabled={processing === 'bulk-approve' || processing === 'bulk-reject'}
-                                >
+                          >
                                   {processing === 'bulk-approve' ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  ) : (
-                                    <>
-                                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                      </svg>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
                                       {pendingRequests.length > 1 ? `一括承認 (${pendingRequests.length})` : '承認'}
-                                    </>
-                                  )}
-                                </Button>
+                              </>
+                            )}
+                          </Button>
                                 
                                 {/* 一括却下ボタン */}
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
+                          <Button
+                            size="sm"
+                            variant="destructive"
                                   onClick={() => handleBulkReject(pendingRequests.map(r => r.id))}
                                   disabled={processing === 'bulk-approve' || processing === 'bulk-reject'}
-                                >
+                          >
                                   {processing === 'bulk-reject' ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  ) : (
-                                    <>
-                                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                                       {pendingRequests.length > 1 ? `一括却下 (${pendingRequests.length})` : '却下'}
-                                    </>
-                                  )}
-                                </Button>
+                              </>
+                            )}
+                          </Button>
 
                                 {/* 個別操作の場合は単一申請のみ表示 */}
                                 {!isMultipleDay && pendingRequests.length === 1 && (
@@ -728,10 +728,10 @@ export default function RequestsPage() {
                                     </div>
                                   </div>
                                 )}
-                              </div>
-                            )}
-                          </div>
                         </div>
+                      )}
+                    </div>
+                  </div>
                       );
                     });
                 })()}

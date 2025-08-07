@@ -409,16 +409,14 @@ export default function ShiftRequestPage() {
 
   return (
     <AuthenticatedLayout>
-      <div className="space-y-4 pb-20">
+      <div className="space-y-6 pb-20">
         {/* ヘッダー */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">📅 シフト希望提出</CardTitle>
-            <p className="text-sm text-gray-600">
-              勤務可能な日時を選択して提出してください
-            </p>
-          </CardHeader>
-        </Card>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">📅 シフト希望提出</h1>
+            <p className="text-gray-600 mt-2">勤務可能な日時を選択して提出してください</p>
+          </div>
+        </div>
 
         {/* 成功・エラーメッセージ */}
         {successMessage && (

@@ -1,34 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// GET - シフトパターン一覧取得
-export async function GET() {
+// GET: シフトパターン一覧取得
+export async function GET(request: Request) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const storeId = searchParams.get('store_id');
+
+    let query = supabase
       .from('shift_patterns')
       .select('*')
-      .order('start_time');
+      .order('created_at', { ascending: true });
+
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
-      console.error('Shift patterns fetch error:', error);
+      console.error('Database error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch shift patterns' },
+        { error: 'シフトパターンの取得に失敗しました' }, 
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: data || [] });
   } catch (error) {
-    console.error('Shift patterns API error:', error);
+    console.error('API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'サーバーエラーが発生しました' }, 
       { status: 500 }
     );
   }
 }
 
 // POST - 新規シフトパターン作成
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { id, name, start_time, end_time, color, break_time } = body;
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
 }
 
 // PUT - シフトパターン更新
-export async function PUT(request: NextRequest) {
+export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, name, start_time, end_time, color, break_time } = body;
@@ -103,7 +112,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // DELETE - シフトパターン削除
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

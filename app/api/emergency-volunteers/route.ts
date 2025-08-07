@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
           id,
           date,
           reason,
-          stores(id, name),
-          shift_patterns(id, name, start_time, end_time)
+          time_slot_id,
+          stores(id, name)
         ),
         users(id, name, role, skill_level)
       `);
@@ -50,11 +50,16 @@ export async function GET(request: NextRequest) {
 // POST - 代打応募
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== Emergency Volunteers POST API 開始 ===');
+    
     const body = await request.json();
-    const { emergency_request_id, user_id } = body;
+    console.log('Request body:', body);
+    
+    const { emergency_request_id, user_id, notes } = body;
 
     // バリデーション
     if (!emergency_request_id || !user_id) {
+      console.error('バリデーションエラー:', { emergency_request_id, user_id });
       return NextResponse.json(
         { error: 'Required fields: emergency_request_id, user_id' },
         { status: 400 }
@@ -62,6 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 重複チェック（同じユーザーが同じ代打募集に複数応募することを防ぐ）
+    console.log('重複チェック開始:', { emergency_request_id, user_id });
     const { data: existingVolunteer } = await supabase
       .from('emergency_volunteers')
       .select('id')
@@ -70,6 +76,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingVolunteer) {
+      console.log('重複応募検出:', existingVolunteer);
       return NextResponse.json(
         { error: 'User has already volunteered for this emergency request' },
         { status: 409 }
@@ -77,13 +84,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 代打募集がまだオープンか確認
+    console.log('代打募集状態チェック開始:', emergency_request_id);
     const { data: emergencyRequest } = await supabase
       .from('emergency_requests')
       .select('status, date')
       .eq('id', emergency_request_id)
       .single();
+    
+    console.log('代打募集データ:', emergencyRequest);
 
     if (!emergencyRequest || emergencyRequest.status !== 'open') {
+      console.log('代打募集が利用不可:', { emergencyRequest, status: emergencyRequest?.status });
       return NextResponse.json(
         { error: 'Emergency request is not available for volunteering' },
         { status: 400 }
@@ -91,6 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 応募者が同じ日に他のシフトを持っていないかチェック
+    console.log('シフト重複チェック開始:', { user_id, date: emergencyRequest.date });
     const { data: existingShifts } = await supabase
       .from('shifts')
       .select(`
@@ -102,9 +114,13 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user_id)
       .eq('date', emergencyRequest.date);
 
+    console.log('既存シフト検索結果:', existingShifts);
+
     if (existingShifts && existingShifts.length > 0) {
       const existingShift = existingShifts[0];
       const storeData = existingShift.stores as { name?: string } | null;
+      
+      console.log('シフト重複検出:', { existingShift, storeData });
       
       return NextResponse.json(
         { 
@@ -117,11 +133,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('データ挿入開始:', { emergency_request_id, user_id, notes: notes || null });
+    
     const { data, error } = await supabase
       .from('emergency_volunteers')
       .insert({
         emergency_request_id,
-        user_id
+        user_id,
+        notes: notes || null
       })
       .select(`
         *,
@@ -129,21 +148,30 @@ export async function POST(request: NextRequest) {
           id,
           date,
           reason,
-          stores(id, name),
-          shift_patterns(id, name, start_time, end_time)
+          time_slot_id,
+          stores(id, name)
         ),
         users(id, name, role, skill_level)
       `)
       .single();
 
     if (error) {
-      console.error('Error creating emergency volunteer:', error);
+      console.error('データ挿入エラー:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data }, { status: 201 });
+    console.log('データ挿入成功:', data);
+    console.log('=== Emergency Volunteers POST API 終了 ===');
+
+    return NextResponse.json({ 
+      data,
+      message: '代打募集への応募が完了しました'
+    }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error:', error);
+    console.error('=== Emergency Volunteers POST API エラー ===');
+    console.error('Error type:', typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
