@@ -24,8 +24,12 @@ export async function POST(request: NextRequest) {
   try {
     const {
       request_ids, // 変換対象のshift_request ID配列
-      status = 'draft' // 作成するシフトのステータス
+      status = 'draft', // 作成するシフトのステータス
+      custom_start_time, // カスタム開始時間（オプション）
+      custom_end_time // カスタム終了時間（オプション）
     } = await request.json();
+
+    console.log('Convert API called with:', { request_ids, status, custom_start_time, custom_end_time });
 
     if (!request_ids || !Array.isArray(request_ids) || request_ids.length === 0) {
       return NextResponse.json(
@@ -34,12 +38,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 対象のシフト希望を取得
+    // まず、IDに該当するシフト希望を全て取得（ステータス条件なし）
+    const { data: allRequests, error: allFetchError } = await supabase
+      .from('shift_requests')
+      .select('*')
+      .in('id', request_ids);
+
+    console.log('All requests found:', allRequests);
+    console.log('All fetch error:', allFetchError);
+
+    // 対象のシフト希望を取得（ステータス条件を一時的に削除）
     const { data: shiftRequests, error: fetchError } = await supabase
       .from('shift_requests')
       .select('*')
-      .in('id', request_ids)
-      .eq('status', 'submitted');
+      .in('id', request_ids);
+      // .eq('status', 'submitted'); // 一時的にコメントアウト
+
+    console.log('All requests found for conversion:', shiftRequests);
+    console.log('Fetch error:', fetchError);
 
     if (fetchError) {
       console.error('Fetch shift requests error:', fetchError);
@@ -51,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     if (!shiftRequests || shiftRequests.length === 0) {
       return NextResponse.json(
-        { error: '対象のシフト希望が見つかりません' },
+        { error: '対象のシフト希望が見つかりません', debug: { request_ids, allRequests } },
         { status: 404 }
       );
     }
@@ -86,8 +102,8 @@ export async function POST(request: NextRequest) {
           store_id: request.store_id,
           date: request.date,
           time_slot_id: request.time_slot_id,
-          custom_start_time: request.preferred_start_time,
-          custom_end_time: request.preferred_end_time,
+          custom_start_time: custom_start_time || request.preferred_start_time,
+          custom_end_time: custom_end_time || request.preferred_end_time,
           status,
           notes: request.notes
         };

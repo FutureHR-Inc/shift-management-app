@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { supabase } from '@/lib/supabase';
+import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot, DatabaseShiftRequest } from '@/lib/types';
+import { getSubmissionPeriods } from '@/lib/utils';
 
 // 型定義
 interface User {
@@ -62,7 +65,7 @@ export default function StaffDashboardPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [todayShift, setTodayShift] = useState<Shift | null>(null);
   const [weeklyShifts, setWeeklyShifts] = useState<Shift[]>([]);
-  const [myRequests, setMyRequests] = useState<TimeOffRequest[]>([]);
+  const [myShiftRequests, setMyShiftRequests] = useState<DatabaseShiftRequest[]>([]);
   const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +125,11 @@ export default function StaffDashboardPage() {
           setWeeklyShifts(weeklyResult.data || []);
         }
 
-        // 希望休申請履歴を取得
-        const requestsResponse = await fetch(`/api/time-off-requests?user_id=${currentUser.id}`);
-        if (requestsResponse.ok) {
-          const requestsResult = await requestsResponse.json();
-          setMyRequests(requestsResult.data || []);
+        // シフト希望提出履歴を取得
+        const shiftRequestsResponse = await fetch(`/api/shift-requests?user_id=${currentUser.id}`);
+        if (shiftRequestsResponse.ok) {
+          const shiftRequestsResult = await shiftRequestsResponse.json();
+          setMyShiftRequests(shiftRequestsResult.data || []);
         }
 
         // 代打募集を取得
@@ -378,9 +381,9 @@ export default function StaffDashboardPage() {
           <Card>
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6 pb-4 sm:pb-6">
               <div className="text-xl sm:text-2xl font-bold text-green-600">
-                {myRequests.filter(r => r.status === 'approved').length}
+                {myShiftRequests.filter(r => r.status === 'converted_to_shift').length}
               </div>
-              <p className="text-xs sm:text-sm text-gray-500 mt-1">承認済み希望休</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">シフト作成済み</p>
             </CardContent>
           </Card>
           <Card>
@@ -394,48 +397,54 @@ export default function StaffDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
-          {/* 希望休申請状況 - モバイル最適化 */}
+          {/* シフト希望提出状況 - モバイル最適化 */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg sm:text-xl">希望休申請状況</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">シフト希望提出状況</CardTitle>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push('/request-off')}
+                  onClick={() => router.push('/shift-request')}
                   className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 h-auto"
                 >
-                  新規申請
+                  新規提出
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {myRequests.length === 0 ? (
+              {myShiftRequests.length === 0 ? (
                 <div className="text-center py-6 sm:py-8 text-gray-500">
-                  <p className="text-sm sm:text-base">申請履歴がありません</p>
+                  <p className="text-sm sm:text-base">提出履歴がありません</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {myRequests.slice(0, 3).map((request) => (
+                  {myShiftRequests.slice(0, 3).map((request) => (
                     <div key={request.id} className="border border-gray-200 rounded-lg p-3 sm:p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 text-sm sm:text-base">
-                            {new Date(request.date).toLocaleDateString('ja-JP')}
+                            {new Date(request.date).toLocaleDateString('ja-JP')} 
+                            {request.time_slots?.name && ` - ${request.time_slots.name}`}
                           </p>
-                          <p className="text-xs sm:text-sm text-gray-600 mt-1 break-words">
-                            {request.reason}
+                          <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                            優先度: {request.priority === 1 ? '最優先' : request.priority === 2 ? '希望' : '可能'}
                           </p>
+                          {request.notes && (
+                            <p className="text-xs sm:text-sm text-gray-500 mt-1 break-words">
+                              {request.notes}
+                            </p>
+                          )}
                         </div>
                         <div className={`px-2 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${
-                          request.status === 'approved' 
+                          request.status === 'converted_to_shift' 
                             ? 'bg-green-100 text-green-800'
-                            : request.status === 'rejected'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            : request.status === 'submitted'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {request.status === 'approved' ? '承認' : 
-                           request.status === 'rejected' ? '却下' : '保留'}
+                          {request.status === 'converted_to_shift' ? 'シフト作成済' : 
+                           request.status === 'submitted' ? '提出済' : '下書き'}
                         </div>
                       </div>
                     </div>

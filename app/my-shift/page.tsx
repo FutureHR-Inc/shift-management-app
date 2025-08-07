@@ -21,7 +21,10 @@ interface Shift {
   date: string;
   user_id: string;
   store_id: string;
-  pattern_id: string;
+  pattern_id?: string;
+  time_slot_id?: string;
+  custom_start_time?: string;
+  custom_end_time?: string;
   status: 'draft' | 'confirmed' | 'completed';
   stores?: { id: string; name: string };
   shift_patterns?: {
@@ -31,6 +34,12 @@ interface Shift {
     end_time: string;
     color: string;
     break_time?: number;
+  };
+  time_slots?: {
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
   };
 }
 
@@ -127,12 +136,33 @@ export default function MyShiftPage() {
     weekDates.forEach(date => {
       const dateString = date.toISOString().split('T')[0];
       const shift = getShiftForDate(dateString);
-      if (shift && shift.shift_patterns) {
-        const start = new Date(`2000-01-01T${shift.shift_patterns.start_time}`);
-        const end = new Date(`2000-01-01T${shift.shift_patterns.end_time}`);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        const breakHours = (shift.shift_patterns.break_time || 30) / 60; // 分を時間に変換
-        totalHours += Math.max(0, hours - breakHours);
+      if (shift) {
+        let startTime, endTime, breakMinutes = 30; // デフォルト休憩時間
+
+        // カスタム時間が設定されている場合
+        if (shift.custom_start_time && shift.custom_end_time) {
+          startTime = shift.custom_start_time;
+          endTime = shift.custom_end_time;
+        }
+        // shift_patternsがある場合
+        else if (shift.shift_patterns) {
+          startTime = shift.shift_patterns.start_time;
+          endTime = shift.shift_patterns.end_time;
+          breakMinutes = shift.shift_patterns.break_time || 30;
+        }
+        // time_slotsがある場合
+        else if (shift.time_slots) {
+          startTime = shift.time_slots.start_time;
+          endTime = shift.time_slots.end_time;
+        }
+
+        if (startTime && endTime) {
+          const start = new Date(`2000-01-01T${startTime}`);
+          const end = new Date(`2000-01-01T${endTime}`);
+          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          const breakHours = breakMinutes / 60; // 分を時間に変換
+          totalHours += Math.max(0, hours - breakHours);
+        }
       }
     });
     return totalHours;
@@ -217,8 +247,33 @@ export default function MyShiftPage() {
                 const dateString = date.toISOString().split('T')[0];
                 const shift = getShiftForDate(dateString);
                 const pattern = shift?.shift_patterns;
+                const timeSlot = shift?.time_slots;
                 const store = shift?.stores;
                 const isToday = dateString === new Date().toISOString().split('T')[0];
+
+                // 表示用の時間情報を取得
+                const getDisplayTime = () => {
+                  if (shift?.custom_start_time && shift?.custom_end_time) {
+                    return `${shift.custom_start_time} - ${shift.custom_end_time}`;
+                  }
+                  if (pattern) {
+                    return `${pattern.start_time} - ${pattern.end_time}`;
+                  }
+                  if (timeSlot) {
+                    return `${timeSlot.start_time} - ${timeSlot.end_time}`;
+                  }
+                  return '';
+                };
+
+                // 表示用の名前を取得
+                const getDisplayName = () => {
+                  return pattern?.name || timeSlot?.name || 'シフト';
+                };
+
+                // 表示用の色を取得
+                const getDisplayColor = () => {
+                  return pattern?.color || '#3B82F6'; // デフォルトは青色
+                };
 
                 return (
                   <div
@@ -242,15 +297,15 @@ export default function MyShiftPage() {
                     </div>
 
                     {/* シフト情報 */}
-                    {shift && pattern && store ? (
+                    {shift && (pattern || timeSlot) && store ? (
                       <div className="space-y-2">
                         <div
                           className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${
                             shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
                           }`}
-                          style={{ backgroundColor: pattern.color }}
+                          style={{ backgroundColor: getDisplayColor() }}
                         >
-                          {pattern.name}
+                          {getDisplayName()}
                           {shift.status === 'confirmed' && (
                             <span className="absolute -top-1 -right-1 bg-yellow-400 text-yellow-900 text-xs rounded-full w-5 h-5 flex items-center justify-center">
                               ✓
@@ -258,7 +313,7 @@ export default function MyShiftPage() {
                           )}
                         </div>
                         <div className="text-center text-sm text-gray-600">
-                          {pattern.start_time} - {pattern.end_time}
+                          {getDisplayTime()}
                         </div>
                         <div className="text-center text-xs text-gray-500">
                           {store.name}

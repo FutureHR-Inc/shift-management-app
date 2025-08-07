@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
+import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
 import { 
   getSubmissionPeriods, 
   generateDateRange, 
@@ -36,6 +39,13 @@ interface PersonRequestGroup {
   totalDays: number;
 }
 
+interface ShiftCreationModal {
+  isOpen: boolean;
+  request?: DatabaseShiftRequest;
+  requests?: DatabaseShiftRequest[];
+  type: 'single' | 'bulk';
+}
+
 export default function ShiftRequestsPage() {
   const router = useRouter();
   
@@ -55,6 +65,12 @@ export default function ShiftRequestsPage() {
 
   // UI states
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
+  const [shiftModal, setShiftModal] = useState<ShiftCreationModal>({ isOpen: false, type: 'single' });
+  
+  // Custom time states
+  const [customStartTime, setCustomStartTime] = useState('');
+  const [customEndTime, setCustomEndTime] = useState('');
+  const [useCustomTime, setUseCustomTime] = useState(false);
 
   useEffect(() => {
     initializePage();
@@ -114,9 +130,9 @@ export default function ShiftRequestsPage() {
       setLoading(true);
       setError(null);
 
-      // シフト希望データを取得
+      // シフト希望データを取得（変換済みを除外）
       const response = await fetch(
-        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}`
+        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}&status=submitted`
       );
       
       if (!response.ok) {
@@ -125,12 +141,18 @@ export default function ShiftRequestsPage() {
 
       const result = await response.json();
       const requestsData = result.data || [];
-      setRequests(requestsData);
+      
+      // さらにフロントエンド側でも変換済みを除外
+      const filteredRequests = requestsData.filter(
+        (request: DatabaseShiftRequest) => request.status !== 'converted_to_shift'
+      );
+      
+      setRequests(filteredRequests);
 
       // 個人ごとにグループ化
       const groupedByPerson: { [userId: string]: PersonRequestGroup } = {};
       
-      requestsData.forEach((request: DatabaseShiftRequest) => {
+      filteredRequests.forEach((request: DatabaseShiftRequest) => {
         const userId = request.user_id;
         
         if (!groupedByPerson[userId]) {
@@ -174,6 +196,8 @@ export default function ShiftRequestsPage() {
 
   const handleCreateShifts = async (date: string, timeSlotId: string, requestIds: string[]) => {
     try {
+      console.log('Frontend: Creating shifts with:', { date, timeSlotId, requestIds, useCustomTime, customStartTime, customEndTime });
+
       const response = await fetch('/api/shift-requests/convert', {
         method: 'POST',
         headers: {
@@ -181,29 +205,37 @@ export default function ShiftRequestsPage() {
         },
         body: JSON.stringify({
           request_ids: requestIds,
-          date,
-          time_slot_id: timeSlotId,
-          store_id: selectedStore
+          status: 'draft',
+          custom_start_time: useCustomTime ? customStartTime : undefined,
+          custom_end_time: useCustomTime ? customEndTime : undefined,
         }),
       });
 
+      const result = await response.json();
+      console.log('Frontend: API response:', { response: response.status, result });
+
       if (!response.ok) {
-        throw new Error('シフト作成に失敗しました');
+        console.error('API Error Response:', result);
+        throw new Error(result.error || 'シフト作成に失敗しました');
       }
+
+      console.log('Shift creation success:', result);
 
       // データを再読み込み
       loadPeriodData();
       
+      // モーダルを閉じる
+      setShiftModal({ isOpen: false, type: 'single' });
+      resetCustomTime();
+      
     } catch (error) {
       console.error('Shift creation error:', error);
-      setError('シフト作成に失敗しました');
+      setError(`シフト作成に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
     }
   };
 
   const handleCreateAllPersonShifts = async (person: PersonRequestGroup) => {
     try {
-      const requestIds = person.requests.map(r => r.id);
-      
       for (const request of person.requests) {
         await handleCreateShifts(request.date, request.time_slot_id!, [request.id]);
       }
@@ -213,6 +245,66 @@ export default function ShiftRequestsPage() {
     } catch (error) {
       console.error('Bulk shift creation error:', error);
       setError('一括シフト作成に失敗しました');
+    }
+  };
+
+  const openShiftModal = (request: DatabaseShiftRequest, type: 'single' = 'single') => {
+    setShiftModal({
+      isOpen: true,
+      request,
+      type
+    });
+    
+    // 時間の初期設定
+    let hasCustomTime = false;
+    
+    // 希望時間がある場合は優先的に使用
+    if (request.preferred_start_time) {
+      setCustomStartTime(request.preferred_start_time);
+      hasCustomTime = true;
+    } else if (request.time_slots?.start_time) {
+      // 希望時間がない場合は時間帯のデフォルト時間を使用
+      setCustomStartTime(request.time_slots.start_time);
+    }
+    
+    if (request.preferred_end_time) {
+      setCustomEndTime(request.preferred_end_time);
+      hasCustomTime = true;
+    } else if (request.time_slots?.end_time) {
+      // 希望時間がない場合は時間帯のデフォルト時間を使用
+      setCustomEndTime(request.time_slots.end_time);
+    }
+    
+    // 希望時間がある場合はカスタム時間を有効に
+    setUseCustomTime(hasCustomTime);
+  };
+
+  const openBulkShiftModal = (person: PersonRequestGroup) => {
+    setShiftModal({
+      isOpen: true,
+      requests: person.requests,
+      type: 'bulk'
+    });
+  };
+
+  const resetCustomTime = () => {
+    setCustomStartTime('');
+    setCustomEndTime('');
+    setUseCustomTime(false);
+  };
+
+  const confirmShiftCreation = async () => {
+    if (shiftModal.type === 'single' && shiftModal.request) {
+      await handleCreateShifts(
+        shiftModal.request.date, 
+        shiftModal.request.time_slot_id!, 
+        [shiftModal.request.id]
+      );
+    } else if (shiftModal.type === 'bulk' && shiftModal.requests) {
+      for (const request of shiftModal.requests) {
+        await handleCreateShifts(request.date, request.time_slot_id!, [request.id]);
+      }
+      setExpandedPersonId(null);
     }
   };
 
@@ -363,7 +455,7 @@ export default function ShiftRequestsPage() {
                         className="text-sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleCreateAllPersonShifts(person);
+                          openBulkShiftModal(person);
                         }}
                       >
                         一括シフト作成
@@ -420,7 +512,7 @@ export default function ShiftRequestsPage() {
                               <Button
                                 variant="secondary"
                                 className="w-full text-sm mt-3"
-                                onClick={() => handleCreateShifts(request.date, request.time_slot_id!, [request.id])}
+                                onClick={() => openShiftModal(request)}
                               >
                                 個別シフト作成
                               </Button>
@@ -436,6 +528,117 @@ export default function ShiftRequestsPage() {
           </div>
         )}
       </div>
+
+      {/* シフト作成カスタムモーダル */}
+      {shiftModal.isOpen && (
+        <div 
+          className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShiftModal({ isOpen: false, type: 'single' });
+              resetCustomTime();
+            }
+          }}
+        >
+          <div 
+            className="bg-white/90 backdrop-blur-md rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-white/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-4">
+              {shiftModal.type === 'single' ? 'シフト作成' : '一括シフト作成'}
+            </h3>
+            
+            {shiftModal.type === 'single' && shiftModal.request && (
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="font-medium">{shiftModal.request.users?.name}</p>
+                  <p className="text-sm text-gray-600">
+                    {new Date(shiftModal.request.date).getDate()}日 ({getJapaneseDayOfWeek(shiftModal.request.date)})
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {shiftModal.request.time_slots?.name} ({formatTime(shiftModal.request.time_slots?.start_time || '')} - {formatTime(shiftModal.request.time_slots?.end_time || '')})
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <AnimatedToggle
+                    checked={useCustomTime}
+                    onChange={setUseCustomTime}
+                    label="勤務時間調整"
+                    description="必要に応じて出勤・退勤時間をカスタマイズできます"
+                  />
+
+                  <div className={`
+                    overflow-hidden transition-all duration-500 ease-in-out
+                    ${useCustomTime ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
+                  `}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                      <CompactTimeSlider
+                        value={customStartTime}
+                        onChange={setCustomStartTime}
+                        label="開始時間"
+                      />
+                      <CompactTimeSlider
+                        value={customEndTime}
+                        onChange={setCustomEndTime}
+                        label="終了時間"
+                      />
+                    </div>
+                    {shiftModal.request.preferred_start_time && (
+                      <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-600">
+                        参考: スタッフ希望時間 {shiftModal.request.preferred_start_time} - {shiftModal.request.preferred_end_time}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {shiftModal.type === 'bulk' && shiftModal.requests && (
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="font-medium">{shiftModal.requests[0]?.users?.name}</p>
+                  <p className="text-sm text-gray-600">
+                    {shiftModal.requests.length}件のシフト希望を一括で作成します
+                  </p>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                  {shiftModal.requests.map(request => (
+                    <div key={request.id} className="text-sm p-2 bg-white border rounded">
+                      {new Date(request.date).getDate()}日 - {request.time_slots?.name}
+                      {request.preferred_start_time && (
+                        <span className="text-blue-600 ml-2">
+                          (希望: {request.preferred_start_time}-{request.preferred_end_time})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex space-x-3 mt-6">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  setShiftModal({ isOpen: false, type: 'single' });
+                  resetCustomTime();
+                }}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                onClick={confirmShiftCreation}
+              >
+                {shiftModal.type === 'single' ? 'シフト作成' : '一括作成'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthenticatedLayout>
   );
 } 
