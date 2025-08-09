@@ -23,7 +23,13 @@ export async function POST(request: NextRequest) {
 
       case 'shift-confirmation':
         const { userEmail: shiftEmail, userName: shiftUser, shifts } = emailData;
+        console.log('📧 shift-confirmation メール送信開始:', {
+          email: shiftEmail,
+          user: shiftUser,
+          shiftsCount: shifts?.length
+        });
         await sendShiftConfirmationEmail(shiftEmail, shiftUser, shifts);
+        console.log('✅ shift-confirmation メール送信完了:', shiftEmail);
         break;
 
       case 'emergency-request':

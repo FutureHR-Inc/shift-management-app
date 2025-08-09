@@ -336,6 +336,17 @@ export async function PATCH(request: NextRequest) {
     // シフト確定時にメール送信
     if (status === 'confirmed' && updatedShifts && updatedShifts.length > 0) {
       try {
+        console.log('🔄 シフト確定メール送信開始:', {
+          shiftCount: updatedShifts.length,
+          shifts: updatedShifts.map(s => ({ 
+            id: s.id, 
+            userId: s.user_id, 
+            userEmail: s.users?.email,
+            userName: s.users?.name,
+            date: s.date 
+          }))
+        });
+
         // スタッフごとにグループ化
         const staffGroups = new Map();
         
@@ -350,9 +361,20 @@ export async function PATCH(request: NextRequest) {
           staffGroups.get(userId).shifts.push(shift);
         });
 
+        console.log('📧 グループ化されたスタッフ数:', staffGroups.size);
+
         // 各スタッフにメール送信
         const emailPromises = Array.from(staffGroups.values()).map(async (group: any) => {
-          if (!group.user?.email) return;
+          if (!group.user?.email) {
+            console.warn('⚠️ メールアドレスが見つかりません:', group.user);
+            return;
+          }
+
+          console.log('📤 メール送信試行:', {
+            email: group.user.email,
+            name: group.user.name,
+            shiftsCount: group.shifts.length
+          });
 
           const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
             method: 'POST',
@@ -374,17 +396,26 @@ export async function PATCH(request: NextRequest) {
           });
 
           if (!emailResponse.ok) {
-            console.warn(`シフト確定メール送信に失敗: ${group.user.email}`);
+            const errorText = await emailResponse.text();
+            console.error(`❌ シフト確定メール送信に失敗: ${group.user.email}`, errorText);
           } else {
-            console.log(`シフト確定メール送信成功: ${group.user.email}`);
+            console.log(`✅ シフト確定メール送信成功: ${group.user.email}`);
           }
         });
 
         await Promise.all(emailPromises);
+        console.log('🎉 全てのシフト確定メール送信処理が完了しました');
       } catch (emailError) {
-        console.error('シフト確定メール送信エラー:', emailError);
+        console.error('❌ シフト確定メール送信エラー:', emailError);
+        console.error('エラースタック:', emailError instanceof Error ? emailError.stack : 'No stack trace');
         // メール送信失敗でもシフト確定は成功とする
       }
+    } else {
+      console.log('ℹ️ メール送信条件に該当しません:', {
+        status,
+        hasUpdatedShifts: !!(updatedShifts && updatedShifts.length > 0),
+        shiftsLength: updatedShifts?.length || 0
+      });
     }
 
     return NextResponse.json({ 

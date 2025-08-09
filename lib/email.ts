@@ -28,6 +28,13 @@ export async function sendEmail({
   from = DEFAULT_FROM
 }: EmailOptions) {
   try {
+    console.log('🔧 メール送信環境チェック:', {
+      hasApiKey: !!process.env.RESEND_API_KEY,
+      from,
+      to: Array.isArray(to) ? to : [to],
+      subject
+    });
+
     const { data, error } = await resend.emails.send({
       from,
       to: Array.isArray(to) ? to : [to],
@@ -37,14 +44,16 @@ export async function sendEmail({
     });
 
     if (error) {
-      console.error('Email sending error:', error);
-      throw new Error(`Failed to send email: ${error.message}`);
+      console.error('📧 Resend API error:', error);
+      throw new Error(`Failed to send email: ${JSON.stringify(error)}`);
     }
 
-    console.log('Email sent successfully:', data);
+    console.log('✅ Email sent successfully:', data);
     return { success: true, data };
   } catch (error) {
-    console.error('Email sending failed:', error);
+    console.error('❌ Email sending failed:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
     throw error;
   }
 }
@@ -63,6 +72,13 @@ export async function sendShiftConfirmationEmail(
     endTime: string;
   }>
 ) {
+  console.log('📧 sendShiftConfirmationEmail 実行開始:', {
+    userEmail,
+    userName,
+    shiftsCount: shifts?.length,
+    shifts: shifts
+  });
+
   const shiftsHtml = shifts.map(shift => `
     <tr>
       <td style="padding: 10px; border: 1px solid #ddd;">${shift.date}</td>
@@ -114,11 +130,19 @@ export async function sendShiftConfirmationEmail(
     </html>
   `;
 
-  return sendEmail({
+  console.log('📤 sendEmail 呼び出し開始:', {
+    to: userEmail,
+    subject: `【シフト確定】${userName}さんのシフトが確定しました`
+  });
+
+  const result = await sendEmail({
     to: userEmail,
     subject: `【シフト確定】${userName}さんのシフトが確定しました`,
     html,
   });
+
+  console.log('✅ sendEmail 呼び出し完了:', result);
+  return result;
 }
 
 /**

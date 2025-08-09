@@ -2469,14 +2469,14 @@ function ShiftCreatePageInner() {
             onClick={() => setEmergencyManagement({ show: false, request: null })}
           >
             <div 
-              className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+              className="bg-white/90 backdrop-blur-md border border-white/20 shadow-2xl rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-semibold text-gray-900">代打募集管理</h3>
                 <button
                   onClick={() => setEmergencyManagement({ show: false, request: null })}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2485,7 +2485,7 @@ function ShiftCreatePageInner() {
               </div>
 
               {/* 募集情報 */}
-              <div className="p-4 bg-gray-50 rounded-lg mb-6">
+              <div className="p-4 bg-white/50 backdrop-blur-sm rounded-lg mb-6 border border-white/30">
                 <h4 className="font-medium text-gray-900 mb-2">募集内容</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -2531,69 +2531,63 @@ function ShiftCreatePageInner() {
                   <div className="space-y-3">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         {emergencyManagement.request.emergency_volunteers.map((volunteer: any) => (
-                      <div key={volunteer.id} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <div key={volunteer.id} className="border border-white/20 bg-white/40 backdrop-blur-sm rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3 flex-1">
+                            <div className="w-10 h-10 bg-blue-100/70 backdrop-blur-sm rounded-full flex items-center justify-center">
                               <span className="text-blue-600 font-medium text-sm">
                                 {volunteer.users?.name?.charAt(0) || '?'}
                               </span>
                             </div>
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium text-gray-900">{volunteer.users?.name || '不明なユーザー'}</p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-gray-600">
                                 {volunteer.users?.skill_level === 'veteran' ? 'ベテラン' :
                                  volunteer.users?.skill_level === 'regular' ? '一般' : '研修中'}
                               </p>
-                              <p className="text-xs text-gray-400">
+                              <p className="text-xs text-gray-500">
                                 応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
                               </p>
                               {volunteer.notes && (
-                                <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                                <div className="mt-2 p-2 bg-blue-50/70 backdrop-blur-sm rounded text-sm border border-blue-200/30">
                                   <p className="text-gray-600 font-medium">応募メモ:</p>
                                   <p className="text-gray-700">{volunteer.notes}</p>
                                 </div>
                               )}
-                            </div>
-                          </div>
-                          
-                          <div className="flex space-x-2">
-                            {/* カスタム時間設定フォーム */}
-                            {customApprovalTime.volunteerId === volunteer.id && customApprovalTime.showCustomTime && (
-                              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                                <div className="bg-white p-6 rounded-lg w-96">
-                                  <h3 className="text-lg font-semibold mb-4">勤務時間設定</h3>
+                              
+                              {/* 時間編集セクション */}
+                              {customApprovalTime.volunteerId === volunteer.id && customApprovalTime.showCustomTime && (
+                                <div className="mt-4 p-4 bg-white/60 backdrop-blur-sm border border-white/40 rounded-lg">
                                   <div className="space-y-4">
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        開始時間
-                                      </label>
-                                      <input
-                                        type="time"
+                                    <div className="flex items-center justify-between">
+                                      <h5 className="text-sm font-medium text-gray-900">勤務時間カスタマイズ</h5>
+                                      <div className="text-xs text-gray-500 bg-blue-50/70 px-2 py-1 rounded">
+                                        元の時間: {emergencyManagement.request.time_slots?.start_time || '00:00'} - {emergencyManagement.request.time_slots?.end_time || '00:00'}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <CompactTimeSlider
                                         value={customApprovalTime.startTime}
-                                        onChange={(e) => setCustomApprovalTime(prev => ({
+                                        onChange={(time) => setCustomApprovalTime(prev => ({
                                           ...prev,
-                                          startTime: e.target.value
+                                          startTime: time
                                         }))}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        label="開始時間"
                                       />
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        終了時間
-                                      </label>
-                                      <input
-                                        type="time"
+                                      <CompactTimeSlider
                                         value={customApprovalTime.endTime}
-                                        onChange={(e) => setCustomApprovalTime(prev => ({
+                                        onChange={(time) => setCustomApprovalTime(prev => ({
                                           ...prev,
-                                          endTime: e.target.value
+                                          endTime: time
                                         }))}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        label="終了時間"
                                       />
                                     </div>
+                                    
                                     <div className="flex space-x-2">
                                       <Button
+                                        size="sm"
                                         onClick={() => {
                                           handleVolunteerAction(
                                             emergencyManagement.request.id, 
@@ -2609,7 +2603,8 @@ function ShiftCreatePageInner() {
                                             showCustomTime: false
                                           });
                                         }}
-                                        className="bg-green-600 hover:bg-green-700"
+                                        className="bg-green-600 hover:bg-green-700 flex-1"
+                                        disabled={processingVolunteer === volunteer.id}
                                       >
                                         {processingVolunteer === volunteer.id ? (
                                           <>
@@ -2617,10 +2612,11 @@ function ShiftCreatePageInner() {
                                             確定中...
                                           </>
                                         ) : (
-                                          'そのまま採用'
+                                          `✅ ${customApprovalTime.startTime}-${customApprovalTime.endTime}で採用`
                                         )}
                                       </Button>
                                       <Button
+                                        size="sm"
                                         variant="secondary"
                                         onClick={() => setCustomApprovalTime({
                                           volunteerId: '',
@@ -2628,65 +2624,72 @@ function ShiftCreatePageInner() {
                                           endTime: '',
                                           showCustomTime: false
                                         })}
+                                        className="px-4"
                                       >
                                         キャンセル
                                       </Button>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col space-y-2 ml-4">
+                            {customApprovalTime.volunteerId !== volunteer.id && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const originalStartTime = emergencyManagement.request.time_slots?.start_time || '09:00';
+                                    const originalEndTime = emergencyManagement.request.time_slots?.end_time || '17:00';
+                                    setCustomApprovalTime({
+                                      volunteerId: volunteer.id,
+                                      startTime: originalStartTime,
+                                      endTime: originalEndTime,
+                                      showCustomTime: true
+                                    });
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-1"
+                                >
+                                  時間設定
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'accept')}
+                                  className="bg-green-600 hover:bg-green-700 text-xs px-3 py-1"
+                                  disabled={processingVolunteer === volunteer.id}
+                                >
+                                  {processingVolunteer === volunteer.id ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                      処理中
+                                    </>
+                                  ) : (
+                                    'そのまま採用'
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'reject')}
+                                  className="text-xs px-3 py-1 border-red-300 text-red-600 hover:bg-red-50"
+                                  disabled={processingVolunteer === volunteer.id}
+                                >
+                                  削除
+                                </Button>
+                              </>
                             )}
-                            
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const originalStartTime = emergencyManagement.request.time_slots?.start_time || '09:00';
-                                const originalEndTime = emergencyManagement.request.time_slots?.end_time || '17:00';
-                                setCustomApprovalTime({
-                                  volunteerId: volunteer.id,
-                                  startTime: originalStartTime,
-                                  endTime: originalEndTime,
-                                  showCustomTime: true
-                                });
-                              }}
-                              disabled={processingVolunteer === volunteer.id}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              時間設定して採用
-                            </Button>
-                            
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'reject')}
-                              disabled={processingVolunteer === volunteer.id}
-                              className="border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              削除
-                            </Button>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <p className="text-lg font-medium mb-2">応募者がいません</p>
-                    <p className="text-sm">まだ誰も応募していません。しばらくお待ちください。</p>
+                  <div className="text-center py-8 text-gray-500 bg-white/30 backdrop-blur-sm rounded-lg border border-white/20">
+                    <p>まだ応募者がいません</p>
                   </div>
                 )}
-              </div>
-
-              <div className="flex justify-end mt-6">
-                <Button
-                  variant="secondary"
-                  onClick={() => setEmergencyManagement({ show: false, request: null })}
-                >
-                  閉じる
-                </Button>
               </div>
             </div>
           </div>
