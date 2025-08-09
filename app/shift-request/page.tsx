@@ -204,7 +204,7 @@ export default function ShiftRequestPage() {
         const updatedDates = dateData.map(d => ({
           ...d,
           requests: existingData
-            .filter((req: DatabaseShiftRequest) => req.date === d.date)
+            .filter((req: DatabaseShiftRequest) => req.date === d.date && req.status !== 'converted_to_shift')
             .map((req: DatabaseShiftRequest) => ({
               date: req.date,
               timeSlotId: req.time_slot_id,
@@ -326,15 +326,21 @@ export default function ShiftRequestPage() {
 
       // 既存の希望と比較して新規分のみを抽出
       const newRequests = allRequests.filter(newReq => {
-        return !existingRequests.some(existing => 
-          existing.date === newReq.date &&
-          existing.time_slot_id === newReq.time_slot_id &&
-          existing.preferred_start_time === newReq.preferred_start_time &&
-          existing.preferred_end_time === newReq.preferred_end_time &&
-          existing.priority === newReq.priority &&
-          existing.notes === newReq.notes &&
-          existing.status === 'submitted' // 提出済みのもののみ除外
-        );
+        return !existingRequests.some(existing => {
+          // 各フィールドを個別に比較
+          const dateMatch = existing.date === newReq.date;
+          const timeSlotMatch = (existing.time_slot_id || null) === (newReq.time_slot_id || null);
+          const startTimeMatch = (existing.preferred_start_time || null) === (newReq.preferred_start_time || null);
+          const endTimeMatch = (existing.preferred_end_time || null) === (newReq.preferred_end_time || null);
+          const priorityMatch = existing.priority === newReq.priority;
+          const notesMatch = (existing.notes || '') === (newReq.notes || '');
+          const isSubmitted = existing.status === 'submitted';
+
+          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch && 
+                              endTimeMatch && priorityMatch && notesMatch && isSubmitted;
+          
+          return isExactMatch;
+        });
       });
 
       // 新規追加分がない場合は確認
@@ -342,8 +348,6 @@ export default function ShiftRequestPage() {
         setError('新しく追加されたシフト希望がありません。既存の希望は変更されません。');
         return;
       }
-
-      console.log(`${allRequests.length}件中、${newRequests.length}件の新規希望を送信します`);
 
       const response = await fetch('/api/shift-requests', {
         method: 'POST',

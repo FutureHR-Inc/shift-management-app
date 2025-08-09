@@ -115,15 +115,21 @@ export async function POST(request: NextRequest) {
       
       // 完全に同一のリクエストを除外
       const filteredRequests = requests.filter((newReq: any) => {
-        return !existingRequests.some((existing: any) => 
-          existing.date === newReq.date &&
-          existing.time_slot_id === newReq.time_slot_id &&
-          existing.preferred_start_time === newReq.preferred_start_time &&
-          existing.preferred_end_time === newReq.preferred_end_time &&
-          existing.priority === newReq.priority &&
-          existing.notes === newReq.notes &&
-          existing.status === 'submitted'
-        );
+        return !existingRequests.some((existing: any) => {
+          // 各フィールドを個別に比較（null値の正規化）
+          const dateMatch = existing.date === newReq.date;
+          const timeSlotMatch = (existing.time_slot_id || null) === (newReq.time_slot_id || null);
+          const startTimeMatch = (existing.preferred_start_time || null) === (newReq.preferred_start_time || null);
+          const endTimeMatch = (existing.preferred_end_time || null) === (newReq.preferred_end_time || null);
+          const priorityMatch = existing.priority === newReq.priority;
+          const notesMatch = (existing.notes || '') === (newReq.notes || '');
+          const isSubmitted = existing.status === 'submitted';
+
+          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch && 
+                              endTimeMatch && priorityMatch && notesMatch && isSubmitted;
+          
+          return isExactMatch;
+        });
       });
 
       if (filteredRequests.length === 0) {
