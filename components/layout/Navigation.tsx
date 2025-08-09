@@ -15,6 +15,8 @@ interface CurrentUser {
 
 interface NotificationData {
   emergencyRequestsCount: number;
+  shiftRequestsCount: number;
+  confirmedShiftsCount: number;
 }
 
 const Navigation = () => {
@@ -23,7 +25,9 @@ const Navigation = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [notifications, setNotifications] = useState<NotificationData>({
-    emergencyRequestsCount: 0
+    emergencyRequestsCount: 0,
+    shiftRequestsCount: 0,
+    confirmedShiftsCount: 0
   });
 
   // ログインユーザー情報を取得
@@ -49,40 +53,54 @@ const Navigation = () => {
     const fetchNotifications = async () => {
       try {
         if (currentUser.role === 'staff') {
-          // スタッフ用：代打募集件数を取得
-          const emergencyResponse = await fetch('/api/emergency-requests?status=open');
+          // スタッフ用通知: 自分以外の代打募集をチェック
+          const emergencyResponse = await fetch('/api/emergency-requests');
+          
           if (emergencyResponse.ok) {
-            const emergencyResult = await emergencyResponse.json();
-            
-            // ユーザーの今後のシフトを取得
-            const today = new Date().toISOString().split('T')[0];
-            const futureDate = new Date();
-            futureDate.setDate(futureDate.getDate() + 30); // 30日先まで
-            const futureDateStr = futureDate.toISOString().split('T')[0];
-            
-            const shiftsResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${futureDateStr}`);
-            const userShifts = shiftsResponse.ok ? (await shiftsResponse.json()).data || [] : [];
-            const userShiftDates = new Set(userShifts.map((shift: { date: string }) => shift.date));
-            
-            const availableRequests = emergencyResult.data?.filter((request: { date: string; emergency_volunteers?: { user_id: string }[] }) => {
-              // 既に応募済みでない
-              const alreadyApplied = request.emergency_volunteers?.some((volunteer: { user_id: string }) => 
-                volunteer.user_id === currentUser.id
-              );
-              
-              // 同じ日にシフトがない
-              const hasShiftOnDate = userShiftDates.has(request.date);
-              
-              return !alreadyApplied && !hasShiftOnDate;
-            }) || [];
+            const emergencyData = await emergencyResponse.json();
+            const availableRequests = emergencyData.data.filter((req: any) => 
+              req.status === 'open' && req.original_user_id !== currentUser.id
+            );
             
             setNotifications(prev => ({
               ...prev,
               emergencyRequestsCount: availableRequests.length
             }));
           }
+
+          // スタッフ用通知: 確定シフト件数をチェック
+          const today = new Date().toISOString().split('T')[0];
+          const futureDate = new Date();
+          futureDate.setDate(futureDate.getDate() + 30); // 30日先まで
+          const futureDateStr = futureDate.toISOString().split('T')[0];
+
+          const shiftsResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${futureDateStr}&status=confirmed`);
+          
+          if (shiftsResponse.ok) {
+            const shiftsData = await shiftsResponse.json();
+            const confirmedShifts = shiftsData.data || [];
+            
+            setNotifications(prev => ({
+              ...prev,
+              confirmedShiftsCount: confirmedShifts.length
+            }));
+          }
         } else if (currentUser.role === 'manager') {
-          // 管理者用通知（将来的に他の通知を追加する場合のために残す）
+          // 管理者用通知: 未確認のシフト希望件数を取得
+          const shiftRequestsResponse = await fetch('/api/shift-requests');
+          
+          if (shiftRequestsResponse.ok) {
+            const shiftRequestsData = await shiftRequestsResponse.json();
+            // status が 'submitted' かつ 'converted_to_shift' でないものをカウント
+            const pendingRequests = shiftRequestsData.data.filter((req: any) => 
+              req.status === 'submitted'
+            );
+            
+            setNotifications(prev => ({
+              ...prev,
+              shiftRequestsCount: pendingRequests.length
+            }));
+          }
         }
       } catch (error) {
         console.error('通知データの取得に失敗:', error);
@@ -94,7 +112,19 @@ const Navigation = () => {
     // 30秒ごとに通知データを更新
     const interval = setInterval(fetchNotifications, 30000);
     
-    return () => clearInterval(interval);
+    // カスタムイベントリスナーを追加（手動更新用）
+    const handleUpdateNotifications = () => {
+      fetchNotifications();
+    };
+    
+    window.addEventListener('updateShiftRequestNotifications', handleUpdateNotifications);
+    window.addEventListener('updateShiftConfirmations', handleUpdateNotifications);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('updateShiftRequestNotifications', handleUpdateNotifications);
+      window.removeEventListener('updateShiftConfirmations', handleUpdateNotifications);
+    };
   }, [currentUser]);
 
   // ユーザー情報が読み込まれていない場合はローディング表示
@@ -115,14 +145,14 @@ const Navigation = () => {
   const managerNavItems = [
     { href: '/dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
     { href: '/shift/create', label: 'シフト作成', icon: 'calendar', badge: 0 },
-    { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard', badge: 0 },
+    { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard', badge: notifications.shiftRequestsCount },
     { href: '/staff', label: 'スタッフ管理', icon: 'users', badge: 0 },
     { href: '/settings/store', label: '店舗設定', icon: 'settings', badge: 0 },
   ];
 
   const staffNavItems = [
     { href: '/staff-dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
-    { href: '/my-shift', label: 'マイシフト', icon: 'calendar', badge: 0 },
+    { href: '/my-shift', label: 'マイシフト', icon: 'calendar', badge: notifications.confirmedShiftsCount },
     { href: '/shift-request', label: 'シフト希望提出', icon: 'clipboard', badge: 0 },
     { href: '/emergency', label: '代打募集', icon: 'alert', badge: notifications.emergencyRequestsCount },
   ];

@@ -333,6 +333,60 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
+    // シフト確定時にメール送信
+    if (status === 'confirmed' && updatedShifts && updatedShifts.length > 0) {
+      try {
+        // スタッフごとにグループ化
+        const staffGroups = new Map();
+        
+        updatedShifts.forEach((shift: any) => {
+          const userId = shift.user_id;
+          if (!staffGroups.has(userId)) {
+            staffGroups.set(userId, {
+              user: shift.users,
+              shifts: []
+            });
+          }
+          staffGroups.get(userId).shifts.push(shift);
+        });
+
+        // 各スタッフにメール送信
+        const emailPromises = Array.from(staffGroups.values()).map(async (group: any) => {
+          if (!group.user?.email) return;
+
+          const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'shift-confirmation',
+              userEmail: group.user.email,
+              userName: group.user.name || '不明',
+              shifts: group.shifts.map((shift: any) => ({
+                date: shift.date,
+                storeName: shift.stores?.name || '不明な店舗',
+                shiftPattern: shift.time_slots?.name || 'カスタム時間',
+                startTime: shift.custom_start_time || shift.time_slots?.start_time || '00:00',
+                endTime: shift.custom_end_time || shift.time_slots?.end_time || '00:00'
+              }))
+            }),
+          });
+
+          if (!emailResponse.ok) {
+            console.warn(`シフト確定メール送信に失敗: ${group.user.email}`);
+          } else {
+            console.log(`シフト確定メール送信成功: ${group.user.email}`);
+          }
+        });
+
+        await Promise.all(emailPromises);
+      } catch (emailError) {
+        console.error('シフト確定メール送信エラー:', emailError);
+        // メール送信失敗でもシフト確定は成功とする
+      }
+    }
+
     return NextResponse.json({ 
       data: updatedShifts,
       message: `Successfully updated ${updatedShifts.length} shifts to ${status}`,

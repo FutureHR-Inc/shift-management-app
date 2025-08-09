@@ -324,6 +324,27 @@ export default function ShiftRequestPage() {
         return;
       }
 
+      // 既存の希望と比較して新規分のみを抽出
+      const newRequests = allRequests.filter(newReq => {
+        return !existingRequests.some(existing => 
+          existing.date === newReq.date &&
+          existing.time_slot_id === newReq.time_slot_id &&
+          existing.preferred_start_time === newReq.preferred_start_time &&
+          existing.preferred_end_time === newReq.preferred_end_time &&
+          existing.priority === newReq.priority &&
+          existing.notes === newReq.notes &&
+          existing.status === 'submitted' // 提出済みのもののみ除外
+        );
+      });
+
+      // 新規追加分がない場合は確認
+      if (newRequests.length === 0) {
+        setError('新しく追加されたシフト希望がありません。既存の希望は変更されません。');
+        return;
+      }
+
+      console.log(`${allRequests.length}件中、${newRequests.length}件の新規希望を送信します`);
+
       const response = await fetch('/api/shift-requests', {
         method: 'POST',
         headers: {
@@ -333,7 +354,8 @@ export default function ShiftRequestPage() {
           user_id: user.id,
           store_id: selectedStore,
           submission_period: selectedPeriod.id,
-          requests: allRequests
+          requests: newRequests,
+          is_incremental: true // 差分更新フラグ
         }),
       });
 
@@ -342,28 +364,21 @@ export default function ShiftRequestPage() {
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
-        } catch (jsonError) {
-          console.error('Error response parse error:', jsonError);
-          errorMessage = `サーバーエラー (${response.status})`;
+        } catch (e) {
+          console.error('Error parsing error response:', e);
         }
-        throw new Error(errorMessage);
+        setError(errorMessage);
+        return;
       }
 
-      let result;
-      try {
-        result = await response.json();
-      } catch (jsonError) {
-        console.error('Success response parse error:', jsonError);
-        result = { message: 'シフト希望を提出しました' };
-      }
-
-      setSuccessMessage(result.message || 'シフト希望を提出しました');
+      const result = await response.json();
       
-      // 3秒後にメッセージを消す
-      setTimeout(() => setSuccessMessage(null), 3000);
-
-      // 提出後、既存データを再取得
-      loadPeriodData();
+      // 成功メッセージを表示
+      setSuccessMessage(`${newRequests.length}件の新しいシフト希望を追加提出しました`);
+      setError(null);
+      
+      // 既存データを更新
+      await loadPeriodData();
 
     } catch (error) {
       console.error('Submit error:', error);

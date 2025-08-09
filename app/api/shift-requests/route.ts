@@ -65,7 +65,8 @@ export async function POST(request: NextRequest) {
       user_id,
       store_id,
       submission_period,
-      requests // 複数日分のリクエスト配列
+      requests, // 複数日分のリクエスト配列
+      is_incremental = false // 差分更新フラグ
     } = await request.json();
 
     // 必須フィールドの検証
@@ -76,20 +77,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 既存の提出を削除（再提出の場合）
-    const { error: deleteError } = await supabase
-      .from('shift_requests')
-      .delete()
-      .eq('user_id', user_id)
-      .eq('store_id', store_id)
-      .eq('submission_period', submission_period);
+    // 差分更新でない場合は従来通り全削除→全挿入
+    if (!is_incremental) {
+      // 既存の提出を削除（再提出の場合）
+      const { error: deleteError } = await supabase
+        .from('shift_requests')
+        .delete()
+        .eq('user_id', user_id)
+        .eq('store_id', store_id)
+        .eq('submission_period', submission_period);
 
-    if (deleteError) {
-      console.error('Delete existing requests error:', deleteError);
-      return NextResponse.json(
-        { error: '既存の希望の削除に失敗しました' },
-        { status: 500 }
-      );
+      if (deleteError) {
+        console.error('Delete existing requests error:', deleteError);
+        return NextResponse.json(
+          { error: '既存の希望の削除に失敗しました' },
+          { status: 500 }
+        );
+      }
+    } else {
+      // 差分更新の場合は重複チェックのみ実行
+      const existingRequestsResponse = await supabase
+        .from('shift_requests')
+        .select('*')
+        .eq('user_id', user_id)
+        .eq('store_id', store_id)
+        .eq('submission_period', submission_period);
+
+      if (existingRequestsResponse.error) {
+        console.error('Error checking existing requests:', existingRequestsResponse.error);
+        return NextResponse.json(
+          { error: '既存希望の確認に失敗しました' },
+          { status: 500 }
+        );
+      }
+
+      const existingRequests = existingRequestsResponse.data || [];
+      
+      // 完全に同一のリクエストを除外
+      const filteredRequests = requests.filter((newReq: any) => {
+        return !existingRequests.some((existing: any) => 
+          existing.date === newReq.date &&
+          existing.time_slot_id === newReq.time_slot_id &&
+          existing.preferred_start_time === newReq.preferred_start_time &&
+          existing.preferred_end_time === newReq.preferred_end_time &&
+          existing.priority === newReq.priority &&
+          existing.notes === newReq.notes &&
+          existing.status === 'submitted'
+        );
+      });
+
+      if (filteredRequests.length === 0) {
+        return NextResponse.json(
+          { error: '新規追加分がありません' },
+          { status: 400 }
+        );
+      }
+
+      // フィルタリング後のリクエストに置き換え
+      requests.splice(0, requests.length, ...filteredRequests);
     }
 
     // 新しい希望を一括挿入
@@ -140,7 +185,7 @@ export async function POST(request: NextRequest) {
             userEmail: userData.email,
             userName: userData.name || '不明',
             submissionPeriod: submission_period,
-            submittedRequestsCount: data.length
+            submittedRequestsCount: data.length // 実際に挿入された件数
           }),
         });
 
@@ -157,7 +202,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       data,
-      message: `${data.length}件のシフト希望を提出しました`
+      message: is_incremental 
+        ? `${data.length}件のシフト希望を追加しました`
+        : `${data.length}件のシフト希望を提出しました`
     });
   } catch (error) {
     console.error('API error:', error);

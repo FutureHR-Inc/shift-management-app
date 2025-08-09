@@ -670,6 +670,9 @@ function ShiftCreatePageInner() {
       const periodName = viewMode === 'week' ? '週' : viewMode === 'half-month' ? '半月' : '月';
       alert(`${result.updated_count}件の${periodName}間シフトを確定しました`);
       
+      // ナビゲーションの通知件数を更新
+      window.dispatchEvent(new CustomEvent('updateShiftConfirmations'));
+      
       // データを完全に再取得
       const startDate = periodStart.toISOString().split('T')[0];
       const endDate = periodEnd.toISOString().split('T')[0];

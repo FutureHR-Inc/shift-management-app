@@ -224,6 +224,9 @@ export default function ShiftRequestsPage() {
       // データを再読み込み
       loadPeriodData();
       
+      // ナビゲーションの通知件数を更新
+      window.dispatchEvent(new CustomEvent('updateShiftRequestNotifications'));
+      
       // モーダルを閉じる
       setShiftModal({ isOpen: false, type: 'single' });
       resetCustomTime();
