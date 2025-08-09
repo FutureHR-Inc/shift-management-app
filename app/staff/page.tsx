@@ -65,6 +65,9 @@ export default function StaffPage() {
   const [generatedLoginId, setGeneratedLoginId] = useState<string>('');
   const [showLoginId, setShowLoginId] = useState(false);
 
+  // 新規スタッフの固定シフト管理用
+  const [newStaffFixedShifts, setNewStaffFixedShifts] = useState<any[]>([]);
+
   // フォーム用state
   const [formData, setFormData] = useState({
     name: '',
@@ -230,6 +233,28 @@ export default function StaffPage() {
           setGeneratedLoginId(createdUser.login_id);
           setShowLoginId(true);
         }
+
+        // 新規作成時に固定シフトも作成
+        if (newStaffFixedShifts.length > 0) {
+          try {
+            const fixedShiftPromises = newStaffFixedShifts.map(shift => 
+              fetch('/api/fixed-shifts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_id: createdUser.id,
+                  ...shift
+                })
+              })
+            );
+
+            await Promise.all(fixedShiftPromises);
+            console.log(`${newStaffFixedShifts.length}件の固定シフトを作成しました`);
+          } catch (fixedShiftError) {
+            console.error('固定シフト作成エラー:', fixedShiftError);
+            // 固定シフト作成失敗でもユーザー作成は成功とする
+          }
+        }
       }
 
       // データを再取得して最新の状態に更新
@@ -300,6 +325,12 @@ export default function StaffPage() {
     });
     setShowLoginId(false);
     setGeneratedLoginId('');
+    setNewStaffFixedShifts([]); // 固定シフトもリセット
+  };
+
+  // 新規作成時の固定シフト変更ハンドラー
+  const handleNewStaffFixedShiftsChange = (shifts: any[]) => {
+    setNewStaffFixedShifts(shifts);
   };
 
   const getSkillLevelColor = (level: string) => {
@@ -766,6 +797,19 @@ export default function StaffPage() {
                         userId={editingUser.id}
                         userStores={formData.stores}
                         onUpdate={fetchUsers}
+                      />
+                    </div>
+                  )}
+
+                  {/* 新規作成時の固定シフト設定セクション */}
+                  {!editingUser && (
+                    <div className="pt-6 border-t border-gray-200">
+                      <FixedShiftManager
+                        userId={undefined} // 新規作成時はundefined
+                        userStores={formData.stores}
+                        onUpdate={fetchUsers}
+                        isNewUser={true}
+                        onFixedShiftsChange={handleNewStaffFixedShiftsChange}
                       />
                     </div>
                   )}

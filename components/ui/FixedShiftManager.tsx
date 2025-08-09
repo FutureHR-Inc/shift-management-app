@@ -3,9 +3,11 @@ import { Button } from './Button';
 import type { DatabaseFixedShift, TimeSlot } from '@/lib/types';
 
 interface FixedShiftManagerProps {
-  userId: string;
+  userId?: string; // 新規作成時はundefined
   userStores: string[]; // ユーザーが所属する店舗IDの配列
   onUpdate?: () => void; // 更新後のコールバック
+  isNewUser?: boolean; // 新規ユーザー作成時かどうか
+  onFixedShiftsChange?: (shifts: FixedShiftFormData[]) => void; // 新規作成時の固定シフトデータコールバック
 }
 
 interface FixedShiftFormData {
@@ -28,7 +30,9 @@ const DAYS_OF_WEEK = [
 export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
   userId,
   userStores,
-  onUpdate
+  onUpdate,
+  isNewUser,
+  onFixedShiftsChange
 }) => {
   const [fixedShifts, setFixedShifts] = useState<DatabaseFixedShift[]>([]);
   const [timeSlotsByStore, setTimeSlotsByStore] = useState<Record<string, TimeSlot[]>>({});
@@ -36,6 +40,9 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 新規作成時の固定シフト管理用
+  const [newUserFixedShifts, setNewUserFixedShifts] = useState<FixedShiftFormData[]>([]);
 
   // 新規追加用のフォーム
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -47,10 +54,10 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
   });
 
   useEffect(() => {
-    if (userId && userStores.length > 0) {
+    if ((userId || isNewUser) && userStores.length > 0) {
       loadData();
     }
-  }, [userId, userStores]);
+  }, [userId, userStores, isNewUser]);
 
   // データ読み込み
   const loadData = async () => {
@@ -58,15 +65,20 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
       setLoading(true);
       setError(null);
 
-      // 固定シフト取得
-      const fixedShiftsRes = await fetch(`/api/fixed-shifts?user_id=${userId}`);
-      const fixedShiftsData = await fixedShiftsRes.json();
-      
-      if (!fixedShiftsRes.ok) {
-        throw new Error(fixedShiftsData.error || '固定シフトの取得に失敗しました');
+      // 固定シフト取得（新規作成時はスキップ）
+      if (userId && !isNewUser) {
+        const fixedShiftsRes = await fetch(`/api/fixed-shifts?user_id=${userId}`);
+        const fixedShiftsData = await fixedShiftsRes.json();
+        
+        if (!fixedShiftsRes.ok) {
+          throw new Error(fixedShiftsData.error || '固定シフトの取得に失敗しました');
+        }
+        
+        setFixedShifts(fixedShiftsData.data || []);
+      } else {
+        // 新規作成時は空配列
+        setFixedShifts([]);
       }
-      
-      setFixedShifts(fixedShiftsData.data || []);
 
       // 店舗情報取得
       const storesRes = await fetch('/api/stores');
@@ -106,6 +118,28 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
       setSaving(true);
       setError(null);
 
+      // 新規ユーザー作成時は配列に追加
+      if (isNewUser) {
+        const newShift = { ...newShiftForm };
+        const updatedShifts = [...newUserFixedShifts, newShift];
+        setNewUserFixedShifts(updatedShifts);
+        
+        // 親コンポーネントに固定シフト情報を渡す
+        onFixedShiftsChange?.(updatedShifts);
+        
+        // フォームをリセット
+        setIsAddingNew(false);
+        setNewShiftForm({
+          store_id: '',
+          day_of_week: 1,
+          time_slot_id: '',
+          is_active: true
+        });
+        
+        return;
+      }
+
+      // 既存ユーザーの場合はAPIに送信
       const response = await fetch('/api/fixed-shifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,6 +238,17 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  // 新規作成時の固定シフト削除
+  const handleDeleteNewUserFixedShift = (index: number) => {
+    if (!window.confirm('この固定シフトを削除しますか？')) {
+      return;
+    }
+    
+    const updatedShifts = newUserFixedShifts.filter((_, i) => i !== index);
+    setNewUserFixedShifts(updatedShifts);
+    onFixedShiftsChange?.(updatedShifts);
   };
 
   // 店舗名取得
@@ -323,60 +368,109 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
 
       {/* 既存の固定シフト一覧 */}
       <div className="space-y-2">
-        {fixedShifts.length === 0 ? (
-          <div className="text-center text-gray-500 py-4">
-            固定シフトが設定されていません
-          </div>
-        ) : (
-          fixedShifts.map(fixedShift => (
-            <div
-              key={fixedShift.id}
-              className={`flex items-center justify-between p-3 rounded-lg border ${
-                fixedShift.is_active 
-                  ? 'bg-green-50 border-green-200' 
-                  : 'bg-gray-50 border-gray-200'
-              }`}
-            >
-              <div className="flex-1">
-                <div className="font-medium text-gray-900">
-                  {DAYS_OF_WEEK.find(d => d.value === fixedShift.day_of_week)?.label} - {getStoreName(fixedShift.store_id)}
+        {/* 新規作成時の固定シフト表示 */}
+        {isNewUser && newUserFixedShifts.length > 0 && (
+          <>
+            <h4 className="font-medium text-gray-900 mt-4">設定予定の固定シフト</h4>
+            {newUserFixedShifts.map((shift, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 rounded-lg border bg-blue-50 border-blue-200"
+              >
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900">
+                    {DAYS_OF_WEEK.find(d => d.value === shift.day_of_week)?.label} - {getStoreName(shift.store_id)}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {getTimeSlotName(shift.store_id, shift.time_slot_id)}
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">
-                  {getTimeSlotName(fixedShift.store_id, fixedShift.time_slot_id)}
+                
+                <div className="flex items-center space-x-2">
+                  {/* 削除ボタン */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteNewUserFixedShift(index)}
+                    disabled={saving}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </Button>
                 </div>
               </div>
-              
-              <div className="flex items-center space-x-2">
-                {/* アクティブ切り替えトグル */}
-                <button
-                  onClick={() => handleToggleActive(fixedShift)}
-                  disabled={saving}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    fixedShift.is_active ? 'bg-green-600' : 'bg-gray-200'
+            ))}
+          </>
+        )}
+
+        {/* 既存ユーザーの固定シフト表示 */}
+        {!isNewUser && (
+          <>
+            {fixedShifts.length === 0 && newUserFixedShifts.length === 0 ? (
+              <div className="text-center text-gray-500 py-4">
+                固定シフトが設定されていません
+              </div>
+            ) : (
+              fixedShifts.map(fixedShift => (
+                <div
+                  key={fixedShift.id}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                    fixedShift.is_active 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-gray-50 border-gray-200'
                   }`}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      fixedShift.is_active ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                
-                {/* 削除ボタン */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteFixedShift(fixedShift.id)}
-                  disabled={saving}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </Button>
-              </div>
-            </div>
-          ))
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">
+                      {DAYS_OF_WEEK.find(d => d.value === fixedShift.day_of_week)?.label} - {getStoreName(fixedShift.store_id)}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {getTimeSlotName(fixedShift.store_id, fixedShift.time_slot_id)}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    {/* アクティブ切り替えトグル */}
+                    <button
+                      onClick={() => handleToggleActive(fixedShift)}
+                      disabled={saving}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        fixedShift.is_active ? 'bg-green-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          fixedShift.is_active ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    
+                    {/* 削除ボタン */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteFixedShift(fixedShift.id)}
+                      disabled={saving}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {/* 新規作成時のプレースホルダー */}
+        {isNewUser && newUserFixedShifts.length === 0 && (
+          <div className="text-center text-gray-500 py-4">
+            固定シフトを追加してください（任意）
+          </div>
         )}
       </div>
     </div>
