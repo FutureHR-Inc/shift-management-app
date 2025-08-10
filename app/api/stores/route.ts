@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase';
 // GET - 店舗一覧取得
 export async function GET() {
   try {
+    console.log('🏪 店舗データ取得開始');
+    
     const { data, error } = await supabase
       .from('stores')
       .select('*')
@@ -12,16 +14,21 @@ export async function GET() {
     if (error) {
       console.error('Stores fetch error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch stores' },
+        { success: false, error: 'Failed to fetch stores' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ data });
+    console.log('✅ 店舗データ取得成功:', data?.length || 0, '件');
+    
+    return NextResponse.json({ 
+      success: true, 
+      data: data || [] 
+    });
   } catch (error) {
     console.error('Stores API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

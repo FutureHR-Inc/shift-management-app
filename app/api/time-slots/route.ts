@@ -31,35 +31,45 @@ function normalizeTimeFormat(timeString: string): string {
 // GET - 時間帯一覧取得
 export async function GET(request: NextRequest) {
   try {
+    console.log('⏰ 時間帯データ取得開始');
+    
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('store_id') || searchParams.get('storeId');
 
-    if (!storeId) {
-      return NextResponse.json(
-        { error: 'Store ID is required' },
-        { status: 400 }
-      );
+    let query = supabase
+      .from('time_slots')
+      .select('*');
+
+    // store_idが指定されている場合のみフィルタリング
+    if (storeId) {
+      query = query.eq('store_id', storeId);
+      console.log('🏪 特定店舗の時間帯を取得:', storeId);
+    } else {
+      console.log('📋 全店舗の時間帯を取得');
     }
 
-    const { data, error } = await supabase
-      .from('time_slots')
-      .select('*')
-      .eq('store_id', storeId)
-      .order('display_order');
+    query = query.order('display_order');
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Time slots fetch error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch time slots' },
+        { success: false, error: 'Failed to fetch time slots' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ data });
+    console.log('✅ 時間帯データ取得成功:', data?.length || 0, '件');
+
+    return NextResponse.json({ 
+      success: true, 
+      data: data || [] 
+    });
   } catch (error) {
     console.error('Time slots API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

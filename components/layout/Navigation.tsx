@@ -101,6 +101,26 @@ const Navigation = () => {
               shiftRequestsCount: pendingRequests.length
             }));
           }
+
+          // 管理者用通知: 自分が作成した代打募集への応募者数を取得
+          const emergencyResponse = await fetch('/api/emergency-requests');
+          
+          if (emergencyResponse.ok) {
+            const emergencyData = await emergencyResponse.json();
+            const myOpenRequests = emergencyData.data.filter((req: any) => 
+              req.status === 'open' && req.original_user_id === currentUser.id
+            );
+            
+            // 自分の募集への応募者数を合計
+            const totalVolunteers = myOpenRequests.reduce((total: number, req: any) => {
+              return total + (req.emergency_volunteers?.length || 0);
+            }, 0);
+            
+            setNotifications(prev => ({
+              ...prev,
+              emergencyRequestsCount: totalVolunteers
+            }));
+          }
         }
       } catch (error) {
         console.error('通知データの取得に失敗:', error);
@@ -143,18 +163,20 @@ const Navigation = () => {
   }
 
   const managerNavItems = [
-    { href: '/dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
-    { href: '/shift/create', label: 'シフト作成', icon: 'calendar', badge: 0 },
+    { href: '/dashboard', label: 'ダッシュボード', icon: 'home' },
+    { href: '/shift/create', label: 'シフト作成', icon: 'calendar' },
     { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard', badge: notifications.shiftRequestsCount },
-    { href: '/staff', label: 'スタッフ管理', icon: 'users', badge: 0 },
-    { href: '/settings/store', label: '店舗設定', icon: 'settings', badge: 0 },
+    { href: '/emergency-management', label: '代打募集管理', icon: 'users', badge: notifications.emergencyRequestsCount },
+    { href: '/staff', label: 'スタッフ管理', icon: 'user' },
+    { href: '/settings/store', label: '店舗設定', icon: 'settings' },
   ];
 
   const staffNavItems = [
-    { href: '/staff-dashboard', label: 'ダッシュボード', icon: 'dashboard', badge: 0 },
+    { href: '/staff-dashboard', label: 'ダッシュボード', icon: 'home' },
     { href: '/my-shift', label: 'マイシフト', icon: 'calendar', badge: notifications.confirmedShiftsCount },
-    { href: '/shift-request', label: 'シフト希望提出', icon: 'clipboard', badge: 0 },
-    { href: '/emergency', label: '代打募集', icon: 'alert', badge: notifications.emergencyRequestsCount },
+    { href: '/shift-request', label: 'シフト希望提出', icon: 'edit' },
+    { href: '/emergency', label: '代打募集', icon: 'users', badge: notifications.emergencyRequestsCount },
+    { href: '/request-off', label: '希望休申請', icon: 'x-circle' },
   ];
 
   const navItems = currentUser.role === 'manager' ? managerNavItems : staffNavItems;
@@ -179,6 +201,12 @@ const Navigation = () => {
   const renderIcon = (iconName: string) => {
     const iconProps = "w-5 h-5";
     switch (iconName) {
+      case 'home':
+        return (
+          <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+        );
       case 'dashboard':
         return (
           <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -195,6 +223,24 @@ const Navigation = () => {
         return (
           <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+          </svg>
+        );
+      case 'user':
+        return (
+          <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        );
+      case 'edit':
+        return (
+          <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        );
+      case 'x-circle':
+        return (
+          <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
       case 'clock':
@@ -257,7 +303,7 @@ const Navigation = () => {
               >
                 <div className="relative">
                   {renderIcon(item.icon)}
-                  <NotificationBadge count={item.badge} />
+                  {item.badge && item.badge > 0 && <NotificationBadge count={item.badge} />}
                 </div>
                 <span>{item.label}</span>
               </Link>
@@ -335,7 +381,7 @@ const Navigation = () => {
                 >
                 <div className="flex-shrink-0 relative">
                   {renderIcon(item.icon)}
-                  <NotificationBadge count={item.badge} />
+                  {item.badge && item.badge > 0 && <NotificationBadge count={item.badge} />}
                 </div>
                 <span className="flex-1">{item.label}</span>
                 {pathname === item.href && (

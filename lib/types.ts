@@ -76,6 +76,8 @@ export interface EmergencyVolunteer {
   id: string;
   emergency_request_id: string;
   user_id: string;
+  notes?: string; // 応募時のメモ
+  responded_at: string; // 応募日時
   created_at: string;
   user?: DatabaseUser;
 }

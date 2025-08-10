@@ -79,7 +79,9 @@ export default function DashboardPage() {
   const [storeStaffing, setStoreStaffing] = useState<StoreStaffing[]>([]);
   const [recentRequests, setRecentRequests] = useState<DashboardShiftRequest[]>([]);
   const [emergencyRequests, setEmergencyRequests] = useState<DatabaseEmergencyRequest[]>([]);
+  const [openEmergencies, setOpenEmergencies] = useState<DatabaseEmergencyRequest[]>([]);
   const [users, setUsers] = useState<DatabaseUser[]>([]);
+  const [stores, setStores] = useState<DashboardStore[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [shiftPatterns, setShiftPatterns] = useState<DashboardShiftPattern[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -180,6 +182,10 @@ export default function DashboardPage() {
         req.status === 'open' && req.original_user_id !== currentUser?.id
       ) || [];
 
+      // state変数を設定
+      setEmergencyRequests(emergencyData as DatabaseEmergencyRequest[]);
+      setOpenEmergencies(openEmergencies);
+
       // 統計情報を設定
       setStats({
         totalShifts: todayShifts.length,
@@ -261,8 +267,8 @@ export default function DashboardPage() {
 
       setStoreStaffing(staffingData);
       setRecentRequests((requestsData as DashboardShiftRequest[])?.slice(0, 3) || []);
-      setEmergencyRequests(openEmergencies.slice(0, 3) || []);
       setUsers((usersData as DatabaseUser[]) || []);
+      setStores((storesData as DashboardStore[]) || []);
       setShiftPatterns((shiftPatternsData as DashboardShiftPattern[]) || []);
 
     } catch (error) {
@@ -285,6 +291,8 @@ export default function DashboardPage() {
     );
   }
 
+  const userRole = currentUser?.role;
+
   return (
     <AuthenticatedLayout>
       <div className="space-y-8">
@@ -302,69 +310,62 @@ export default function DashboardPage() {
         </div>
 
         {/* 統計カード */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* 今日のシフト */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-6">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">今日のシフト</CardTitle>
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">今日のシフト</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{stats.totalShifts}</div>
-              <p className="text-sm text-gray-500 mt-1">件の勤務予定</p>
+              <div className="text-2xl sm:text-3xl font-bold text-blue-600">{stats.totalShifts}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">件の勤務予定</p>
             </CardContent>
           </Card>
-
-          {/* 新しいシフト希望 */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">新しいシフト希望</CardTitle>
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">代打募集中</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-orange-600">{stats.pendingRequests}</div>
-              <p className="text-sm text-gray-500 mt-1">件のシフト希望</p>
+              <div className="text-2xl sm:text-3xl font-bold text-orange-600">{stats.openEmergencies}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">件の募集</p>
             </CardContent>
           </Card>
-
-          {/* 代打募集 */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">代打募集</CardTitle>
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">未確認希望</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-600">{stats.openEmergencies}</div>
-              <p className="text-sm text-gray-500 mt-1">件の緊急募集</p>
+              <div className="text-2xl sm:text-3xl font-bold text-red-600">{stats.pendingRequests}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">件の希望</p>
             </CardContent>
           </Card>
-
-          {/* 総スタッフ数 */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-gray-600">総スタッフ数</CardTitle>
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">総スタッフ数</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">{stats.totalStaff}</div>
-              <p className="text-sm text-gray-500 mt-1">人のスタッフ</p>
+              <div className="text-2xl sm:text-3xl font-bold text-green-600">{stats.totalStaff}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">人のスタッフ</p>
             </CardContent>
           </Card>
         </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
           {/* 今日の店舗別出勤状況 */}
           <Card>
             <CardHeader>
-              <CardTitle>今日の店舗別出勤状況</CardTitle>
+              <CardTitle className="text-base sm:text-lg">今日の店舗別出勤状況</CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                 {storeStaffing.map((staffing, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
-                        <p className="font-medium text-gray-900">{staffing.store}</p>
-                        <p className="text-sm text-gray-500">
+                        <p className="font-medium text-gray-900 text-sm sm:text-base">{staffing.store}</p>
+                        <p className="text-xs sm:text-sm text-gray-500">
                           {staffing.scheduled} / {staffing.required} 人
                         </p>
                       </div>
-                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
                       staffing.status === 'sufficient'
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-red-100 text-red-800'
@@ -377,190 +378,87 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 代打募集管理 */}
+          {/* 代打募集セクション */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <CardTitle>代打募集管理</CardTitle>
-                {emergencyRequests.length > 0 && (
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                      {emergencyRequests.length}件募集中
-                    </span>
-                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                      総応募者: {emergencyRequests.reduce((total, req) => total + (req.emergency_volunteers?.length || 0), 0)}名
-                    </span>
-                  </div>
-                )}
-              </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                onClick={() => router.push('/shift/create')}
-                >
-                募集作成
-                </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {emergencyRequests.length > 0 ? (
-                  emergencyRequests.map((request) => {
-                    const user = users.find(u => u.id === request.original_user_id);
-                    const volunteerCount = request.emergency_volunteers?.length || 0;
-                    const requestDate = new Date(request.date);
-                    const today = new Date();
-                    const daysUntil = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                    
-                    // 応募状況による色分け
-                    const getStatusInfo = () => {
-                      if (volunteerCount === 0) {
-                        return {
-                          bgColor: 'bg-red-50 border-red-200',
-                          badgeColor: 'bg-red-100 text-red-800',
-                          icon: '🆘',
-                          status: '応募者募集中',
-                          pulse: daysUntil <= 1 ? 'animate-pulse' : ''
-                        };
-                      } else if (volunteerCount <= 2) {
-                        return {
-                          bgColor: 'bg-orange-50 border-orange-200',
-                          badgeColor: 'bg-orange-100 text-orange-800',
-                          icon: '⚠️',
-                          status: '応募者少',
-                          pulse: ''
-                        };
-                      } else {
-                        return {
-                          bgColor: 'bg-green-50 border-green-200',
-                          badgeColor: 'bg-green-100 text-green-800',
-                          icon: '✅',
-                          status: '応募者十分',
-                          pulse: ''
-                        };
-                      }
-                    };
-
-                    const statusInfo = getStatusInfo();
-
-                    // 緊急度による表示
-                    const getUrgencyInfo = () => {
-                      if (daysUntil < 0) {
-                        return { text: '過去の募集', color: 'text-gray-500' };
-                      } else if (daysUntil === 0) {
-                        return { text: '今日', color: 'text-red-600 font-bold' };
-                      } else if (daysUntil === 1) {
-                        return { text: '明日', color: 'text-orange-600 font-semibold' };
-                      } else if (daysUntil <= 3) {
-                        return { text: `${daysUntil}日後`, color: 'text-yellow-600' };
-                      } else {
-                        return { text: `${daysUntil}日後`, color: 'text-gray-600' };
-                      }
-                    };
-
-                    const urgencyInfo = getUrgencyInfo();
-
-                    return (
-                      <div 
-                        key={request.id} 
-                        className={`border rounded-lg p-3 ${statusInfo.bgColor} ${statusInfo.pulse} transition-all duration-200 hover:shadow-md`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <div>
-                              <p className="font-medium text-gray-900">{user?.name || '不明なユーザー'}</p>
-                              <div className="flex items-center space-x-2">
-                                <p className="text-sm text-gray-500">
-                                  {new Date(request.date).toLocaleDateString('ja-JP')}
-                                </p>
-                                <span className={`text-xs ${urgencyInfo.color}`}>
-                                  ({urgencyInfo.text})
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.badgeColor}`}>
-                              {statusInfo.icon} {statusInfo.status}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <p className="text-xs text-gray-600 mb-3">理由: {request.reason}</p>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="text-sm text-gray-700">
-                              応募者: 
-                              <span className={`ml-1 font-bold ${
-                                volunteerCount === 0 ? 'text-red-600' :
-                                volunteerCount <= 2 ? 'text-orange-600' : 'text-green-600'
-                              }`}>
-                                {volunteerCount}名
-                              </span>
-                            </div>
-                            {volunteerCount > 0 && (
-                              <div className="flex -space-x-1">
-                                {request.emergency_volunteers?.slice(0, 3).map((volunteer) => (
-                                  <div 
-                                    key={volunteer.id}
-                                    className="w-6 h-6 bg-blue-100 border-2 border-white rounded-full flex items-center justify-center text-xs font-medium text-blue-600"
-                                    title={volunteer.user?.name || '不明'}
-                                  >
-                                    {volunteer.user?.name?.charAt(0) || '?'}
-                                  </div>
-                                ))}
-                                {volunteerCount > 3 && (
-                                  <div className="w-6 h-6 bg-gray-100 border-2 border-white rounded-full flex items-center justify-center text-xs font-medium text-gray-600">
-                                    +{volunteerCount - 3}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <Button
-                            size="sm"
-                            variant={volunteerCount > 0 ? "primary" : "secondary"}
-                            onClick={() => {
-                              if (currentUser?.role === 'manager') {
-                                router.push(`/shift/create?emergency=${request.id}`);
-                              } else {
-                                // スタッフの場合は応募処理
-                                const hasApplied = request.emergency_volunteers?.some(
-                                  volunteer => volunteer.user_id === currentUser?.id
-                                );
-                                if (hasApplied) {
-                                  alert('既に応募済みです');
-                                } else {
-                                  handleApplyEmergency(request.id);
-                                }
-                              }
-                            }}
-                            className={`${
-                              volunteerCount > 0 
-                                ? 'bg-blue-600 hover:bg-blue-700 text-white relative' 
-                                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                            } transition-all duration-200`}
-                          >
-                            {volunteerCount > 0 && (
-                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                                {volunteerCount}
-                              </div>
-                            )}
-                            {currentUser?.role === 'manager' ? '管理' : (
-                              request.emergency_volunteers?.some(volunteer => volunteer.user_id === currentUser?.id) 
-                                ? '応募済み' 
-                                : '応募'
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-gray-500 text-center py-4">代打募集はありません</p>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>代打募集</span>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => router.push('/emergency-management')}
+                    size="sm"
+                    className="w-full sm:w-auto text-sm"
+                  >
+                    募集作成
+                  </Button>
+                  {userRole === 'manager' && (
+                    <Button
+                      onClick={() => router.push('/emergency-management?tab=manage')}
+                      variant="secondary"
+                      size="sm" 
+                      className="w-full sm:w-auto text-sm"
+                    >
+                      応募管理
+                    </Button>
                   )}
                 </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {openEmergencies.length === 0 ? (
+                <p className="text-gray-500 text-sm">現在、代打募集はありません</p>
+              ) : (
+                <div className="space-y-3">
+                  {openEmergencies.slice(0, 3).map((emergency: DatabaseEmergencyRequest) => (
+                    <div key={emergency.id} className="border-l-4 border-orange-400 pl-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {users.find(u => u.id === emergency.original_user_id)?.name || '不明なユーザー'}さん
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {new Date(emergency.date || '').toLocaleDateString('ja-JP', { 
+                              month: 'numeric', 
+                              day: 'numeric', 
+                              weekday: 'short' 
+                            })} | {stores.find(s => s.id === emergency.store_id)?.name || '不明な店舗'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            📝 {emergency.reason}
+                          </p>
+                        </div>
+                        {userRole === 'manager' && (emergency.emergency_volunteers?.length || 0) > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                              応募{emergency.emergency_volunteers?.length || 0}名
+                            </span>
+                            <Button
+                              onClick={() => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`)}
+                              size="sm"
+                              variant="secondary"
+                              className="text-xs whitespace-nowrap"
+                            >
+                              管理
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {openEmergencies.length > 3 && (
+                    <div className="text-center">
+                      <Button
+                        onClick={() => router.push('/emergency-management')}
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600 hover:text-blue-700 text-sm"
+                      >
+                        すべて見る ({openEmergencies.length}件)
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

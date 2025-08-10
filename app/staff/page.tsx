@@ -272,8 +272,14 @@ export default function StaffPage() {
 
   // ユーザー削除
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm('このユーザーを削除してもよろしいですか？')) return;
+    const user = users.find(u => u.id === userId);
+    const userName = user?.name || 'このユーザー';
+    
+    if (!confirm(
+      `${userName}を削除してもよろしいですか？\n\n⚠️ 以下の関連データも同時に削除されます：\n• シフト希望\n• 確定済みシフト\n• 代打募集・応募\n• 希望休申請\n• 固定シフト設定\n\nこの操作は元に戻せません。`
+    )) return;
 
+    setSaving(true);
     try {
       const response = await fetch(`/api/users?id=${userId}`, {
         method: 'DELETE',
@@ -286,8 +292,13 @@ export default function StaffPage() {
 
       // ローカル状態から削除
       setUsers(users.filter(user => user.id !== userId));
+      alert(`${userName}を削除しました`);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'ユーザーの削除に失敗しました');
+      const errorMessage = error instanceof Error ? error.message : 'ユーザーの削除に失敗しました';
+      setError(errorMessage);
+      alert(`削除に失敗しました: ${errorMessage}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -409,35 +420,35 @@ export default function StaffPage() {
         </div>
 
         {/* 統計カード */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6">
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-blue-600">{users.length}</div>
-              <p className="text-sm text-gray-500 mt-1">総スタッフ数</p>
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600">{users.length}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">総スタッフ数</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-600">
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="text-xl sm:text-2xl font-bold text-green-600">
                 {users.filter(u => u.role === 'manager').length}
               </div>
-              <p className="text-sm text-gray-500 mt-1">店長</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">店長</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-orange-600">
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="text-xl sm:text-2xl font-bold text-orange-600">
                 {users.filter(u => u.skillLevel === 'veteran').length}
               </div>
-              <p className="text-sm text-gray-500 mt-1">ベテランスタッフ</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">ベテランスタッフ</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-yellow-600">
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="text-xl sm:text-2xl font-bold text-purple-600">
                 {users.filter(u => u.skillLevel === 'training').length}
               </div>
-              <p className="text-sm text-gray-500 mt-1">研修中スタッフ</p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">研修中スタッフ</p>
             </CardContent>
           </Card>
         </div>
@@ -516,36 +527,35 @@ export default function StaffPage() {
             ) : (
               <div className="space-y-4">
                 {filteredUsers.map((user) => (
-                  <div key={user.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                  <div key={user.id} className="border border-gray-200 rounded-xl p-3 sm:p-4 hover:shadow-lg transition-shadow">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
                         {/* アバター */}
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-sm sm:text-lg flex-shrink-0">
                           {user.name.charAt(0)}
                         </div>
                         
                         {/* ユーザー情報 */}
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <h3 className="text-lg font-semibold text-gray-900">{user.name}</h3>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{user.name}</h3>
                             {user.role === 'manager' && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium whitespace-nowrap">
                                 店長
                               </span>
                             )}
-                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${getSkillLevelColor(user.skillLevel)}`}>
+                            <span className={`px-2 py-1 text-xs rounded-full font-medium whitespace-nowrap ${getSkillLevelColor(user.skillLevel)}`}>
                               {getSkillLevelText(user.skillLevel)}
                             </span>
                           </div>
-                          <div className="text-sm text-gray-600 space-y-1">
-                            <div className="flex items-center space-x-4">
-                              <span>📧 {user.email}</span>
-                              <span>📞 {user.phone}</span>
+                          <div className="text-xs sm:text-sm text-gray-600 space-y-0.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-4">
+                              <span className="truncate">📧 {user.email}</span>
+                              <span className="whitespace-nowrap">📞 {user.phone}</span>
                             </div>
-                            {/* ログイン用ID表示 */}
                             <div className="flex items-center space-x-2">
                               <span>🔑</span>
-                              <span className="font-mono text-blue-600 font-medium">
+                              <span className="font-mono text-blue-600 font-medium text-xs truncate">
                                 {user.loginId || generateLoginId(user.name, user.stores, user.role)}
                               </span>
                               <button
@@ -554,25 +564,30 @@ export default function StaffPage() {
                                   navigator.clipboard.writeText(loginId);
                                   alert('ログイン用IDをクリップボードにコピーしました');
                                 }}
-                                className="text-gray-400 hover:text-gray-600 transition-colors"
+                                className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 flex-shrink-0"
                                 title="ログイン用IDをコピー"
                               >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
                               </button>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <span>🏪</span>
-                              <span>
-                                {user.stores.map(storeId => {
-                                  const store = stores.find(s => s.id === storeId);
-                                  return store?.name;
-                                }).filter(Boolean).join(', ') || '未設定'}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                <span>🏪</span>
+                                <span className="truncate text-xs">
+                                  {user.stores.map(storeId => {
+                                    const store = stores.find(s => s.id === storeId);
+                                    return store?.name;
+                                  }).filter(Boolean).join(', ') || '未設定'}
+                                </span>
+                              </div>
+                              <span className="text-gray-500 text-xs whitespace-nowrap ml-2">
+                                💰 ¥{user.hourlyWage || 1000}
                               </span>
                             </div>
                             {user.memo && (
-                              <div className="text-gray-500">
+                              <div className="text-gray-500 truncate text-xs">
                                 💭 {user.memo}
                               </div>
                             )}
@@ -581,12 +596,14 @@ export default function StaffPage() {
                       </div>
 
                       {/* アクションボタン */}
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEditUser(user)}
                           disabled={saving}
+                          className="p-1.5 h-8 w-8"
+                          title="編集"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -597,6 +614,8 @@ export default function StaffPage() {
                           size="sm"
                           onClick={() => handleDeleteUser(user.id)}
                           disabled={saving}
+                          className="p-1.5 h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="削除"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

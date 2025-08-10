@@ -426,6 +426,55 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    // 関連するレコードを順番に削除
+    const deleteOperations = [];
+
+    // 1. shift_requests の削除
+    deleteOperations.push(
+      supabase.from('shift_requests').delete().eq('user_id', id)
+    );
+
+    // 2. shifts の削除
+    deleteOperations.push(
+      supabase.from('shifts').delete().eq('user_id', id)
+    );
+
+    // 3. emergency_volunteers の削除
+    deleteOperations.push(
+      supabase.from('emergency_volunteers').delete().eq('user_id', id)
+    );
+
+    // 4. emergency_requests の削除（original_user_id）
+    deleteOperations.push(
+      supabase.from('emergency_requests').delete().eq('original_user_id', id)
+    );
+
+    // 5. time_off_requests の削除
+    deleteOperations.push(
+      supabase.from('time_off_requests').delete().eq('user_id', id)
+    );
+
+    // 6. fixed_shifts の削除
+    deleteOperations.push(
+      supabase.from('fixed_shifts').delete().eq('user_id', id)
+    );
+
+    // 7. user_stores の削除
+    deleteOperations.push(
+      supabase.from('user_stores').delete().eq('user_id', id)
+    );
+
+    // 関連レコードを並行削除（エラーがあっても続行）
+    const results = await Promise.allSettled(deleteOperations);
+    
+    // エラーがあったレコードをログ出力（削除を止めない）
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`Warning: Failed to delete related records at operation ${index}:`, result.reason);
+      }
+    });
+
+    // 最後にユーザー本体を削除
     const { error } = await supabase
       .from('users')
       .delete()
@@ -433,12 +482,22 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting user:', error);
+      
+      // 外部キー制約エラーの場合、詳細なエラーメッセージを返す
+      if (error.code === '23503') {
+        return NextResponse.json({ 
+          error: 'このユーザーに関連するデータが存在するため削除できません。関連するシフト、希望休、代打募集などを先に削除してください。' 
+        }, { status: 409 });
+      }
+      
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'ユーザーの削除中に予期しないエラーが発生しました。関連するデータがある場合は、先にそれらを削除してください。' 
+    }, { status: 500 });
   }
 } 

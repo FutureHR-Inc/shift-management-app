@@ -1510,16 +1510,17 @@ function ShiftCreatePageInner() {
         )}
 
         {/* ヘッダー */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">シフト作成</h1>
-            <p className="text-gray-600 mt-2">期間単位でシフトを作成・編集できます</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">シフト作成</h1>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">期間単位でシフトを作成・編集できます</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button 
               variant="secondary" 
               disabled={saving || !shiftStatus.hasShifts} 
               onClick={handleSaveDraft}
+              className="w-full sm:w-auto text-sm"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
@@ -1529,7 +1530,7 @@ function ShiftCreatePageInner() {
             <Button 
               disabled={saving || !shiftStatus.hasShifts || shiftStatus.allConfirmed} 
               onClick={handleConfirmShifts}
-              className={shiftStatus.allConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}
+              className={`w-full sm:w-auto text-sm ${shiftStatus.allConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}`}
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1539,12 +1540,12 @@ function ShiftCreatePageInner() {
           </div>
         </div>
 
-        {/* 統計サマリー */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* 統計サマリー - スマホ対応 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-blue-600">{weeklyStats.totalHours}h</div>
-              <p className="text-sm text-gray-500 mt-1">
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <div className="text-lg sm:text-2xl font-bold text-blue-600">{weeklyStats.totalHours}h</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 {viewMode === 'week' ? '総勤務時間' : 
                  viewMode === 'half-month' ? '半月勤務時間' : 
                  '月間勤務時間'}
@@ -1558,9 +1559,9 @@ function ShiftCreatePageInner() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-600">¥{weeklyStats.totalWage.toLocaleString()}</div>
-              <p className="text-sm text-gray-500 mt-1">
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <div className="text-lg sm:text-2xl font-bold text-green-600">¥{weeklyStats.totalWage.toLocaleString()}</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 {viewMode === 'week' ? '総人件費' : 
                  viewMode === 'half-month' ? '半月人件費' : 
                  '月間人件費'}
@@ -1574,33 +1575,31 @@ function ShiftCreatePageInner() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-purple-600">{weeklyStats.uniqueStaff}人</div>
-              <p className="text-sm text-gray-500 mt-1">勤務スタッフ数</p>
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <div className="text-lg sm:text-2xl font-bold text-purple-600">{weeklyStats.uniqueStaff}人</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">勤務スタッフ数</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-orange-600">{weeklyStats.averageHours}h</div>
-              <p className="text-sm text-gray-500 mt-1">平均勤務時間</p>
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <div className="text-lg sm:text-2xl font-bold text-orange-600">{weeklyStats.averageHours}h</div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">平均勤務時間</p>
             </CardContent>
           </Card>
         </div>
 
-
-
         {/* 店舗・週選択 */}
         <Card>
-          <CardContent className="pt-6">
-            {/* 表示期間切り替えタブ */}
-            <div className="mb-6">
-              <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+          <CardContent className="pt-4 sm:pt-6">
+            {/* 表示期間切り替えタブ - スマホ対応 */}
+            <div className="mb-4 sm:mb-6">
+              <div className="flex bg-gray-100 p-1 rounded-lg w-full overflow-x-auto">
                 <button
                   onClick={() => {
                     setViewMode('week');
                     setSelectedWeek(getAppropriateStartDate('week'));
                   }}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
                     viewMode === 'week'
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1613,7 +1612,7 @@ function ShiftCreatePageInner() {
                     setViewMode('half-month');
                     setSelectedWeek(getAppropriateStartDate('half-month'));
                   }}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
                     viewMode === 'half-month'
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1626,7 +1625,7 @@ function ShiftCreatePageInner() {
                     setViewMode('month');
                     setSelectedWeek(getAppropriateStartDate('month'));
                   }}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
                     viewMode === 'month'
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -1637,7 +1636,7 @@ function ShiftCreatePageInner() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   店舗選択
@@ -1645,7 +1644,7 @@ function ShiftCreatePageInner() {
                 <select
                   value={selectedStore}
                   onChange={(e) => setSelectedStore(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   disabled={loading}
                 >
                   {stores.length === 0 ? (
@@ -1675,7 +1674,8 @@ function ShiftCreatePageInner() {
                         setSelectedWeek(newMonth);
                       }}
                       disabled={loading}
-                      className="px-3 py-2"
+                      className="px-2 sm:px-3 py-2"
+                      size="sm"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1685,9 +1685,9 @@ function ShiftCreatePageInner() {
                       type="month"
                       value={selectedWeek.substring(0, 7)}
                       onChange={(e) => setSelectedWeek(e.target.value + '-01')}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={loading}
-                    />
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  disabled={loading}
+                />
                     <Button
                       variant="secondary"
                       onClick={() => {
@@ -1698,110 +1698,71 @@ function ShiftCreatePageInner() {
                         setSelectedWeek(newMonth);
                       }}
                       disabled={loading}
-                      className="px-3 py-2"
+                      className="px-2 sm:px-3 py-2"
+                      size="sm"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </Button>
-                  </div>
-                ) : viewMode === 'week' ? (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const currentDate = new Date(selectedWeek);
-                        currentDate.setDate(currentDate.getDate() - 7);
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
-                      }}
-                      disabled={loading}
-                      className="px-3 py-2"
-                      title="前週"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </Button>
-                    <input
-                      type="date"
-                      value={selectedWeek}
-                      onChange={(e) => setSelectedWeek(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={loading}
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const currentDate = new Date(selectedWeek);
-                        currentDate.setDate(currentDate.getDate() + 7);
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
-                      }}
-                      disabled={loading}
-                      className="px-3 py-2"
-                      title="次週"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Button>
-                  </div>
-                ) : viewMode === 'half-month' ? (
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const currentDate = new Date(selectedWeek);
-                        currentDate.setDate(currentDate.getDate() - 14);
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
-                      }}
-                      disabled={loading}
-                      className="px-3 py-2"
-                      title="前半月"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </Button>
-                    <input
-                      type="date"
-                      value={selectedWeek}
-                      onChange={(e) => setSelectedWeek(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={loading}
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        const currentDate = new Date(selectedWeek);
-                        currentDate.setDate(currentDate.getDate() + 14);
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
-                      }}
-                      disabled={loading}
-                      className="px-3 py-2"
-                      title="次半月"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Button>
-                  </div>
+              </div>
                 ) : (
-                  <input
-                    type="date"
-                    value={selectedWeek}
-                    onChange={(e) => setSelectedWeek(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={loading}
-                />
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const prevWeek = new Date(selectedWeek);
+                        prevWeek.setDate(prevWeek.getDate() - 
+                          (viewMode === 'half-month' ? 14 : 7));
+                        setSelectedWeek(prevWeek.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-2 sm:px-3 py-2"
+                      size="sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                    </Button>
+                    <input
+                      type="date"
+                      value={selectedWeek}
+                      onChange={(e) => setSelectedWeek(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      disabled={loading}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const nextWeek = new Date(selectedWeek);
+                        nextWeek.setDate(nextWeek.getDate() + 
+                          (viewMode === 'half-month' ? 14 : 7));
+                        setSelectedWeek(nextWeek.toISOString().split('T')[0]);
+                      }}
+                      disabled={loading}
+                      className="px-2 sm:px-3 py-2"
+                      size="sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                </Button>
+                  </div>
                 )}
               </div>
-              <div className="flex items-end">
-                <Button variant="secondary" fullWidth disabled={loading || saving}>
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  前期間コピー
-                </Button>
+              <div className="sm:col-span-2 lg:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  シフト状況
+                </label>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <span className="text-sm text-gray-600">
+                    {shiftStatus.allConfirmed ? '✅ 確定済み' : 
+                     shiftStatus.hasShifts ? '📝 下書き中' : '📝 未作成'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {shiftStatus.totalShifts}件のシフト
+                  </span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -1826,10 +1787,10 @@ function ShiftCreatePageInner() {
                 </div>
               ) : (
                 <>
-            <div className="mb-4 p-3 bg-yellow-50 rounded-xl">
-              <h4 className="font-medium text-yellow-900 mb-1">操作方法</h4>
-              <p className="text-sm text-yellow-800">
-                各セルをクリックしてシフトを追加・編集できます。色分け：🔴不足 / 🟢適正 / 🔵過剰
+            <div className="mb-3 sm:mb-4 p-3 bg-yellow-50 rounded-xl">
+              <h4 className="font-medium text-yellow-900 mb-1 text-sm sm:text-base">操作方法</h4>
+              <p className="text-xs sm:text-sm text-yellow-800">
+                各セルをタップしてシフトを追加・編集できます。色分け：🔴不足 / 🟢適正 / 🔵過剰
                 {viewMode === 'month' && (
                   <><br />月表示では横スクロールで全日程を確認できます。</>
                 )}
@@ -1837,15 +1798,15 @@ function ShiftCreatePageInner() {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse" style={{ minWidth: viewMode === 'month' ? '2000px' : 'auto' }}>
+              <table className="w-full border-collapse" style={{ minWidth: viewMode === 'month' ? '2000px' : viewMode === 'half-month' ? '1200px' : '800px' }}>
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left p-3 font-medium text-gray-900 bg-gray-50 sticky left-0 z-10">時間帯</th>
+                    <th className="text-left p-2 sm:p-3 font-medium text-gray-900 bg-gray-50 sticky left-0 z-10 text-xs sm:text-sm">時間帯</th>
                     {displayDates.map((date, index) => (
-                      <th key={index} className={`text-center p-2 font-medium text-gray-900 bg-gray-50 ${
-                        viewMode === 'month' ? 'min-w-24' : 'min-w-36'
+                      <th key={index} className={`text-center p-1 sm:p-2 font-medium text-gray-900 bg-gray-50 ${
+                        viewMode === 'month' ? 'min-w-20 sm:min-w-24' : 'min-w-24 sm:min-w-36'
                       }`}>
-                        <div>
+                        <div className="text-xs sm:text-sm">
                           {date.toLocaleDateString('ja-JP', { 
                             month: viewMode === 'month' ? 'numeric' : 'short', 
                             day: 'numeric' 
@@ -1861,8 +1822,8 @@ function ShiftCreatePageInner() {
                 <tbody>
                   {timeSlots.map((timeSlot) => (
                     <tr key={timeSlot.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-3 bg-gray-50 sticky left-0 z-10">
-                        <div className="font-medium text-gray-900">{timeSlot.name}</div>
+                      <td className="p-2 sm:p-3 bg-gray-50 sticky left-0 z-10">
+                        <div className="font-medium text-gray-900 text-xs sm:text-sm">{timeSlot.name}</div>
                                                   <div className="text-xs text-gray-500">{timeSlot.start_time}-{timeSlot.end_time}</div>
                       </td>
                       {displayDates.map((date, dayIndex) => {
@@ -1885,13 +1846,13 @@ function ShiftCreatePageInner() {
                           }
                           
                           return (
-                            <td key={dayIndex} className="p-2">
+                            <td key={dayIndex} className="p-1 sm:p-2">
                               <div 
-                                className={`min-h-28 border-2 rounded-xl p-2 cursor-pointer hover:shadow-md transition-all ${cellStyle}`}
+                                className={`min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation ${cellStyle}`}
                                 onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
                               >
                                 {/* 必要人数表示 */}
-                                <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center justify-between mb-1 sm:mb-2">
                                   <span className="text-xs font-medium text-gray-600">
                                     {current}/{required}人
                                   </span>
@@ -1903,13 +1864,14 @@ function ShiftCreatePageInner() {
                                 </div>
                                 
                                 {/* スタッフ表示 */}
-                                <div className="space-y-1">
-                                  {dayShifts && dayShifts.map((shift) => {
+                                <div className="space-y-1 min-h-12 sm:min-h-16">
+                                  {dayShifts && dayShifts.length > 0 ? (
+                                    dayShifts.map((shift) => {
                                     try {
                                       const user = users.find(u => u.id === shift.userId);
-                                      const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
+                                        const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
                                       
-                                      if (!user || !timeSlot) {
+                                        if (!user || !timeSlot) {
                                         return null;
                                       }
 
@@ -1919,156 +1881,133 @@ function ShiftCreatePageInner() {
                                       // 代打募集状況をチェック
                                       const emergencyRequest = getEmergencyRequestForShift(shift.id);
                                       const isEmergencyRequested = !!emergencyRequest;
-                                      
-                                      // データベース形式のシフトオブジェクトを作成
-                                      const dbShift: DatabaseShift = {
-                                        id: shift.id,
-                                        user_id: shift.userId,
-                                        store_id: shift.storeId,
-                                        date: shift.date,
-                                        time_slot_id: shift.timeSlotId,
-                                        status: shift.status,
-                                        custom_start_time: shift.customStartTime,
-                                        custom_end_time: shift.customEndTime,
-                                        notes: shift.notes,
-                                        created_at: '',
-                                        updated_at: '',
-                                        users: {
-                                          id: user.id,
-                                          name: user.name,
-                                          email: user.email,
-                                          phone: user.phone,
-                                          role: user.role,
-                                          skill_level: user.skillLevel,
-                                          hourly_wage: user.hourlyWage
-                                        },
-                                        time_slots: timeSlot
-                                      };
+                                        
+                                        // データベース形式のシフトオブジェクトを作成
+                                        const dbShift: DatabaseShift = {
+                                          id: shift.id,
+                                          user_id: shift.userId,
+                                          store_id: shift.storeId,
+                                          date: shift.date,
+                                          time_slot_id: shift.timeSlotId,
+                                          status: shift.status,
+                                          custom_start_time: shift.customStartTime,
+                                          custom_end_time: shift.customEndTime,
+                                          notes: shift.notes,
+                                          created_at: '',
+                                          updated_at: '',
+                                          users: {
+                                            id: user.id,
+                                            name: user.name,
+                                            email: user.email,
+                                            phone: user.phone,
+                                            role: user.role,
+                                            hourly_wage: user.hourlyWage,
+                                            skill_level: user.skillLevel
+                                          },
+                                          time_slots: {
+                                            id: timeSlot.id,
+                                            name: timeSlot.name,
+                                            start_time: timeSlot.start_time,
+                                            end_time: timeSlot.end_time,
+                                            store_id: timeSlot.store_id || '',
+                                            display_order: timeSlot.display_order || 0,
+                                            created_at: '',
+                                            updated_at: ''
+                                          }
+                                        };
                                       
                                       return (
-                                        <div key={shift.id} className="relative group">
-                                          <div
-                                            className={`text-xs p-1.5 rounded-lg text-white font-medium flex items-center justify-between relative ${
-                                              isConfirmed ? 'ring-2 ring-yellow-400' : ''
-                                            } ${
-                                              isEmergencyRequested ? 'ring-2 ring-red-500 ring-dashed' : ''
-                                            }`}
-                                            style={{ backgroundColor: '#6B7280' }}
-                                            onContextMenu={(e) => {
-                                              handleShiftRightClick(e, dbShift);
+                                          <div 
+                                            key={shift.id}
+                                            className={`text-xs p-1.5 sm:p-2 rounded-md border transition-all group relative ${
+                                              isConfirmed 
+                                                ? 'bg-blue-100 border-blue-300 text-blue-800' 
+                                                : 'bg-white border-gray-200 text-gray-700'
+                                            } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (isEmergencyRequested) {
+                                                const volunteerCount = emergencyRequest.emergency_volunteers?.length || 0;
+                                                if (volunteerCount > 0) {
+                                                  setEmergencyManagement({ 
+                                                    show: true, 
+                                                    request: emergencyRequest 
+                                                  });
+                                                } else {
+                                                  alert('まだ応募者がいません。');
+                                                }
+                                              } else {
+                                                setContextMenu({ 
+                                                  show: true, 
+                                                  x: e.pageX, 
+                                                  y: e.pageY, 
+                                                  shiftId: shift.id, 
+                                                  shift: dbShift 
+                                                });
+                                              }
                                             }}
                                           >
-                                            <span className="truncate flex items-center">
-                                              {user.name || '不明'}
-                                              {isConfirmed && (
-                                                <span className="ml-1 text-yellow-300">✓</span>
-                                              )}
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-medium truncate flex-1 mr-1">
+                                                {user.name}
+                                              </span>
+                                              <div className="flex items-center space-x-1">
                                               {isEmergencyRequested && (
-                                                <span className="ml-1 text-red-300">
-                                                  🆘{emergencyRequest?.emergency_volunteers?.length || 0}
-                                                </span>
+                                                  <span className="text-red-600 font-bold text-xs">🆘</span>
                                               )}
-                                            </span>
+                                                {/* 削除ボタン - iPhoneでも見える */}
                                             {!isConfirmed && !isEmergencyRequested && (
                                               <button
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   handleDeleteShift(shift.id);
                                                 }}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 hover:bg-black hover:bg-opacity-20 rounded"
+                                                    className="w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
+                                                    title="削除"
                                               >
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
+                                                    ×
                                               </button>
                                             )}
                                           </div>
-                                          <div className="text-xs text-gray-500 mt-0.5 flex items-center justify-between">
-                                            <span>
-                                              {(() => {
-                                                // カスタム時間が設定されている場合はそれを使用
-                                                const startTime = shift.customStartTime || timeSlot.start_time || '00:00';
-                                                const endTime = shift.customEndTime || timeSlot.end_time || '00:00';
-                                                const hasCustomTime = shift.customStartTime || shift.customEndTime;
-                                                
-                                                return (
-                                                  <span className={hasCustomTime ? 'text-orange-600 font-medium' : ''}>
-                                                    {startTime}-{endTime}
-                                                    {hasCustomTime && (
-                                                      <span className="ml-1 text-orange-500" title="カスタム時間">⚡</span>
-                                                    )}
-                                                  </span>
-                                                );
-                                              })()}
-                                            </span>
-                                            <div className="flex items-center space-x-1">
-                                              {isEmergencyRequested && (
-                                                <span className="text-red-600 font-medium text-xs">代打募集中</span>
-                                              )}
                                             </div>
+                                            {/* カスタム時間表示 */}
+                                            {(shift.customStartTime && shift.customEndTime) && (
+                                              <div className="text-xs text-purple-600 mt-1">
+                                                ⏰ {shift.customStartTime}-{shift.customEndTime}
                                           </div>
-                                          
-                                          {/* 代打募集バッジ */}
-                                          {isEmergencyRequested && (
-                                            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 py-0.5 rounded-full">
-                                              募集中
+                                            )}
+                                            {/* 確定マーク */}
+                                            {isConfirmed && (
+                                              <div className="text-xs text-blue-600 mt-1">
+                                                ✓ 確定
                                             </div>
                                           )}
                                         </div>
                                       );
-                                    } catch (error) {
-                                      console.error('Error rendering shift:', error);
+                                      } catch (shiftError) {
+                                        console.error('Error rendering shift:', shiftError);
                                       return null;
                                     }
-                                  })}
-                                  
-                                  {/* 固定シフト表示 */}
-                                  {(() => {
-                                    const dayFixedShifts = getFixedShiftForSlot(date.getDay(), timeSlot.id);
-                                    return dayFixedShifts.map((fixedShift) => {
-                                      const user = users.find(u => u.id === fixedShift.user_id);
-                                      if (!user) return null;
-                                      
-                                      // 既存シフトがある場合は固定シフトを表示しない
-                                      const hasExistingShift = dayShifts && dayShifts.some(shift => shift.userId === fixedShift.user_id);
-                                      if (hasExistingShift) return null;
-                                      
-                                      return (
-                                        <div key={`fixed-${fixedShift.id}`} className="relative">
-                                          <div
-                                            className="text-xs p-1.5 rounded-lg text-white font-medium flex items-center justify-between bg-gradient-to-r from-purple-500 to-purple-600 border-2 border-purple-300 border-dashed opacity-80"
-                                          >
-                                            <span className="truncate flex items-center">
-                                              {user.name || '不明'}
-                                              <span className="ml-1 text-purple-200">📌</span>
-                                            </span>
-                                          </div>
-                                          
-                                          {/* 固定シフトバッジ */}
-                                          <div className="absolute -top-1 -right-1 bg-purple-500 text-white text-xs px-1 py-0.5 rounded-full">
-                                            固定
-                                          </div>
-                                        </div>
-                                      );
-                                    });
-                                  })()}
+                                    })
+                                  ) : (
+                                    /* 空のセルにヒント表示 */
+                                    <div className="flex items-center justify-center h-full min-h-12 sm:min-h-16">
+                                      <div className="text-center text-gray-400">
+                                        <div className="text-lg sm:text-xl mb-1">+</div>
+                                        <div className="text-xs">タップして追加</div>
                                 </div>
-                                
-                                {/* 追加ボタン */}
-                                <div className="mt-2">
-                                  <div className="w-full text-xs text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 text-center hover:border-gray-400 hover:text-gray-600 transition-colors">
-                                    + スタッフ追加
                                   </div>
+                                  )}
                                 </div>
                               </div>
                             </td>
                           );
-                        } catch (error) {
-                          console.error('Error rendering table cell:', error);
+                        } catch (cellError) {
+                          console.error('Error rendering cell:', cellError);
                           return (
-                            <td key={dayIndex} className="p-2">
-                              <div className="min-h-28 border-2 rounded-xl p-2 bg-gray-100">
-                                <div className="text-xs text-red-500">エラー</div>
+                            <td key={dayIndex} className="p-1 sm:p-2">
+                              <div className="min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 border-red-300 bg-red-50">
+                                <span className="text-xs text-red-600">エラー</span>
                               </div>
                             </td>
                           );
@@ -2111,18 +2050,18 @@ function ShiftCreatePageInner() {
         {/* シフト追加モーダル */}
         {isModalOpen && modalData && (
           <div 
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={handleCloseModal}
           >
             <div 
-              className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
+              className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">シフト追加</h3>
                 <button
                   onClick={handleCloseModal}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 p-1"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2130,7 +2069,7 @@ function ShiftCreatePageInner() {
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4">{/* 日時表示 */}
                 <div>
                   <p className="text-sm text-gray-600">
                     {new Date(modalData.date).toLocaleDateString('ja-JP', {
@@ -2148,6 +2087,7 @@ function ShiftCreatePageInner() {
                   </p>
                 </div>
 
+                {/* スタッフ選択 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     スタッフ選択 *
@@ -2186,7 +2126,6 @@ function ShiftCreatePageInner() {
                     })}
                   </select>
                   
-                  
                   {/* 希望休承認済みスタッフの警告表示 */}
                   {availableStaff.some(user => isStaffOnTimeOff(user.id, modalData.date)) && (
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -2200,7 +2139,7 @@ function ShiftCreatePageInner() {
                       </div>
                     </div>
                   )}
-
+                  
                   {/* 固定シフトスタッフの情報表示 */}
                   {selectedTimeSlot && availableStaff.some(user => checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot)) && (
                     <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
@@ -2216,6 +2155,7 @@ function ShiftCreatePageInner() {
                   )}
                 </div>
 
+                {/* シフトパターン選択 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     シフトパターン *
@@ -2248,7 +2188,7 @@ function ShiftCreatePageInner() {
                       overflow-hidden transition-all duration-500 ease-in-out
                       ${isCustomTime ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
                     `}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                      <div className="grid grid-cols-1 gap-4 pt-4 border-t border-gray-100">
                         <CompactTimeSlider
                           value={customStartTime}
                           onChange={setCustomStartTime}
@@ -2289,6 +2229,7 @@ function ShiftCreatePageInner() {
                   ) : null;
                 })()}
 
+                {/* プレビュー */}
                 {selectedUser && selectedTimeSlot && (
                   <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 transition-all duration-300">
                     <h4 className="font-medium text-blue-900 mb-1 flex items-center">
@@ -2303,7 +2244,7 @@ function ShiftCreatePageInner() {
                       {users.find(u => u.id === selectedUser)?.name} - {' '}
                         {timeSlots.find(p => p.id === selectedTimeSlot)?.name}
                       </div>
-                      <div className="flex items-center space-x-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
                         <span>勤務時間: {(() => {
                           const pattern = timeSlots.find(p => p.id === selectedTimeSlot);
                         if (!pattern) return '0時間';
@@ -2340,17 +2281,19 @@ function ShiftCreatePageInner() {
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-3 pt-4">
+                {/* ボタン */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button
                     variant="secondary"
                     onClick={handleCloseModal}
-                    disabled={saving}
+                    className="flex-1"
                   >
                     キャンセル
                   </Button>
                   <Button
                     onClick={handleAddShift}
                     disabled={!selectedUser || !selectedTimeSlot || saving}
+                    className="flex-1"
                   >
                     {saving ? (
                       <>
@@ -2358,7 +2301,7 @@ function ShiftCreatePageInner() {
                         追加中...
                       </>
                     ) : (
-                      '追加'
+                      'シフト追加'
                     )}
                   </Button>
                 </div>
@@ -2465,36 +2408,36 @@ function ShiftCreatePageInner() {
         {/* 応募者管理モーダル */}
         {emergencyManagement.show && emergencyManagement.request && (
           <div 
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={() => setEmergencyManagement({ show: false, request: null })}
           >
             <div 
-              className="bg-white/90 backdrop-blur-md border border-white/20 shadow-2xl rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto"
+              className="bg-white/90 backdrop-blur-md border border-white/20 shadow-2xl rounded-xl p-4 sm:p-6 w-full max-w-sm sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">代打募集管理</h3>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">代打募集管理</h3>
                 <button
                   onClick={() => setEmergencyManagement({ show: false, request: null })}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 -m-2"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
               {/* 募集情報 */}
-              <div className="p-4 bg-white/50 backdrop-blur-sm rounded-lg mb-6 border border-white/30">
-                <h4 className="font-medium text-gray-900 mb-2">募集内容</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="p-3 sm:p-4 bg-white/50 backdrop-blur-sm rounded-lg mb-4 sm:mb-6 border border-white/30">
+                <h4 className="font-medium text-gray-900 mb-2 text-sm sm:text-base">募集内容</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                   <div>
-                    <p className="text-gray-600">店舗</p>
-                    <p className="font-medium">{emergencyManagement.request.stores?.name || '不明な店舗'}</p>
+                    <p className="text-gray-600 text-xs sm:text-sm">店舗</p>
+                    <p className="font-medium text-sm sm:text-base">{emergencyManagement.request.stores?.name || '不明な店舗'}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600">日時</p>
-                    <p className="font-medium">
+                    <p className="text-gray-600 text-xs sm:text-sm">日時</p>
+                    <p className="font-medium text-sm sm:text-base">
                       {new Date(emergencyManagement.request.date).toLocaleDateString('ja-JP', {
                         year: 'numeric',
                         month: 'long',
@@ -2503,27 +2446,27 @@ function ShiftCreatePageInner() {
                       })}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-gray-600">シフト</p>
-                    <p className="font-medium">
+                  <div className="sm:col-span-2">
+                    <p className="text-gray-600 text-xs sm:text-sm">シフト</p>
+                    <p className="font-medium text-sm sm:text-base">
                       {emergencyManagement.request.time_slots?.name || '不明なシフト'} 
                       ({emergencyManagement.request.time_slots?.start_time || '00:00'}-{emergencyManagement.request.time_slots?.end_time || '00:00'})
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">元の担当者</p>
-                    <p className="font-medium">{emergencyManagement.request.original_user?.name || '不明なユーザー'}</p>
+                    <p className="text-gray-600 text-xs sm:text-sm">元の担当者</p>
+                    <p className="font-medium text-sm sm:text-base">{emergencyManagement.request.original_user?.name || '不明なユーザー'}</p>
                   </div>
                 </div>
                 <div className="mt-3">
-                  <p className="text-gray-600">理由</p>
-                  <p className="font-medium">{emergencyManagement.request.reason}</p>
+                  <p className="text-gray-600 text-xs sm:text-sm">理由</p>
+                  <p className="font-medium text-sm sm:text-base">{emergencyManagement.request.reason}</p>
                 </div>
               </div>
 
               {/* 応募者一覧 */}
               <div>
-                <h4 className="font-medium text-gray-900 mb-4">
+                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">
                   応募者一覧 ({emergencyManagement.request.emergency_volunteers?.length || 0}名)
                 </h4>
                 
@@ -2531,17 +2474,17 @@ function ShiftCreatePageInner() {
                   <div className="space-y-3">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         {emergencyManagement.request.emergency_volunteers.map((volunteer: any) => (
-                      <div key={volunteer.id} className="border border-white/20 bg-white/40 backdrop-blur-sm rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3 flex-1">
-                            <div className="w-10 h-10 bg-blue-100/70 backdrop-blur-sm rounded-full flex items-center justify-center">
-                              <span className="text-blue-600 font-medium text-sm">
+                      <div key={volunteer.id} className="border border-white/20 bg-white/40 backdrop-blur-sm rounded-lg p-3 sm:p-4">
+                        <div className="flex flex-col space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100/70 backdrop-blur-sm rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-blue-600 font-medium text-xs sm:text-sm">
                                 {volunteer.users?.name?.charAt(0) || '?'}
                               </span>
                             </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-900">{volunteer.users?.name || '不明なユーザー'}</p>
-                              <p className="text-sm text-gray-600">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-gray-900 text-sm sm:text-base">{volunteer.users?.name || '不明なユーザー'}</p>
+                              <p className="text-xs sm:text-sm text-gray-600">
                                 {volunteer.users?.skill_level === 'veteran' ? 'ベテラン' :
                                  volunteer.users?.skill_level === 'regular' ? '一般' : '研修中'}
                               </p>
@@ -2549,7 +2492,7 @@ function ShiftCreatePageInner() {
                                 応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
                               </p>
                               {volunteer.notes && (
-                                <div className="mt-2 p-2 bg-blue-50/70 backdrop-blur-sm rounded text-sm border border-blue-200/30">
+                                <div className="mt-2 p-2 bg-blue-50/70 backdrop-blur-sm rounded text-xs sm:text-sm border border-blue-200/30">
                                   <p className="text-gray-600 font-medium">応募メモ:</p>
                                   <p className="text-gray-700">{volunteer.notes}</p>
                                 </div>
@@ -2557,16 +2500,16 @@ function ShiftCreatePageInner() {
                               
                               {/* 時間編集セクション */}
                               {customApprovalTime.volunteerId === volunteer.id && customApprovalTime.showCustomTime && (
-                                <div className="mt-4 p-4 bg-white/60 backdrop-blur-sm border border-white/40 rounded-lg">
-                                  <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
+                                <div className="mt-3 p-3 bg-white/60 backdrop-blur-sm border border-white/40 rounded-lg">
+                                  <div className="space-y-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                       <h5 className="text-sm font-medium text-gray-900">勤務時間カスタマイズ</h5>
                                       <div className="text-xs text-gray-500 bg-blue-50/70 px-2 py-1 rounded">
-                                        元の時間: {emergencyManagement.request.time_slots?.start_time || '00:00'} - {emergencyManagement.request.time_slots?.end_time || '00:00'}
+                                        元: {emergencyManagement.request.time_slots?.start_time || '00:00'} - {emergencyManagement.request.time_slots?.end_time || '00:00'}
                                       </div>
                                     </div>
                                     
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                       <CompactTimeSlider
                                         value={customApprovalTime.startTime}
                                         onChange={(time) => setCustomApprovalTime(prev => ({
@@ -2585,7 +2528,7 @@ function ShiftCreatePageInner() {
                                       />
                                     </div>
                                     
-                                    <div className="flex space-x-2">
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                       <Button
                                         size="sm"
                                         onClick={() => {
@@ -2603,12 +2546,12 @@ function ShiftCreatePageInner() {
                                             showCustomTime: false
                                           });
                                         }}
-                                        className="bg-green-600 hover:bg-green-700 flex-1"
+                                        className="bg-green-600 hover:bg-green-700 flex-1 text-xs sm:text-sm"
                                         disabled={processingVolunteer === volunteer.id}
                                       >
                                         {processingVolunteer === volunteer.id ? (
                                           <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
                                             確定中...
                                           </>
                                         ) : (
@@ -2624,7 +2567,7 @@ function ShiftCreatePageInner() {
                                           endTime: '',
                                           showCustomTime: false
                                         })}
-                                        className="px-4"
+                                        className="px-4 text-xs sm:text-sm"
                                       >
                                         キャンセル
                                       </Button>
@@ -2635,7 +2578,7 @@ function ShiftCreatePageInner() {
                             </div>
                           </div>
                           
-                          <div className="flex flex-col space-y-2 ml-4">
+                          <div className="flex flex-wrap gap-2">
                             {customApprovalTime.volunteerId !== volunteer.id && (
                               <>
                                 <Button
@@ -2650,14 +2593,14 @@ function ShiftCreatePageInner() {
                                       showCustomTime: true
                                     });
                                   }}
-                                  className="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-1"
+                                  className="bg-blue-600 hover:bg-blue-700 text-xs flex-1 sm:flex-none"
                                 >
                                   時間設定
                                 </Button>
                                 <Button
                                   size="sm"
                                   onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'accept')}
-                                  className="bg-green-600 hover:bg-green-700 text-xs px-3 py-1"
+                                  className="bg-green-600 hover:bg-green-700 text-xs flex-1 sm:flex-none"
                                   disabled={processingVolunteer === volunteer.id}
                                 >
                                   {processingVolunteer === volunteer.id ? (
@@ -2673,7 +2616,7 @@ function ShiftCreatePageInner() {
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => handleVolunteerAction(emergencyManagement.request.id, volunteer.id, 'reject')}
-                                  className="text-xs px-3 py-1 border-red-300 text-red-600 hover:bg-red-50"
+                                  className="text-xs border-red-300 text-red-600 hover:bg-red-50 flex-1 sm:flex-none"
                                   disabled={processingVolunteer === volunteer.id}
                                 >
                                   削除
@@ -2686,8 +2629,8 @@ function ShiftCreatePageInner() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500 bg-white/30 backdrop-blur-sm rounded-lg border border-white/20">
-                    <p>まだ応募者がいません</p>
+                  <div className="text-center py-6 sm:py-8 text-gray-500 bg-white/30 backdrop-blur-sm rounded-lg border border-white/20">
+                    <p className="text-sm sm:text-base">まだ応募者がいません</p>
                   </div>
                 )}
               </div>
