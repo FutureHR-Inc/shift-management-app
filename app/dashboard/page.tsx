@@ -381,13 +381,13 @@ export default function DashboardPage() {
           {/* 代打募集セクション */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+              <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <span>代打募集</span>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => router.push('/emergency-management')}
                     size="sm"
-                    className="w-full sm:w-auto text-sm"
+                    className="flex-1 sm:flex-none text-xs sm:text-sm"
                   >
                     募集作成
                   </Button>
@@ -396,7 +396,7 @@ export default function DashboardPage() {
                       onClick={() => router.push('/emergency-management?tab=manage')}
                       variant="secondary"
                       size="sm" 
-                      className="w-full sm:w-auto text-sm"
+                      className="flex-1 sm:flex-none text-xs sm:text-sm"
                     >
                       応募管理
                     </Button>
@@ -411,7 +411,7 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {openEmergencies.slice(0, 3).map((emergency: DatabaseEmergencyRequest) => (
                     <div key={emergency.id} className="border-l-4 border-orange-400 pl-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">
                             {users.find(u => u.id === emergency.original_user_id)?.name || '不明なユーザー'}さん
@@ -428,19 +428,28 @@ export default function DashboardPage() {
                           </p>
                         </div>
                         {userRole === 'manager' && (emergency.emergency_volunteers?.length || 0) > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full whitespace-nowrap">
                               応募{emergency.emergency_volunteers?.length || 0}名
                             </span>
                             <Button
                               onClick={() => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`)}
                               size="sm"
                               variant="secondary"
-                              className="text-xs whitespace-nowrap"
+                              className="text-xs whitespace-nowrap w-full sm:w-auto"
                             >
                               管理
                             </Button>
                           </div>
+                        )}
+                        {userRole === 'staff' && !emergency.emergency_volunteers?.some(v => v.user_id === currentUser?.id) && (
+                          <Button
+                            onClick={() => handleApplyEmergency(emergency.id)}
+                            size="sm"
+                            className="text-xs whitespace-nowrap w-full sm:w-auto"
+                          >
+                            応募する
+                          </Button>
                         )}
                       </div>
                     </div>

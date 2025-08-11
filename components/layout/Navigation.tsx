@@ -52,76 +52,12 @@ const Navigation = () => {
 
     const fetchNotifications = async () => {
       try {
-        if (currentUser.role === 'staff') {
-          // スタッフ用通知: 自分以外の代打募集をチェック
-          const emergencyResponse = await fetch('/api/emergency-requests');
-          
-          if (emergencyResponse.ok) {
-            const emergencyData = await emergencyResponse.json();
-            const availableRequests = emergencyData.data.filter((req: any) => 
-              req.status === 'open' && req.original_user_id !== currentUser.id
-            );
-            
-            setNotifications(prev => ({
-              ...prev,
-              emergencyRequestsCount: availableRequests.length
-            }));
-          }
-
-          // スタッフ用通知: 確定シフト件数をチェック
-          const today = new Date().toISOString().split('T')[0];
-          const futureDate = new Date();
-          futureDate.setDate(futureDate.getDate() + 30); // 30日先まで
-          const futureDateStr = futureDate.toISOString().split('T')[0];
-
-          const shiftsResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${futureDateStr}&status=confirmed`);
-          
-          if (shiftsResponse.ok) {
-            const shiftsData = await shiftsResponse.json();
-            const confirmedShifts = shiftsData.data || [];
-            
-            setNotifications(prev => ({
-              ...prev,
-              confirmedShiftsCount: confirmedShifts.length
-            }));
-          }
-        } else if (currentUser.role === 'manager') {
-          // 管理者用通知: 未確認のシフト希望件数を取得
-          const shiftRequestsResponse = await fetch('/api/shift-requests');
-          
-          if (shiftRequestsResponse.ok) {
-            const shiftRequestsData = await shiftRequestsResponse.json();
-            // status が 'submitted' かつ 'converted_to_shift' でないものをカウント
-            const pendingRequests = shiftRequestsData.data.filter((req: any) => 
-              req.status === 'submitted'
-            );
-            
-            setNotifications(prev => ({
-              ...prev,
-              shiftRequestsCount: pendingRequests.length
-            }));
-          }
-
-          // 管理者用通知: 自分が作成した代打募集への応募者数を取得
-          const emergencyResponse = await fetch('/api/emergency-requests');
-          
-          if (emergencyResponse.ok) {
-            const emergencyData = await emergencyResponse.json();
-            const myOpenRequests = emergencyData.data.filter((req: any) => 
-              req.status === 'open' && req.original_user_id === currentUser.id
-            );
-            
-            // 自分の募集への応募者数を合計
-            const totalVolunteers = myOpenRequests.reduce((total: number, req: any) => {
-              return total + (req.emergency_volunteers?.length || 0);
-            }, 0);
-            
-            setNotifications(prev => ({
-              ...prev,
-              emergencyRequestsCount: totalVolunteers
-            }));
-          }
-        }
+        // 通知機能を無効化 - 常に0を設定
+        setNotifications({
+          emergencyRequestsCount: 0,
+          shiftRequestsCount: 0,
+          confirmedShiftsCount: 0
+        });
       } catch (error) {
         console.error('通知データの取得に失敗:', error);
       }
@@ -165,17 +101,17 @@ const Navigation = () => {
   const managerNavItems = [
     { href: '/dashboard', label: 'ダッシュボード', icon: 'home' },
     { href: '/shift/create', label: 'シフト作成', icon: 'calendar' },
-    { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard', badge: notifications.shiftRequestsCount },
-    { href: '/emergency-management', label: '代打募集管理', icon: 'users', badge: notifications.emergencyRequestsCount },
+    { href: '/shift-requests', label: 'シフト希望確認', icon: 'clipboard' },
+    { href: '/emergency-management', label: '代打募集管理', icon: 'users' },
     { href: '/staff', label: 'スタッフ管理', icon: 'user' },
     { href: '/settings/store', label: '店舗設定', icon: 'settings' },
   ];
 
   const staffNavItems = [
     { href: '/staff-dashboard', label: 'ダッシュボード', icon: 'home' },
-    { href: '/my-shift', label: 'マイシフト', icon: 'calendar', badge: notifications.confirmedShiftsCount },
+    { href: '/my-shift', label: 'マイシフト', icon: 'calendar' },
     { href: '/shift-request', label: 'シフト希望提出', icon: 'edit' },
-    { href: '/emergency', label: '代打募集', icon: 'users', badge: notifications.emergencyRequestsCount },
+    { href: '/emergency', label: '代打募集', icon: 'users' },
     { href: '/request-off', label: '希望休申請', icon: 'x-circle' },
   ];
 
@@ -192,8 +128,7 @@ const Navigation = () => {
     if (count === 0) return null;
     
     return (
-      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full min-w-[20px]">
-        {count > 99 ? '99+' : count}
+      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-3 h-3 bg-red-500 rounded-full">
       </span>
     );
   };
@@ -279,33 +214,36 @@ const Navigation = () => {
         <div className="flex justify-between h-14 sm:h-16">
           {/* ロゴとブランド - モバイル最適化 */}
           <div className="flex items-center">
-            <Link href={currentUser.role === 'manager' ? '/dashboard' : '/staff-dashboard'} className="flex items-center space-x-2 sm:space-x-3">
+            <Link 
+              href={currentUser?.role === 'manager' ? '/dashboard' : '/staff-dashboard'} 
+              className="flex items-center space-x-2 sm:space-x-3"
+            >
               <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500 rounded-lg flex items-center justify-center">
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
                 </svg>
               </div>
-              <span className="text-lg sm:text-xl font-semibold text-gray-900">シフト管理</span>
+              <span className="text-lg sm:text-xl font-semibold text-gray-900 whitespace-nowrap">シフト管理</span>
             </Link>
           </div>
 
           {/* デスクトップメニュー */}
-          <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
+          <div className="hidden md:flex items-center space-x-2 lg:space-x-4 xl:space-x-6">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 relative ${
+                className={`flex items-center space-x-1 lg:space-x-2 px-2 lg:px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 relative whitespace-nowrap ${
                   pathname === item.href
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
               >
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   {renderIcon(item.icon)}
-                  {item.badge && item.badge > 0 && <NotificationBadge count={item.badge} />}
+                  {/* 通知バッジを削除 */}
                 </div>
-                <span>{item.label}</span>
+                <span className="hidden lg:inline text-sm">{item.label}</span>
               </Link>
             ))}
           </div>
@@ -313,17 +251,19 @@ const Navigation = () => {
           {/* ユーザー情報とメニューボタン */}
           <div className="flex items-center space-x-2 sm:space-x-4">
             {/* ユーザー情報（デスクトップのみ） */}
-            <div className="hidden lg:block text-right">
-              <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
-              <p className="text-xs text-gray-500">
-                {currentUser.role === 'manager' ? '店長' : 'スタッフ'}
-              </p>
-            </div>
+            {currentUser && (
+              <div className="hidden lg:block text-right">
+                <p className="text-sm font-medium text-gray-900 whitespace-nowrap">{currentUser.name}</p>
+                <p className="text-xs text-gray-500 whitespace-nowrap">
+                  {currentUser.role === 'manager' ? '店長' : 'スタッフ'}
+                </p>
+              </div>
+            )}
             
             {/* ログアウトボタン（デスクトップのみ） */}
             <button
               onClick={handleLogout}
-              className="hidden md:block text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 px-2 py-1 rounded"
+              className="hidden md:block text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 px-2 py-1 rounded whitespace-nowrap"
             >
               ログアウト
             </button>
@@ -343,11 +283,11 @@ const Navigation = () => {
               </svg>
             </button>
           </div>
-          </div>
         </div>
+      </div>
 
       {/* モバイルメニュー - 改善されたレイアウト */}
-        {isMobileMenuOpen && (
+      {isMobileMenuOpen && currentUser && (
         <div className="md:hidden border-t border-gray-200 bg-white shadow-lg">
           {/* ユーザー情報セクション */}
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
@@ -368,20 +308,20 @@ const Navigation = () => {
 
           {/* ナビゲーションメニュー */}
           <div className="py-2">
-              {navItems.map((item) => (
-                <Link
+            {navItems.map((item) => (
+              <Link
                 key={item.href}
-                  href={item.href}
+                href={item.href}
                 className={`flex items-center space-x-3 px-4 py-3 text-base font-medium transition-colors duration-200 min-h-[52px] relative ${
-                    pathname === item.href
+                  pathname === item.href
                     ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500'
                     : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50 active:bg-gray-100'
                 }`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 <div className="flex-shrink-0 relative">
                   {renderIcon(item.icon)}
-                  {item.badge && item.badge > 0 && <NotificationBadge count={item.badge} />}
+                  {/* 通知バッジを削除 */}
                 </div>
                 <span className="flex-1">{item.label}</span>
                 {pathname === item.href && (
@@ -397,18 +337,18 @@ const Navigation = () => {
 
           {/* ログアウトボタン */}
           <div className="border-t border-gray-200 py-2">
-                <button
-                  onClick={handleLogout}
+            <button
+              onClick={handleLogout}
               className="flex items-center space-x-3 px-4 py-3 text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors duration-200 w-full min-h-[52px]"
-                >
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>ログアウト</span>
-                </button>
-            </div>
+            </button>
           </div>
-        )}
+        </div>
+      )}
     </nav>
   );
 };

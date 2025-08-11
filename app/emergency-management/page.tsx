@@ -380,13 +380,23 @@ export default function EmergencyManagementPage() {
     setCreating(true);
     
     try {
+      // 募集タイプを判定
+      const hasShifts = selectedSlot.timeSlot.shifts.length > 0;
+      const isShortage = selectedSlot.timeSlot.shortage > 0;
+      const requestType = isShortage ? 'shortage' : 'substitute'; // 人手不足が優先
+
       console.log('🚀 代打募集作成開始:', {
         date: selectedSlot.date,
         timeSlot: selectedSlot.timeSlot.name,
         store: selectedStore,
         reason: reason.trim(),
         currentUser: currentUser?.id,
-        shifts: selectedSlot.timeSlot.shifts
+        shifts: selectedSlot.timeSlot.shifts,
+        requestType,
+        hasShifts,
+        isShortage,
+        requiredStaff: selectedSlot.timeSlot.requiredStaff,
+        currentStaff: selectedSlot.timeSlot.currentStaff
       });
 
       const requestData = {
@@ -395,6 +405,7 @@ export default function EmergencyManagementPage() {
         date: selectedSlot.date,
         time_slot_id: selectedSlot.timeSlot.id,
         reason: reason.trim(),
+        request_type: requestType // 新規追加
       };
 
       console.log('📤 送信データ:', requestData);
@@ -415,9 +426,14 @@ export default function EmergencyManagementPage() {
       if (response.ok) {
         console.log('✅ 代打募集作成成功:', result);
         
-        // 配置済みスタッフの情報を含む成功メッセージ
+        // 募集タイプに応じた成功メッセージ
         const shiftStaff = selectedSlot.timeSlot.shifts.map((s: any) => s.user_name).join('、');
-        alert(`✅ 代打募集を作成しました！\n\n📅 日時: ${formatDate(selectedSlot.date)}\n⏰ 時間: ${selectedSlot.timeSlot.name}\n👥 現在の配置: ${shiftStaff}\n📝 理由: ${reason.trim()}\n\n📧 該当スタッフにメール通知を送信しています...`);
+        const messageType = requestType === 'shortage' ? '人手不足募集' : '代打募集';
+        const situationDesc = requestType === 'shortage' 
+          ? `👥 現在の配置: ${shiftStaff || 'なし'}\n⚠️ 不足人数: ${selectedSlot.timeSlot.shortage}名`
+          : `👥 現在の配置: ${shiftStaff}`;
+        
+        alert(`✅ ${messageType}を作成しました！\n\n📅 日時: ${formatDate(selectedSlot.date)}\n⏰ 時間: ${selectedSlot.timeSlot.name}\n${situationDesc}\n📝 理由: ${reason.trim()}\n\n📧 該当スタッフにメール通知を送信しています...`);
         
         setReason('');
         setSelectedSlot(null);
@@ -709,15 +725,15 @@ export default function EmergencyManagementPage() {
                   </div>
 
                   {selectedStore && (
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-medium text-gray-900">
+                    <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+                      <h3 className="text-base sm:text-lg font-medium text-gray-900">
                         {viewWeek.getFullYear()}年 {viewWeek.getMonth() + 1}月 第{Math.ceil(viewWeek.getDate() / 7)}週
                       </h3>
-                      <div className="flex space-x-2">
-                        <Button variant="secondary" size="sm" onClick={() => changeWeek('prev')}>
+                      <div className="flex space-x-2 justify-center sm:justify-end">
+                        <Button variant="secondary" size="sm" onClick={() => changeWeek('prev')} className="text-xs sm:text-sm">
                           ← 前週
                         </Button>
-                        <Button variant="secondary" size="sm" onClick={() => changeWeek('next')}>
+                        <Button variant="secondary" size="sm" onClick={() => changeWeek('next')} className="text-xs sm:text-sm">
                           次週 →
                         </Button>
                       </div>
@@ -969,12 +985,29 @@ export default function EmergencyManagementPage() {
                                             {/* 代打募集ボタン */}
                                             {canCreateRequest && (
                                               <div className="text-center pt-1">
-                                                <div className={`text-xs font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${
-                                                  hasShifts 
-                                                    ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
-                                                    : 'text-red-600 bg-red-100 hover:bg-red-200'
+                                                <div className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${
+                                                  isShortage
+                                                    ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                                                    : hasShifts 
+                                                      ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+                                                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
                                                 }`}>
-                                                  {hasShifts ? '📝 代打募集作成' : '🆘 人手不足募集'}
+                                                  <span className="sm:hidden">
+                                                    {isShortage 
+                                                      ? '🆘 人手不足'
+                                                      : hasShifts 
+                                                        ? '📝 代打募集'
+                                                        : '➕ 新規募集'
+                                                    }
+                                                  </span>
+                                                  <span className="hidden sm:inline">
+                                                    {isShortage 
+                                                      ? '🆘 人手不足募集'
+                                                      : hasShifts 
+                                                        ? '📝 代打募集作成'
+                                                        : '➕ 新規シフト募集'
+                                                    }
+                                                  </span>
                                                 </div>
                                               </div>
                                             )}

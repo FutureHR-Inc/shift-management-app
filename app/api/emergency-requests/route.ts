@@ -127,7 +127,8 @@ export async function POST(request: Request) {
       store_id,
       date,
       time_slot_id, // time_slot_idのみ使用
-      reason
+      reason,
+      request_type // 新規追加: 'substitute' (代打) or 'shortage' (人手不足)
     } = await request.json();
 
     // 必須フィールドの検証
@@ -146,6 +147,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // request_typeの検証
+    if (!request_type || !['substitute', 'shortage'].includes(request_type)) {
+      return NextResponse.json(
+        { error: 'request_typeは "substitute" または "shortage" である必要があります' }, 
+        { status: 400 }
+      );
+    }
+
     // 既存の緊急募集リクエストの重複チェック
     const { data: existingRequest } = await supabase
       .from('emergency_requests')
@@ -153,24 +162,26 @@ export async function POST(request: Request) {
       .eq('original_user_id', original_user_id)
       .eq('store_id', store_id)
       .eq('date', date)
+      .eq('time_slot_id', time_slot_id) // time_slot_idも含めて重複チェック
       .eq('status', 'open')
       .limit(1);
 
     if (existingRequest && existingRequest.length > 0) {
       return NextResponse.json(
-        { error: 'この日時にはすでに緊急募集リクエストが存在します' }, 
+        { error: 'この日時・時間帯にはすでに緊急募集リクエストが存在します' }, 
         { status: 409 }
       );
     }
 
-    // データ挿入（time_slot_idのみ）
+    // データ挿入（request_typeを追加）
     const insertData: Record<string, unknown> = {
-        original_user_id,
-        store_id,
-        date,
-        time_slot_id, // time_slot_idのみ設定
+      original_user_id,
+      store_id,
+      date,
+      time_slot_id, // time_slot_idのみ設定
       reason: reason.trim(),
-        status: 'open'
+      request_type, // 新規追加
+      status: 'open'
     };
 
     const { data, error } = await supabase
@@ -352,36 +363,69 @@ export async function PATCH(request: Request) {
           { error: 'この日にすでに他のシフトが存在します' }, 
           { status: 409 }
         );
-    }
-
-      // 承認処理：元のシフトを削除して新しいシフトを作成
-      console.log('元のシフト削除開始:', { original_user_id: emergencyRequest.original_user_id, date: emergencyRequest.date, store_id: emergencyRequest.store_id });
-      
-      // 1. 元のシフトを削除
-      const { error: deleteError } = await supabase
-        .from('shifts')
-        .delete()
-        .eq('user_id', emergencyRequest.original_user_id)
-        .eq('date', emergencyRequest.date)
-        .eq('store_id', emergencyRequest.store_id);
-
-      if (deleteError) {
-        console.error('元のシフト削除エラー:', deleteError);
-        return NextResponse.json(
-          { error: '元のシフトの削除に失敗しました' }, 
-          { status: 500 }
-        );
       }
 
-      console.log('元のシフト削除完了');
+      // 募集タイプに応じて処理を分岐
+      const requestType = emergencyRequest.request_type as string;
+      
+      if (requestType === 'substitute') {
+        // 代打募集の場合：元のシフトを削除して新しいシフトを作成
+        console.log('代打募集承認開始:', { original_user_id: emergencyRequest.original_user_id, date: emergencyRequest.date, store_id: emergencyRequest.store_id });
+        
+        // 1. 元のシフトを削除
+        const { error: deleteError } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('user_id', emergencyRequest.original_user_id)
+          .eq('date', emergencyRequest.date)
+          .eq('store_id', emergencyRequest.store_id)
+          .eq('time_slot_id', emergencyRequest.time_slot_id); // 特定の時間帯のみ削除
 
-      // 2. 新しいシフトを作成
+        if (deleteError) {
+          console.error('元のシフト削除エラー:', deleteError);
+          return NextResponse.json(
+            { error: '元のシフトの削除に失敗しました' }, 
+            { status: 500 }
+          );
+        }
+
+        console.log('元のシフト削除完了（代打）');
+      } else if (requestType === 'shortage') {
+        // 人手不足募集の場合：元のシフトは削除せず、新しいシフトを追加
+        console.log('人手不足募集承認開始:', { volunteer_user_id: volunteer.user_id, date: emergencyRequest.date, store_id: emergencyRequest.store_id });
+        // 元のシフトは削除しない
+      } else {
+        // 旧データ対応：request_typeが設定されていない場合は代打として扱う
+        console.log('旧データ（代打として処理）:', { original_user_id: emergencyRequest.original_user_id, date: emergencyRequest.date, store_id: emergencyRequest.store_id });
+        
+        // 1. 元のシフトを削除
+        const { error: deleteError } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('user_id', emergencyRequest.original_user_id)
+          .eq('date', emergencyRequest.date)
+          .eq('store_id', emergencyRequest.store_id);
+
+        if (deleteError) {
+          console.error('元のシフト削除エラー:', deleteError);
+          return NextResponse.json(
+            { error: '元のシフトの削除に失敗しました' }, 
+            { status: 500 }
+          );
+        }
+
+        console.log('元のシフト削除完了（旧データ対応）');
+      }
+
+      // 2. 新しいシフトを作成（共通処理）
       const insertData: Record<string, unknown> = {
         user_id: volunteer.user_id,
         store_id: emergencyRequest.store_id,
         date: emergencyRequest.date,
         status: 'confirmed' as const,
-        notes: `代打承認により自動作成（元: ${(emergencyRequest as any).original_user?.name || '不明'}）`
+        notes: requestType === 'shortage' 
+          ? `人手不足募集承認により自動作成` 
+          : `代打承認により自動作成（元: ${(emergencyRequest as any).original_user?.name || '不明'}）`
       };
 
       // time_slot_idを使用

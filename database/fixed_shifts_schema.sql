@@ -37,8 +37,39 @@ CREATE TRIGGER update_fixed_shifts_updated_at
     EXECUTE FUNCTION update_fixed_shifts_updated_at();
 
 -- 確認用クエリ
--- SELECT * FROM fixed_shifts 
--- JOIN users ON fixed_shifts.user_id = users.id 
--- JOIN stores ON fixed_shifts.store_id = stores.id 
--- JOIN time_slots ON fixed_shifts.time_slot_id = time_slots.id 
--- WHERE is_active = true; 
+-- 固定シフト一覧表示（ユーザー名、店舗名、時間帯名付き）
+-- SELECT 
+--   fs.id,
+--   u.name as user_name,
+--   s.name as store_name,
+--   fs.day_of_week,
+--   CASE fs.day_of_week
+--     WHEN 0 THEN '日曜日'
+--     WHEN 1 THEN '月曜日'
+--     WHEN 2 THEN '火曜日'
+--     WHEN 3 THEN '水曜日'
+--     WHEN 4 THEN '木曜日'
+--     WHEN 5 THEN '金曜日'
+--     WHEN 6 THEN '土曜日'
+--   END as day_name,
+--   ts.name as time_slot_name,
+--   ts.start_time,
+--   ts.end_time,
+--   fs.is_active,
+--   fs.created_at
+-- FROM fixed_shifts fs
+-- JOIN users u ON fs.user_id = u.id
+-- JOIN stores s ON fs.store_id = s.id
+-- JOIN time_slots ts ON fs.time_slot_id = ts.id
+-- WHERE fs.is_active = true
+-- ORDER BY s.name, fs.day_of_week, ts.start_time;
+
+-- 固定シフト数の確認
+-- SELECT 
+--   s.name as store_name,
+--   COUNT(*) as active_fixed_shifts
+-- FROM fixed_shifts fs
+-- JOIN stores s ON fs.store_id = s.id
+-- WHERE fs.is_active = true
+-- GROUP BY s.id, s.name
+-- ORDER BY s.name; 

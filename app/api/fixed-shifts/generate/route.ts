@@ -53,7 +53,8 @@ export async function POST(request: NextRequest) {
     const skippedShifts = [];
 
     // 指定期間の各日について処理
-    for (let currentDate = new Date(startDate); currentDate <= endDate; currentDate.setDate(currentDate.getDate() + 1)) {
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
       const dayOfWeek = currentDate.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
       const dateString = currentDate.toISOString().split('T')[0];
 
@@ -145,6 +146,9 @@ export async function POST(request: NextRequest) {
           });
         }
       }
+      
+      // 日付を1日進める（安全に新しいDateオブジェクトを作成）
+      currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
     }
 
     return NextResponse.json({

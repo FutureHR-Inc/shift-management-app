@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
 import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
 import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot, DatabaseFixedShift } from '@/lib/types';
+import { DesktopShiftTable } from '@/components/shift/DesktopShiftTable';
+import { MobileShiftTable } from '@/components/shift/MobileShiftTable';
 
 interface ShiftModalData {
   date: string;
@@ -503,7 +505,8 @@ function ShiftCreatePageInner() {
         return [];
       }
 
-      return shifts.filter(shift => {
+      // 通常のシフトを取得
+      const regularShifts = shifts.filter(shift => {
         if (shift.date !== date || shift.storeId !== selectedStore) return false;
         
         const pattern = timeSlots.find(ts => ts.id === timeSlot);
@@ -512,6 +515,37 @@ function ShiftCreatePageInner() {
         // 時間帯の判定ロジック（time_slots ベース）
         return shift.timeSlotId === timeSlot;
       });
+
+      // 固定シフトをチェックして追加
+      const dayOfWeek = new Date(date).getDay();
+      const fixedShiftsForSlot = fixedShifts.filter(fixedShift => 
+        fixedShift.day_of_week === dayOfWeek &&
+        fixedShift.time_slot_id === timeSlot &&
+        fixedShift.store_id === selectedStore &&
+        fixedShift.is_active
+      );
+
+      // 固定シフトユーザーが既に通常のシフトに入っているかチェック
+      const existingUserIds = regularShifts.map(shift => shift.userId);
+      
+      // 固定シフトをshiftオブジェクトとして変換
+      const fixedShiftsAsShifts = fixedShiftsForSlot
+        .filter(fixedShift => !existingUserIds.includes(fixedShift.user_id))
+        .map(fixedShift => ({
+          id: `fixed-${fixedShift.id}`, // 固定シフト識別のためのプレフィックス
+          userId: fixedShift.user_id,
+          storeId: fixedShift.store_id,
+          date: date,
+          timeSlotId: fixedShift.time_slot_id,
+          status: 'confirmed' as const, // 固定シフトは常に確定済み
+          customStartTime: undefined,
+          customEndTime: undefined,
+          notes: '固定シフト',
+          isFixedShift: true, // 固定シフトフラグ
+          fixedShiftData: fixedShift // 元の固定シフトデータ
+        }));
+
+      return [...regularShifts, ...fixedShiftsAsShifts];
     } catch (error) {
       console.error('Error in getShiftForSlot:', error);
       return [];
@@ -1790,234 +1824,44 @@ function ShiftCreatePageInner() {
             <div className="mb-3 sm:mb-4 p-3 bg-yellow-50 rounded-xl">
               <h4 className="font-medium text-yellow-900 mb-1 text-sm sm:text-base">操作方法</h4>
               <p className="text-xs sm:text-sm text-yellow-800">
-                各セルをタップしてシフトを追加・編集できます。色分け：🔴不足 / 🟢適正 / 🔵過剰
+                <span className="hidden lg:inline">各セルをクリックしてシフトを追加・編集できます。</span>
+                <span className="lg:hidden">各セルをタップしてシフトを追加・編集できます。</span>
+                色分け：🔴不足 / 🟢適正 / 🔵過剰
                 {viewMode === 'month' && (
                   <><br />月表示では横スクロールで全日程を確認できます。</>
                 )}
+                <br />
+                <span className="hidden lg:inline">💡 固定シフトで登録されたスタッフのシフトは自動的に確定済みで表示されます。</span>
+                <span className="lg:hidden">💡 固定シフトは確定済みで表示されます。</span>
               </p>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse" style={{ minWidth: viewMode === 'month' ? '2000px' : viewMode === 'half-month' ? '1200px' : '800px' }}>
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left p-2 sm:p-3 font-medium text-gray-900 bg-gray-50 sticky left-0 z-10 text-xs sm:text-sm">時間帯</th>
-                    {displayDates.map((date, index) => (
-                      <th key={index} className={`text-center p-1 sm:p-2 font-medium text-gray-900 bg-gray-50 ${
-                        viewMode === 'month' ? 'min-w-20 sm:min-w-24' : 'min-w-24 sm:min-w-36'
-                      }`}>
-                        <div className="text-xs sm:text-sm">
-                          {date.toLocaleDateString('ja-JP', { 
-                            month: viewMode === 'month' ? 'numeric' : 'short', 
-                            day: 'numeric' 
-                          })}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {date.toLocaleDateString('ja-JP', { weekday: 'short' })}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeSlots.map((timeSlot) => (
-                    <tr key={timeSlot.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-2 sm:p-3 bg-gray-50 sticky left-0 z-10">
-                        <div className="font-medium text-gray-900 text-xs sm:text-sm">{timeSlot.name}</div>
-                                                  <div className="text-xs text-gray-500">{timeSlot.start_time}-{timeSlot.end_time}</div>
-                      </td>
-                      {displayDates.map((date, dayIndex) => {
-                        try {
-                          const dateString = date.toISOString().split('T')[0];
-                          const dayShifts = getShiftForSlot(dateString, timeSlot.id);
-                          const required = getRequiredStaff(date.getDay(), timeSlot.id);
-                          const current = dayShifts ? dayShifts.length : 0;
-                          
-                          // 人数過不足による色分け
-                          let cellStyle = '';
-                          if (current < required) {
-                            cellStyle = 'border-red-300 bg-red-50';
-                          } else if (current > required) {
-                            cellStyle = 'border-blue-300 bg-blue-50';
-                          } else if (current === required && required > 0) {
-                            cellStyle = 'border-green-300 bg-green-50';
-                          } else {
-                            cellStyle = 'border-gray-200 bg-gray-50';
-                          }
-                          
-                          return (
-                            <td key={dayIndex} className="p-1 sm:p-2">
-                              <div 
-                                className={`min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation ${cellStyle}`}
-                                onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
-                              >
-                                {/* 必要人数表示 */}
-                                <div className="flex items-center justify-between mb-1 sm:mb-2">
-                                  <span className="text-xs font-medium text-gray-600">
-                                    {current}/{required}人
-                                  </span>
-                                  {current !== required && (
-                                    <span className="text-xs">
-                                      {current < required ? '🔴' : '🔵'}
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                {/* スタッフ表示 */}
-                                <div className="space-y-1 min-h-12 sm:min-h-16">
-                                  {dayShifts && dayShifts.length > 0 ? (
-                                    dayShifts.map((shift) => {
-                                    try {
-                                      const user = users.find(u => u.id === shift.userId);
-                                        const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
-                                      
-                                        if (!user || !timeSlot) {
-                                        return null;
-                                      }
-
-                                      // 確定済みシフトかどうかを判定
-                                      const isConfirmed = shift.status === 'confirmed';
-                                      
-                                      // 代打募集状況をチェック
-                                      const emergencyRequest = getEmergencyRequestForShift(shift.id);
-                                      const isEmergencyRequested = !!emergencyRequest;
-                                        
-                                        // データベース形式のシフトオブジェクトを作成
-                                        const dbShift: DatabaseShift = {
-                                          id: shift.id,
-                                          user_id: shift.userId,
-                                          store_id: shift.storeId,
-                                          date: shift.date,
-                                          time_slot_id: shift.timeSlotId,
-                                          status: shift.status,
-                                          custom_start_time: shift.customStartTime,
-                                          custom_end_time: shift.customEndTime,
-                                          notes: shift.notes,
-                                          created_at: '',
-                                          updated_at: '',
-                                          users: {
-                                            id: user.id,
-                                            name: user.name,
-                                            email: user.email,
-                                            phone: user.phone,
-                                            role: user.role,
-                                            hourly_wage: user.hourlyWage,
-                                            skill_level: user.skillLevel
-                                          },
-                                          time_slots: {
-                                            id: timeSlot.id,
-                                            name: timeSlot.name,
-                                            start_time: timeSlot.start_time,
-                                            end_time: timeSlot.end_time,
-                                            store_id: timeSlot.store_id || '',
-                                            display_order: timeSlot.display_order || 0,
-                                            created_at: '',
-                                            updated_at: ''
-                                          }
-                                        };
-                                      
-                                      return (
-                                          <div 
-                                            key={shift.id}
-                                            className={`text-xs p-1.5 sm:p-2 rounded-md border transition-all group relative ${
-                                              isConfirmed 
-                                                ? 'bg-blue-100 border-blue-300 text-blue-800' 
-                                                : 'bg-white border-gray-200 text-gray-700'
-                                            } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (isEmergencyRequested) {
-                                                const volunteerCount = emergencyRequest.emergency_volunteers?.length || 0;
-                                                if (volunteerCount > 0) {
-                                                  setEmergencyManagement({ 
-                                                    show: true, 
-                                                    request: emergencyRequest 
-                                                  });
-                                                } else {
-                                                  alert('まだ応募者がいません。');
-                                                }
-                                              } else {
-                                                setContextMenu({ 
-                                                  show: true, 
-                                                  x: e.pageX, 
-                                                  y: e.pageY, 
-                                                  shiftId: shift.id, 
-                                                  shift: dbShift 
-                                                });
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-medium truncate flex-1 mr-1">
-                                                {user.name}
-                                              </span>
-                                              <div className="flex items-center space-x-1">
-                                              {isEmergencyRequested && (
-                                                  <span className="text-red-600 font-bold text-xs">🆘</span>
-                                              )}
-                                                {/* 削除ボタン - iPhoneでも見える */}
-                                            {!isConfirmed && !isEmergencyRequested && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleDeleteShift(shift.id);
-                                                }}
-                                                    className="w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
-                                                    title="削除"
-                                              >
-                                                    ×
-                                              </button>
-                                            )}
-                                          </div>
-                                            </div>
-                                            {/* カスタム時間表示 */}
-                                            {(shift.customStartTime && shift.customEndTime) && (
-                                              <div className="text-xs text-purple-600 mt-1">
-                                                ⏰ {shift.customStartTime}-{shift.customEndTime}
-                                          </div>
-                                            )}
-                                            {/* 確定マーク */}
-                                            {isConfirmed && (
-                                              <div className="text-xs text-blue-600 mt-1">
-                                                ✓ 確定
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                      } catch (shiftError) {
-                                        console.error('Error rendering shift:', shiftError);
-                                      return null;
-                                    }
-                                    })
-                                  ) : (
-                                    /* 空のセルにヒント表示 */
-                                    <div className="flex items-center justify-center h-full min-h-12 sm:min-h-16">
-                                      <div className="text-center text-gray-400">
-                                        <div className="text-lg sm:text-xl mb-1">+</div>
-                                        <div className="text-xs">タップして追加</div>
-                                </div>
-                                  </div>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                          );
-                        } catch (cellError) {
-                          console.error('Error rendering cell:', cellError);
-                          return (
-                            <td key={dayIndex} className="p-1 sm:p-2">
-                              <div className="min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 border-red-300 bg-red-50">
-                                <span className="text-xs text-red-600">エラー</span>
-                              </div>
-                            </td>
-                          );
-                        }
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* PC・スマホ別シフト表 */}
+            <DesktopShiftTable
+              selectedStore={selectedStore}
+              selectedWeek={selectedWeek}
+              viewMode={viewMode}
+              displayDates={displayDates}
+              getRequiredStaff={getRequiredStaff}
+              getEmergencyRequestForShift={getEmergencyRequestForShift}
+              handleCellClick={handleCellClick}
+              handleDeleteShift={handleDeleteShift}
+              setContextMenu={setContextMenu}
+              setEmergencyManagement={setEmergencyManagement}
+            />
+            
+            <MobileShiftTable
+              selectedStore={selectedStore}
+              selectedWeek={selectedWeek}
+              viewMode={viewMode}
+              displayDates={displayDates}
+              getRequiredStaff={getRequiredStaff}
+              getEmergencyRequestForShift={getEmergencyRequestForShift}
+              handleCellClick={handleCellClick}
+              handleDeleteShift={handleDeleteShift}
+              setContextMenu={setContextMenu}
+              setEmergencyManagement={setEmergencyManagement}
+            />
             </>
             )}
           </CardContent>
@@ -2026,23 +1870,48 @@ function ShiftCreatePageInner() {
         {/* シフトパターン凡例 */}
         <Card>
           <CardHeader>
-            <CardTitle>シフトパターン凡例</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">シフトパターン凡例</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {timeSlots.map((timeSlot) => (
-                <div key={timeSlot.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-xl">
+                <div key={timeSlot.id} className="flex items-center space-x-2 sm:space-x-3 p-2 sm:p-3 border border-gray-200 rounded-lg sm:rounded-xl hover:bg-gray-50 transition-colors">
                   <div
-                    className="w-4 h-4 rounded bg-blue-500"
+                    className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-blue-500 flex-shrink-0"
                   />
-                  <div>
-                    <div className="font-medium text-gray-900">{timeSlot.name}</div>
-                    <div className="text-xs text-gray-500">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{timeSlot.name}</div>
+                    <div className="text-xs sm:text-sm text-gray-500">
                       {timeSlot.start_time}-{timeSlot.end_time}
                     </div>
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <h5 className="font-medium text-blue-900 mb-2 text-sm">ステータス表示</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                <div className="flex items-center space-x-2">
+                  <span className="text-green-600">📌</span>
+                  <span className="text-gray-700">固定シフト（自動配置）</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-blue-600">✓</span>
+                  <span className="text-blue-800">確定済みシフト（編集不可）</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-red-600">🆘</span>
+                  <span className="text-gray-700">代打募集中</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-purple-600">⏰</span>
+                  <span className="text-gray-700">カスタム時間設定</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-400">+</span>
+                  <span className="text-gray-700">空きスロット</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

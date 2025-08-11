@@ -114,17 +114,21 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
 
   // 固定シフト追加
   const handleAddFixedShift = async () => {
+    // バリデーション
+    if (!newShiftForm.store_id || !newShiftForm.time_slot_id) {
+      setError('店舗と時間帯を選択してください');
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
 
-      // 新規ユーザー作成時は配列に追加
+      // 新規ユーザーの場合は配列に追加するだけ
       if (isNewUser) {
         const newShift = { ...newShiftForm };
         const updatedShifts = [...newUserFixedShifts, newShift];
         setNewUserFixedShifts(updatedShifts);
-        
-        // 親コンポーネントに固定シフト情報を渡す
         onFixedShiftsChange?.(updatedShifts);
         
         // フォームをリセット
@@ -153,6 +157,35 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
 
       if (!response.ok) {
         throw new Error(data.error || '固定シフトの追加に失敗しました');
+      }
+
+      // 固定シフト追加成功後、現在の週と来週のシフトを自動生成
+      try {
+        const today = new Date();
+        const currentMonday = new Date(today);
+        currentMonday.setDate(today.getDate() - today.getDay() + 1); // 今週の月曜日
+        
+        const nextWeekEnd = new Date(currentMonday);
+        nextWeekEnd.setDate(currentMonday.getDate() + 13); // 来週末まで（2週間分）
+        
+        const generateResponse = await fetch('/api/fixed-shifts/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            store_id: newShiftForm.store_id,
+            start_date: currentMonday.toISOString().split('T')[0],
+            end_date: nextWeekEnd.toISOString().split('T')[0]
+          })
+        });
+
+        const generateData = await generateResponse.json();
+        
+        if (generateResponse.ok && generateData.generated_count > 0) {
+          console.log(`${generateData.generated_count}件の固定シフトをシフト表に自動反映しました`);
+        }
+      } catch (generateError) {
+        console.error('シフト自動生成エラー:', generateError);
+        // 自動生成エラーは固定シフト作成の成功を妨げない
       }
 
       // 成功時にリロードしてフォームをリセット
@@ -228,6 +261,40 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
         throw new Error(data.error || '固定シフトの更新に失敗しました');
       }
 
+      // 固定シフト更新成功後、シフトを自動生成/削除
+      try {
+        const today = new Date();
+        const currentMonday = new Date(today);
+        currentMonday.setDate(today.getDate() - today.getDay() + 1); // 今週の月曜日
+        
+        const nextWeekEnd = new Date(currentMonday);
+        nextWeekEnd.setDate(currentMonday.getDate() + 13); // 来週末まで（2週間分）
+        
+        if (!fixedShift.is_active) {
+          // 有効化する場合は自動生成
+          const generateResponse = await fetch('/api/fixed-shifts/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              store_id: fixedShift.store_id,
+              start_date: currentMonday.toISOString().split('T')[0],
+              end_date: nextWeekEnd.toISOString().split('T')[0]
+            })
+          });
+
+          const generateData = await generateResponse.json();
+          
+          if (generateResponse.ok && generateData.generated_count > 0) {
+            console.log(`${generateData.generated_count}件の固定シフトをシフト表に自動反映しました`);
+          }
+        }
+        // 無効化する場合は既存の固定シフト由来のシフトは手動削除が必要
+        // （既に確定済みシフトを自動削除するのはリスクが高いため）
+      } catch (generateError) {
+        console.error('シフト自動生成エラー:', generateError);
+        // 自動生成エラーは固定シフト更新の成功を妨げない
+      }
+
       // 成功時にリロード
       await loadData();
       onUpdate?.();
@@ -271,7 +338,12 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">固定出勤設定</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">固定出勤設定</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            固定シフトを登録すると、現在の週と来週のシフト表に自動的に反映されます
+          </p>
+        </div>
         <Button
           variant="secondary"
           size="sm"
