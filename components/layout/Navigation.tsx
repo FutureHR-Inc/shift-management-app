@@ -134,7 +134,7 @@ const Navigation = () => {
   };
 
   const renderIcon = (iconName: string) => {
-    const iconProps = "w-5 h-5";
+    const iconProps = "w-4 h-4 lg:w-5 lg:h-5 xl:w-6 xl:h-6";
     switch (iconName) {
       case 'home':
         return (
@@ -210,30 +210,30 @@ const Navigation = () => {
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-14 sm:h-16">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
+        <div className="flex justify-between h-16 sm:h-18">
           {/* ロゴとブランド - モバイル最適化 */}
           <div className="flex items-center">
             <Link 
               href={currentUser?.role === 'manager' ? '/dashboard' : '/staff-dashboard'} 
               className="flex items-center space-x-2 sm:space-x-3"
             >
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 bg-blue-500 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <span className="text-lg sm:text-xl font-semibold text-gray-900 whitespace-nowrap">シフト管理</span>
+              <span className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900 whitespace-nowrap">シフト管理</span>
             </Link>
           </div>
 
           {/* デスクトップメニュー */}
-          <div className="hidden md:flex items-center space-x-2 lg:space-x-4 xl:space-x-6">
+          <div className="hidden md:flex items-center space-x-2 lg:space-x-3 xl:space-x-4">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center space-x-1 lg:space-x-2 px-2 lg:px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 relative whitespace-nowrap ${
+                className={`flex items-center space-x-1 lg:space-x-2 px-2 lg:px-3 py-2 rounded-lg text-sm lg:text-base font-medium transition-colors duration-200 relative whitespace-nowrap ${
                   pathname === item.href
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -243,18 +243,18 @@ const Navigation = () => {
                   {renderIcon(item.icon)}
                   {/* 通知バッジを削除 */}
                 </div>
-                <span className="hidden lg:inline text-sm">{item.label}</span>
+                <span className="hidden xl:inline">{item.label}</span>
               </Link>
             ))}
           </div>
 
           {/* ユーザー情報とメニューボタン */}
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             {/* ユーザー情報（デスクトップのみ） */}
             {currentUser && (
-              <div className="hidden lg:block text-right">
-                <p className="text-sm font-medium text-gray-900 whitespace-nowrap">{currentUser.name}</p>
-                <p className="text-xs text-gray-500 whitespace-nowrap">
+              <div className="hidden md:block text-right">
+                <p className="text-sm lg:text-base font-medium text-gray-900 whitespace-nowrap">{currentUser.name}</p>
+                <p className="text-xs lg:text-sm text-gray-500 whitespace-nowrap">
                   {currentUser.role === 'manager' ? '店長' : 'スタッフ'}
                 </p>
               </div>
@@ -263,7 +263,7 @@ const Navigation = () => {
             {/* ログアウトボタン（デスクトップのみ） */}
             <button
               onClick={handleLogout}
-              className="hidden md:block text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 px-2 py-1 rounded whitespace-nowrap"
+              className="hidden md:block text-sm lg:text-base text-gray-600 hover:text-gray-900 transition-colors duration-200 px-2 lg:px-3 py-2 rounded whitespace-nowrap"
             >
               ログアウト
             </button>
@@ -271,7 +271,7 @@ const Navigation = () => {
             {/* モバイルメニューボタン - タップエリア拡大 */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 transition-colors duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="md:hidden p-2.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 transition-colors duration-200 min-w-[48px] min-h-[48px] flex items-center justify-center"
               aria-label="メニューを開く"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
