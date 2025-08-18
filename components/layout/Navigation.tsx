@@ -112,7 +112,6 @@ const Navigation = () => {
     { href: '/my-shift', label: 'マイシフト', icon: 'calendar' },
     { href: '/shift-request', label: 'シフト希望提出', icon: 'edit' },
     { href: '/emergency', label: '代打募集', icon: 'users' },
-    { href: '/request-off', label: '希望休申請', icon: 'x-circle' },
   ];
 
   const navItems = currentUser.role === 'manager' ? managerNavItems : staffNavItems;

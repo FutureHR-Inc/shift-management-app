@@ -244,9 +244,6 @@ export default function MyShiftPage() {
             <p className="text-gray-600 mt-2">あなたの勤務スケジュールを確認できます</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => router.push('/request-off')}>
-              希望休申請
-            </Button>
             <Button variant="secondary">PDF出力</Button>
           </div>
         </div>
