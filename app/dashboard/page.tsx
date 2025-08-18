@@ -230,7 +230,7 @@ export default function DashboardPage() {
 
       // 時間帯別の枠判定を行うヘルパー関数
       const getTimeSlotForPattern = (patternId: string, storeId: string): string | null => {
-        const pattern = (shiftPatternsData as DashboardShiftPattern[])?.find(p => p.id === patternId);
+        const pattern = (shiftPatterns as DashboardShiftPattern[])?.find(p => p.id === patternId);
         if (!pattern) return null;
 
         const startTime = pattern.start_time.split(':').map(Number);
