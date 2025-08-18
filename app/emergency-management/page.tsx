@@ -126,13 +126,13 @@ export default function EmergencyManagementPage() {
 
       console.log('📡 データ取得開始...');
 
-      // 並行してデータ取得
+      // 🔧 企業分離対応: 並行してデータ取得
       const [emergencyResult, shiftsResult, storesResult, timeSlotsResult, usersResult] = await Promise.all([
-        fetch('/api/emergency-requests').then(res => res.json()),
-        fetch('/api/shifts?user_id=current&include_future=true').then(res => res.json()),
-        fetch('/api/stores').then(res => res.json()),
-        fetch('/api/time-slots').then(res => res.json()),
-        fetch('/api/users').then(res => res.json()) // ユーザーデータも取得
+        fetch(`/api/emergency-requests?current_user_id=${user.id}`).then(res => res.json()),
+        fetch(`/api/shifts?user_id=current&include_future=true&current_user_id=${user.id}`).then(res => res.json()),
+        fetch(`/api/stores?current_user_id=${user.id}`).then(res => res.json()),
+        fetch(`/api/time-slots?current_user_id=${user.id}`).then(res => res.json()),
+        fetch(`/api/users?current_user_id=${user.id}`).then(res => res.json()) // ユーザーデータも取得
       ]);
 
       console.log('📦 取得したデータ:', {
@@ -214,11 +214,11 @@ export default function EmergencyManagementPage() {
         end: endDate.toISOString().split('T')[0]
       });
 
-      // 並行してデータを取得 - 店舗の詳細情報も含める
+      // 🔧 企業分離対応: 並行してデータを取得 - 店舗の詳細情報も含める
       const [shiftsResponse, usersResponse, storeDetailResponse] = await Promise.all([
-        fetch(`/api/shifts?store_id=${selectedStore}&date_from=${startDate.toISOString().split('T')[0]}&date_to=${endDate.toISOString().split('T')[0]}`),
-        fetch('/api/users'),
-        fetch(`/api/stores`) // 全店舗データから該当店舗を探す
+        fetch(`/api/shifts?store_id=${selectedStore}&date_from=${startDate.toISOString().split('T')[0]}&date_to=${endDate.toISOString().split('T')[0]}&current_user_id=${currentUser.id}`),
+        fetch(`/api/users?current_user_id=${currentUser.id}`),
+        fetch(`/api/stores?current_user_id=${currentUser.id}`) // 全店舗データから該当店舗を探す
       ]);
 
       const shiftsData = shiftsResponse.ok ? await shiftsResponse.json() : { data: [] };
