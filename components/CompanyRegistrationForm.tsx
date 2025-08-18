@@ -70,13 +70,18 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
 
       // 成功メッセージ
-      alert(`企業「${result.company.name}」の登録が完了しました！`);
+      alert(`企業「${result.company.name}」の登録が完了しました！\nスタッフ管理画面で従業員を追加できます。`);
       
-      // 成功コールバック
+      // 成功コールバック（スタッフ管理ページで最新データを取得）
       onSuccess();
       
-      // ダッシュボードにリダイレクト
-      router.push('/dashboard');
+      // フォームをリセット
+      setFormData({
+        companyName: '',
+        description: '',
+        address: '',
+        phoneNumber: ''
+      });
 
     } catch (error) {
       console.error('Company registration error:', error);

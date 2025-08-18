@@ -121,17 +121,18 @@ function StaffPageContent() {
       // currentUserが存在しない場合は空配列を返す
       if (!currentUser?.id) {
         console.log('🔍 [DEBUG] fetchUsers - currentUser.id not found, returning empty array');
+      console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
         return [];
       }
       
       const currentUserIdParam = `?current_user_id=${currentUser.id}`;
-
+      console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
+      console.log('🔍 [DEBUG] fetchUsers - API URL:', `/api/users${currentUserIdParam}`);
       
       const response = await fetch(`/api/users${currentUserIdParam}`);
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
-      
-
+      console.log('🔍 [DEBUG] fetchUsers - API response:', result);
       
       // API response を DisplayUser 型に変換
       const usersData = result.data?.map((user: ApiUser) => ({
@@ -514,8 +515,24 @@ function StaffPageContent() {
           <CompanyRegistrationForm 
             currentUser={currentUser}
             onSuccess={() => {
+              // ローカルストレージから最新のユーザー情報を再読み込み
+              const updatedUserData = localStorage.getItem('currentUser');
+              if (updatedUserData) {
+                try {
+                  const updatedUser = JSON.parse(updatedUserData);
+                  setCurrentUser(updatedUser);
+                  console.log('🔄 [DEBUG] currentUser updated after company registration:', updatedUser);
+                } catch (error) {
+                  console.error('Error parsing updated user data:', error);
+                }
+              }
+              
               setActiveTab('staff-list');
-              fetchUsers(); // データを再取得
+              
+              // データベース反映を待って再取得
+              setTimeout(() => {
+                fetchUsers(); // データを再取得
+              }, 500);
             }}
           />
         ) : (
