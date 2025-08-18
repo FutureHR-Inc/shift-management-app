@@ -118,7 +118,13 @@ function StaffPageContent() {
   // データ取得関数
   const fetchUsers = async () => {
     try {
-      const currentUserIdParam = currentUser?.id ? `?current_user_id=${currentUser.id}` : '';
+      // currentUserが存在しない場合は空配列を返す
+      if (!currentUser?.id) {
+        console.log('🔍 [DEBUG] fetchUsers - currentUser.id not found, returning empty array');
+        return [];
+      }
+      
+      const currentUserIdParam = `?current_user_id=${currentUser.id}`;
       console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
       console.log('🔍 [DEBUG] fetchUsers - API URL:', `/api/users${currentUserIdParam}`);
       
@@ -151,7 +157,13 @@ function StaffPageContent() {
 
   const fetchStores = async () => {
     try {
-      const currentUserIdParam = currentUser?.id ? `?current_user_id=${currentUser.id}` : '';
+      // currentUserが存在しない場合は空配列を返す
+      if (!currentUser?.id) {
+        console.log('🔍 [DEBUG] fetchStores - currentUser.id not found, returning empty array');
+        return [];
+      }
+      
+      const currentUserIdParam = `?current_user_id=${currentUser.id}`;
       const response = await fetch(`/api/stores${currentUserIdParam}`);
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
@@ -162,9 +174,17 @@ function StaffPageContent() {
     }
   };
 
-  // 初期データ読み込み
+  // 初期データ読み込み（currentUserが設定された後に実行）
   useEffect(() => {
     const loadInitialData = async () => {
+      // currentUserが設定されていない場合は実行しない
+      if (!currentUser) {
+        console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser not set, skipping');
+        return;
+      }
+      
+      console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser:', currentUser);
+      
       try {
         setLoading(true);
         setError(null);
@@ -173,6 +193,9 @@ function StaffPageContent() {
           fetchUsers(),
           fetchStores()
         ]);
+        
+        console.log('🔍 [FRONTEND DEBUG] loadInitialData - usersData:', usersData);
+        console.log('🔍 [FRONTEND DEBUG] loadInitialData - storesData:', storesData);
         
         setUsers(usersData);
         setStores(storesData);
@@ -185,7 +208,7 @@ function StaffPageContent() {
     };
 
     loadInitialData();
-  }, []);
+  }, [currentUser]); // currentUserが変更されたときに再実行
 
   // フィルタリング
   const filteredUsers = users.filter(user => {

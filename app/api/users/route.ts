@@ -3,16 +3,22 @@ import { supabase } from '@/lib/supabase';
 
 // 現在のユーザーIDから企業IDを取得するヘルパー関数
 async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  console.log('🔍 [API DEBUG] getCurrentUserCompanyId - userId:', userId);
+  
   const { data, error } = await supabase
     .from('users')
-    .select('company_id')
+    .select('id, name, email, company_id')
     .eq('id', userId)
     .single();
     
+  console.log('🔍 [API DEBUG] getCurrentUserCompanyId - result:', { data, error });
+    
   if (error || !data) {
+    console.log('🔍 [API DEBUG] getCurrentUserCompanyId - returning null due to error or no data');
     return null;
   }
   
+  console.log('🔍 [API DEBUG] getCurrentUserCompanyId - returning company_id:', data.company_id);
   return data.company_id;
 }
 
@@ -126,16 +132,19 @@ export async function GET(request: NextRequest) {
         )
       `);
 
-    // 企業IDでフィルタリング（company_idがnullの場合は既存企業として扱う）
-    if (companyIdFilter) {
-      console.log('🔍 [API DEBUG] Users GET - フィルタリング: company_id =', companyIdFilter);
-      query = query.eq('company_id', companyIdFilter);
-    } else if (currentUserId) {
-      // ログインユーザーがcompany_idを持たない場合は、既存企業のユーザーのみ表示
-      console.log('🔍 [API DEBUG] Users GET - フィルタリング: company_id IS NULL (既存企業)');
-      query = query.is('company_id', null);
+    // 企業IDでフィルタリング（厳密にチェック）
+    if (currentUserId) {
+      if (companyIdFilter) {
+        console.log('🔍 [API DEBUG] Users GET - 新企業フィルタリング: company_id =', companyIdFilter);
+        query = query.eq('company_id', companyIdFilter);
+      } else {
+        // ログインユーザーがcompany_idを持たない場合は、既存企業のユーザーのみ表示
+        console.log('🔍 [API DEBUG] Users GET - 既存企業フィルタリング: company_id IS NULL');
+        query = query.is('company_id', null);
+      }
     } else {
-      console.log('🔍 [API DEBUG] Users GET - フィルタリングなし（全ユーザー）');
+      console.log('🔍 [API DEBUG] Users GET - current_user_idが未指定、全ユーザー表示');
+      // current_user_idが指定されていない場合は全ユーザー（後方互換性）
     }
 
     // 店舗でフィルタリング

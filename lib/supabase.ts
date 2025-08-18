@@ -18,6 +18,12 @@ export type Database = {
           role: 'manager' | 'staff'
           skill_level: 'training' | 'regular' | 'veteran'
           memo: string | null
+          company_id: string | null
+          login_id: string | null
+          password_hash: string | null
+          login_type: string | null
+          is_first_login: boolean | null
+          hourly_wage: number | null
           created_at: string
           updated_at: string
         }
@@ -29,6 +35,12 @@ export type Database = {
           role: 'manager' | 'staff'
           skill_level: 'training' | 'regular' | 'veteran'
           memo?: string | null
+          company_id?: string | null
+          login_id?: string | null
+          password_hash?: string | null
+          login_type?: string | null
+          is_first_login?: boolean | null
+          hourly_wage?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -40,6 +52,12 @@ export type Database = {
           role?: 'manager' | 'staff'
           skill_level?: 'training' | 'regular' | 'veteran'
           memo?: string | null
+          company_id?: string | null
+          login_id?: string | null
+          password_hash?: string | null
+          login_type?: string | null
+          is_first_login?: boolean | null
+          hourly_wage?: number | null
           updated_at?: string
         }
       }
@@ -53,6 +71,7 @@ export type Database = {
             max_consecutive_days?: number
             min_rest_hours?: number
           } | null
+          company_id: string | null
           created_at: string
           updated_at: string
         }
@@ -65,6 +84,7 @@ export type Database = {
             max_consecutive_days?: number
             min_rest_hours?: number
           } | null
+          company_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -77,6 +97,7 @@ export type Database = {
             max_consecutive_days?: number
             min_rest_hours?: number
           } | null
+          company_id?: string | null
           updated_at?: string
         }
       }
