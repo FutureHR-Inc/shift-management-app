@@ -106,6 +106,7 @@ function ShiftCreatePageInner() {
   const [fixedShifts, setFixedShifts] = useState<DatabaseFixedShift[]>([]);
   
   // UI state
+  const [currentUser, setCurrentUser] = useState<any>(null); // 現在のユーザー情報
   const [selectedStore, setSelectedStore] = useState('');
   const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeekMonday()); // 今週の月曜日
   const [viewMode, setViewMode] = useState<'week' | 'half-month' | 'month'>('week'); // 表示期間モード
@@ -150,10 +151,31 @@ function ShiftCreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ユーザー情報を取得・同期する関数
+  const loadCurrentUser = async () => {
+    const userData = localStorage.getItem('currentUser');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        setCurrentUser(user);
+      } catch (error) {
+        console.error('Failed to parse user data:', error);
+        router.push('/login');
+      }
+    } else {
+      router.push('/login');
+    }
+  };
+
   // データ取得関数
   const fetchStores = async () => {
+    if (!currentUser) {
+      console.log('currentUser not available, skipping store fetch');
+      return [];
+    }
+    
     try {
-      const response = await fetch('/api/stores');
+      const response = await fetch(`/api/stores?current_user_id=${currentUser.id}`);
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
       
@@ -173,8 +195,13 @@ function ShiftCreatePageInner() {
   };
 
   const fetchUsers = async () => {
+    if (!currentUser) {
+      console.log('currentUser not available, skipping users fetch');
+      return [];
+    }
+    
     try {
-      const response = await fetch('/api/users');
+      const response = await fetch(`/api/users?current_user_id=${currentUser.id}`);
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
       
@@ -335,8 +362,15 @@ function ShiftCreatePageInner() {
     }
   };
 
-  // 初期データ読み込み
+  // currentUser初期化
   useEffect(() => {
+    loadCurrentUser();
+  }, []);
+
+  // 初期データ読み込み（currentUserがセットされてから）
+  useEffect(() => {
+    if (!currentUser) return; // currentUserが読み込まれるまで待機
+    
     const loadInitialData = async () => {
       try {
         setLoading(true);
@@ -369,7 +403,7 @@ function ShiftCreatePageInner() {
     };
 
     loadInitialData();
-  }, [searchParams]);
+  }, [currentUser, searchParams]);
 
   // 店舗変更時に時間帯データと固定シフトを取得
   useEffect(() => {

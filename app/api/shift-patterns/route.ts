@@ -1,16 +1,38 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// GET: シフトパターン一覧取得
+// GET: シフトパターン一覧取得 (time_slotsベース)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('store_id');
+    const currentUserId = searchParams.get('current_user_id');
 
     let query = supabase
-      .from('shift_patterns')
+      .from('time_slots')
       .select('*')
-      .order('created_at', { ascending: true });
+      .order('display_order', { ascending: true });
+
+    // 企業フィルタリング（current_user_idが指定されている場合）
+    if (currentUserId) {
+      // current_user_idからcompany_idを取得
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', currentUserId)
+        .single();
+
+      if (userError || !userData?.company_id) {
+        console.error('User company_id fetch error:', userError);
+        return NextResponse.json(
+          { error: 'ユーザーの企業情報が取得できません' },
+          { status: 400 }
+        );
+      }
+
+      // company_idでフィルタリング
+      query = query.eq('company_id', userData.company_id);
+    }
 
     if (storeId) {
       query = query.eq('store_id', storeId);
@@ -26,7 +48,19 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({ data: data || [] });
+    // time_slotsをshift_patterns形式にマッピング（既存コードとの互換性のため）
+    const mappedData = (data || []).map(timeSlot => ({
+      id: timeSlot.id,
+      name: timeSlot.name,
+      start_time: timeSlot.start_time,
+      end_time: timeSlot.end_time,
+      color: timeSlot.color || '#3B82F6', // デフォルト色
+      break_time: timeSlot.break_minutes || 0,
+      created_at: timeSlot.created_at,
+      updated_at: timeSlot.updated_at
+    }));
+
+    return NextResponse.json({ data: mappedData });
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
@@ -36,102 +70,39 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - 新規シフトパターン作成
+// POST - 新規シフトパターン作成（time_slotsベース）
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { id, name, start_time, end_time, color, break_time } = body;
-
-    // バリデーション
-    if (!id || !name || !start_time || !end_time || !color) {
-      return NextResponse.json(
-        { error: 'Required fields: id, name, start_time, end_time, color' },
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabase
-      .from('shift_patterns')
-      .insert({
-        id,
-        name,
-        start_time,
-        end_time,
-        color,
-        break_time: break_time || 0
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating shift pattern:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json(
+      { error: 'シフトパターンの作成は /api/time-slots を使用してください' },
+      { status: 400 }
+    );
   } catch (error) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// PUT - シフトパターン更新
+// PUT - シフトパターン更新（time_slotsベース）
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id, name, start_time, end_time, color, break_time } = body;
-
-    if (!id) {
-      return NextResponse.json({ error: 'Pattern ID is required' }, { status: 400 });
-    }
-
-    const { data, error } = await supabase
-      .from('shift_patterns')
-      .update({
-        name,
-        start_time,
-        end_time,
-        color,
-        break_time,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating shift pattern:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json(
+      { error: 'シフトパターンの更新は /api/time-slots を使用してください' },
+      { status: 400 }
+    );
   } catch (error) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE - シフトパターン削除
+// DELETE - シフトパターン削除（time_slotsベース）
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Pattern ID is required' }, { status: 400 });
-    }
-
-    const { error } = await supabase
-      .from('shift_patterns')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting shift pattern:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ message: 'Shift pattern deleted successfully' }, { status: 200 });
+    return NextResponse.json(
+      { error: 'シフトパターンの削除は /api/time-slots を使用してください' },
+      { status: 400 }
+    );
   } catch (error) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
