@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -48,7 +48,8 @@ interface DisplayUser {
 
 type TabType = 'staff-list' | 'company-registration';
 
-export default function StaffPage() {
+// メインコンポーネント（useSearchParamsを使用）
+function StaffPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -1033,5 +1034,23 @@ export default function StaffPage() {
         )}
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+// Suspenseでラップしたエクスポートコンポーネント
+export default function StaffPage() {
+  return (
+    <Suspense fallback={
+      <AuthenticatedLayout>
+        <div className="flex items-center justify-center min-h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-gray-600">読み込み中...</p>
+          </div>
+        </div>
+      </AuthenticatedLayout>
+    }>
+      <StaffPageContent />
+    </Suspense>
   );
 } 
