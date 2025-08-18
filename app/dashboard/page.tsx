@@ -159,14 +159,14 @@ export default function DashboardPage() {
         emergencyResponse, // APIルート経由に変更
         usersResponse, // APIルート経由に変更（企業フィルタリング）
         storesResponse, // APIルート経由に変更（企業フィルタリング）
-        { data: shiftPatternsData }
+        timeSlotsResponse
       ] = await Promise.all([
         supabase.from('shifts').select('*'),
         fetch('/api/shift-requests?status=submitted'), // シフト希望APIルート経由
         fetch('/api/emergency-requests'), // APIルート経由に変更
         fetch(`/api/users?current_user_id=${currentUser.id}`), // 企業フィルタリング
         fetch(`/api/stores?current_user_id=${currentUser.id}`), // 企業フィルタリング
-        supabase.from('shift_patterns').select('*')
+        fetch(`/api/time-slots?current_user_id=${currentUser.id}`) // shift_patternsの代替としてtime_slotsを使用
       ]);
 
       // emergency_requestsはAPIレスポンスから取得
@@ -299,11 +299,20 @@ export default function DashboardPage() {
         } as StoreStaffing;
       });
 
+      // time_slotsレスポンス処理
+      let timeSlotsData = [];
+      if (timeSlotsResponse.ok) {
+        const timeSlotsResult = await timeSlotsResponse.json();
+        timeSlotsData = timeSlotsResult.data || [];
+      } else {
+        console.error('Time slots API error:', await timeSlotsResponse.text());
+      }
+
       setStoreStaffing(staffingData);
       setRecentRequests((requestsData as DashboardShiftRequest[])?.slice(0, 3) || []);
       setUsers((usersData as DatabaseUser[]) || []);
       setStores((storesData as DashboardStore[]) || []);
-      setShiftPatterns((shiftPatternsData as DashboardShiftPattern[]) || []);
+      setShiftPatterns((timeSlotsData as DashboardShiftPattern[]) || []); // time_slotsをshift_patternsとして使用
 
     } catch (error) {
       console.error('Dashboard data loading error:', error);

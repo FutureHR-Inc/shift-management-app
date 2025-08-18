@@ -35,17 +35,40 @@ export async function GET(request: NextRequest) {
     
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('store_id') || searchParams.get('storeId');
+    const currentUserId = searchParams.get('current_user_id');
 
     let query = supabase
       .from('time_slots')
       .select('*');
+
+    // 企業フィルタリング（current_user_idが指定されている場合）
+    if (currentUserId) {
+      // current_user_idからcompany_idを取得
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('company_id')
+        .eq('id', currentUserId)
+        .single();
+
+      if (userError || !userData?.company_id) {
+        console.error('User company_id fetch error:', userError);
+        return NextResponse.json(
+          { success: false, error: 'ユーザーの企業情報が取得できません' },
+          { status: 400 }
+        );
+      }
+
+      // company_idでフィルタリング
+      query = query.eq('company_id', userData.company_id);
+      console.log('🏢 企業別時間帯取得:', userData.company_id);
+    }
 
     // store_idが指定されている場合のみフィルタリング
     if (storeId) {
       query = query.eq('store_id', storeId);
       console.log('🏪 特定店舗の時間帯を取得:', storeId);
     } else {
-      console.log('📋 全店舗の時間帯を取得');
+      console.log('📋 時間帯を取得');
     }
 
     query = query.order('display_order');
