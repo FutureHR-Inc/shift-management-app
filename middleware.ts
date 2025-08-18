@@ -7,12 +7,22 @@ export function middleware(request: NextRequest) {
   
   // 開発環境では localhost のみ
   if (hostname === 'localhost' || hostname.includes('localhost')) {
-    // デフォルトは既存企業（legacy-main）として処理
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-company-slug', 'legacy-main');
-    requestHeaders.set('x-is-legacy', 'true');
     
-    console.log(`[MIDDLEWARE] Development mode - default to legacy-main`);
+    // クエリパラメータでcompany指定をチェック（開発環境のみ）
+    const companyParam = url.searchParams.get('company');
+    
+    if (companyParam) {
+      // ?company=企業名 で指定された場合
+      requestHeaders.set('x-company-slug', companyParam);
+      requestHeaders.set('x-is-legacy', 'false');
+      console.log(`[MIDDLEWARE] Development mode - company specified: ${companyParam}`);
+    } else {
+      // デフォルトは既存企業（legacy-main）として処理
+      requestHeaders.set('x-company-slug', 'legacy-main');
+      requestHeaders.set('x-is-legacy', 'true');
+      console.log(`[MIDDLEWARE] Development mode - default to legacy-main`);
+    }
     
     return NextResponse.next({
       request: { headers: requestHeaders }

@@ -104,8 +104,14 @@ export default function DashboardPage() {
     if (user) {
       setCurrentUser(JSON.parse(user));
     }
-    loadDashboardData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // currentUserが設定された後にデータを読み込み
+    if (currentUser) {
+      loadDashboardData();
+    }
+  }, [currentUser]);
 
   // 代打募集に応募する関数
   const handleApplyEmergency = async (requestId: string) => {
@@ -139,29 +145,27 @@ export default function DashboardPage() {
       try {
         setIsLoading(true);
 
-      // 並列でデータを取得
+        // currentUserが設定されていない場合は待機
+        if (!currentUser?.id) {
+          console.log('currentUser not set, waiting...');
+          setIsLoading(false);
+          return;
+        }
+
+      // 並列でデータを取得（企業フィルタリング対応）
       const [
         { data: shiftsData },
         shiftRequestsResponse, // APIルート経由に変更
         emergencyResponse, // APIルート経由に変更
-        { data: usersData },
-        { data: storesData },
+        usersResponse, // APIルート経由に変更（企業フィルタリング）
+        storesResponse, // APIルート経由に変更（企業フィルタリング）
         { data: shiftPatternsData }
       ] = await Promise.all([
         supabase.from('shifts').select('*'),
         fetch('/api/shift-requests?status=submitted'), // シフト希望APIルート経由
         fetch('/api/emergency-requests'), // APIルート経由に変更
-        supabase.from('users').select(`
-          *,
-          user_stores (
-            store_id,
-            stores (*)
-          )
-        `),
-        supabase.from('stores').select(`
-          *,
-          time_slots(*)
-        `),
+        fetch(`/api/users?current_user_id=${currentUser.id}`), // 企業フィルタリング
+        fetch(`/api/stores?current_user_id=${currentUser.id}`), // 企業フィルタリング
         supabase.from('shift_patterns').select('*')
       ]);
 
@@ -193,16 +197,35 @@ export default function DashboardPage() {
         req.status === 'open' && req.original_user_id !== currentUser?.id
       ) || [];
 
+      // users と stores データをAPIレスポンスから取得
+      let usersData = [];
+      if (usersResponse.ok) {
+        const usersResult = await usersResponse.json();
+        usersData = usersResult.data || [];
+      } else {
+        console.error('Users API error:', await usersResponse.text());
+      }
+
+      let storesData = [];
+      if (storesResponse.ok) {
+        const storesResult = await storesResponse.json();
+        storesData = storesResult.data || [];
+      } else {
+        console.error('Stores API error:', await storesResponse.text());
+      }
+
       // state変数を設定
+      setUsers(usersData);
+      setStores(storesData);
       setEmergencyRequests(emergencyData as DatabaseEmergencyRequest[]);
       setOpenEmergencies(openEmergencies);
 
-      // 統計情報を設定
+      // 統計情報を設定（企業フィルタリング済みデータ）
       setStats({
         totalShifts: todayShifts.length,
         pendingRequests: pendingRequests.length,
         openEmergencies: openEmergencies.length,
-        totalStaff: usersData?.length || 0
+        totalStaff: usersData.length || 0 // 企業別スタッフ数
       });
 
       // 時間帯別の枠判定を行うヘルパー関数

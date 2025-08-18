@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 
 interface CompanyRegistrationProps {
   currentUser: any;
-  onSuccess: () => void;
+  onSuccess: (updatedUser: any) => void;
 }
 
 export default function CompanyRegistrationForm({ currentUser, onSuccess }: CompanyRegistrationProps) {
@@ -38,6 +38,15 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
       // バリデーション
       if (!formData.companyName.trim()) {
         throw new Error('企業名は必須です');
+      }
+
+      // 既に企業に所属していないかDBで確認
+      const checkResponse = await fetch(`/api/debug/check-user?user_id=${currentUser?.id}`);
+      if (checkResponse.ok) {
+        const checkResult = await checkResponse.json();
+        if (checkResult.user && checkResult.user.company_id) {
+          throw new Error('既に企業に所属しています。企業情報は登録済みです。');
+        }
       }
 
       // 企業登録API呼び出し
@@ -72,8 +81,8 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
       // 成功メッセージ
       alert(`企業「${result.company.name}」の登録が完了しました！\nスタッフ管理画面で従業員を追加できます。`);
       
-      // 成功コールバック（スタッフ管理ページで最新データを取得）
-      onSuccess();
+      // 成功コールバック（更新されたユーザー情報を渡す）
+      onSuccess(updatedUser);
       
       // フォームをリセット
       setFormData({
@@ -98,6 +107,23 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
         <p className="text-gray-600 text-center text-sm">
           新しい企業をシステムに登録して、スタッフ管理を開始しましょう
         </p>
+        
+        {/* 進行状況インジケーター */}
+        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">企業情報登録中</h3>
+              <p className="text-sm text-blue-700">
+                こちらのフォームで企業情報を入力してください。登録完了後、スタッフ管理が可能になります。
+              </p>
+            </div>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {error && (

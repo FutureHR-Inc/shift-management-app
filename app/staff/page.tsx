@@ -100,19 +100,39 @@ function StaffPageContent() {
       setActiveTab('company-registration');
     }
     
-    // ローカルストレージからユーザー情報を取得
-    const userData = localStorage.getItem('currentUser');
-    if (userData) {
-      try {
-        const user = JSON.parse(userData);
-        setCurrentUser(user);
-      } catch (error) {
-        console.error('Error parsing user data:', error);
+    // ローカルストレージからユーザー情報を取得し、DB同期を確認
+    const loadAndSyncUser = async () => {
+      const userData = localStorage.getItem('currentUser');
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          
+          // DB側の最新情報を確認
+          const response = await fetch(`/api/debug/check-user?user_id=${user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.user && result.user.company_id !== user.company_id) {
+              // DB側の方が新しい情報を持っている場合、localStorageを更新
+              const updatedUser = { ...user, company_id: result.user.company_id };
+              localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+              setCurrentUser(updatedUser);
+              console.log('🔄 [SYNC] LocalStorage updated with DB company_id:', result.user.company_id);
+            } else {
+              setCurrentUser(user);
+            }
+          } else {
+            setCurrentUser(user);
+          }
+        } catch (error) {
+          console.error('Error parsing user data or syncing with DB:', error);
+          router.push('/login');
+        }
+      } else {
         router.push('/login');
       }
-    } else {
-      router.push('/login');
-    }
+    };
+    
+    loadAndSyncUser();
   }, [searchParams, router]);
 
   // データ取得関数
@@ -121,12 +141,16 @@ function StaffPageContent() {
       // currentUserが存在しない場合は空配列を返す
       if (!currentUser?.id) {
         console.log('🔍 [DEBUG] fetchUsers - currentUser.id not found, returning empty array');
-      console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
+        console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
+        console.log('🔍 [DEBUG] fetchUsers - typeof currentUser:', typeof currentUser);
+        console.log('🔍 [DEBUG] fetchUsers - currentUser keys:', currentUser ? Object.keys(currentUser) : 'null');
         return [];
       }
       
       const currentUserIdParam = `?current_user_id=${currentUser.id}`;
       console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
+      console.log('🔍 [DEBUG] fetchUsers - currentUser.id:', currentUser.id);
+      console.log('🔍 [DEBUG] fetchUsers - currentUser.company_id:', currentUser.company_id);
       console.log('🔍 [DEBUG] fetchUsers - API URL:', `/api/users${currentUserIdParam}`);
       
       const response = await fetch(`/api/users${currentUserIdParam}`);
@@ -180,10 +204,19 @@ function StaffPageContent() {
       // currentUserが設定されていない場合は実行しない
       if (!currentUser) {
         console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser not set, skipping');
+        console.log('🔍 [FRONTEND DEBUG] loadInitialData - localStorage currentUser:', localStorage.getItem('currentUser'));
         return;
       }
       
-
+      console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser loaded:', currentUser);
+      console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser.id:', currentUser.id);
+      console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser.company_id:', currentUser.company_id);
+      
+      // 企業登録済みユーザーが企業登録タブにいる場合、スタッフ一覧に自動移行
+      if (currentUser.company_id && activeTab === 'company-registration') {
+        console.log('🔄 [AUTO REDIRECT] User has company_id, switching to staff-list tab');
+        setActiveTab('staff-list');
+      }
       
       try {
         setLoading(true);
@@ -207,7 +240,7 @@ function StaffPageContent() {
     };
 
     loadInitialData();
-  }, [currentUser]); // currentUserが変更されたときに再実行
+  }, [currentUser, activeTab]); // currentUserまたはactiveTabが変更されたときに再実行
 
   // フィルタリング
   const filteredUsers = users.filter(user => {
@@ -511,22 +544,15 @@ function StaffPageContent() {
         </div>
 
         {/* タブコンテンツ */}
-        {activeTab === 'company-registration' ? (
+        {activeTab === 'company-registration' && !currentUser?.company_id ? (
           <CompanyRegistrationForm 
             currentUser={currentUser}
-            onSuccess={() => {
-              // ローカルストレージから最新のユーザー情報を再読み込み
-              const updatedUserData = localStorage.getItem('currentUser');
-              if (updatedUserData) {
-                try {
-                  const updatedUser = JSON.parse(updatedUserData);
-                  setCurrentUser(updatedUser);
-                  console.log('🔄 [DEBUG] currentUser updated after company registration:', updatedUser);
-                } catch (error) {
-                  console.error('Error parsing updated user data:', error);
-                }
-              }
+            onSuccess={(updatedUser) => {
+              // 即座にcurrentUserを更新
+              setCurrentUser(updatedUser);
+              console.log('🔄 [SUCCESS] currentUser immediately updated after company registration:', updatedUser);
               
+              // スタッフ一覧タブに切り替え
               setActiveTab('staff-list');
               
               // データベース反映を待って再取得
@@ -539,7 +565,7 @@ function StaffPageContent() {
           /* スタッフ一覧タブのコンテンツ */
           <>
             {/* 企業未登録の警告 */}
-            {!currentUser?.company_id && (
+            {!currentUser?.company_id && activeTab === 'staff-list' && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
