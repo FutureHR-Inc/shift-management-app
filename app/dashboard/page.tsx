@@ -22,7 +22,15 @@ interface StoreStaffing {
   store: string;
   scheduled: number;
   required: number;
-  status: 'sufficient' | 'insufficient';
+  status: 'sufficient' | 'insufficient' | 'no_setting' | 'no_assignment';
+  details: {
+    timeSlots: Array<{
+      name: string;
+      scheduled: number;
+      required: number;
+      status: 'sufficient' | 'insufficient' | 'no_setting';
+    }>;
+  };
 }
 
 interface DashboardShiftRequest {
@@ -150,7 +158,10 @@ export default function DashboardPage() {
             stores (*)
           )
         `),
-        supabase.from('stores').select('*'),
+        supabase.from('stores').select(`
+          *,
+          time_slots(*)
+        `),
         supabase.from('shift_patterns').select('*')
       ]);
 

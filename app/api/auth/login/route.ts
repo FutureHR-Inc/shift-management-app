@@ -5,21 +5,37 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { login_id, password } = body;
+    const { login_credential, login_type, password } = body;
 
     // 入力値チェック
-    if (!login_id || !password) {
+    if (!login_credential || !password || !login_type) {
       return NextResponse.json(
-        { error: 'ログインIDとパスワードが必要です' },
+        { error: 'ログイン情報とパスワードが必要です' },
         { status: 400 }
       );
     }
 
-    // ユーザー情報を取得
-    const { data: users, error: fetchError } = await supabase
-      .from('users')
-      .select('id, name, email, role, password_hash, is_first_login, last_login_at')
-      .eq('login_id', login_id);
+    // ログインタイプによって検索条件を変える
+    let users, fetchError;
+    if (login_type === 'manager') {
+      // 店長はメールアドレスで検索
+      const result = await supabase
+        .from('users')
+        .select('id, name, email, role, password_hash, is_first_login, last_login_at, company_id')
+        .eq('email', login_credential)
+        .eq('login_type', 'manager');
+      users = result.data;
+      fetchError = result.error;
+    } else {
+      // スタッフはlogin_idで検索
+      const result = await supabase
+        .from('users')
+        .select('id, name, email, role, password_hash, is_first_login, last_login_at, company_id')
+        .eq('login_id', login_credential)
+        .eq('login_type', 'staff');
+      users = result.data;
+      fetchError = result.error;
+    }
 
     if (fetchError || !users || users.length === 0) {
       return NextResponse.json(

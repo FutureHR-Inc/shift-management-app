@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FixedShiftManager } from '@/components/ui/FixedShiftManager';
+import CompanyRegistrationForm from '@/components/CompanyRegistrationForm';
 // import type { User, Store } from '@/lib/types'; // 未使用のため削除
 
 // APIから取得するデータ用の型
@@ -44,7 +46,16 @@ interface DisplayUser {
   stores: string[];
 }
 
+type TabType = 'staff-list' | 'company-registration';
+
 export default function StaffPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // タブ管理
+  const [activeTab, setActiveTab] = useState<TabType>('staff-list');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
   // データベースから取得するstate
   const [users, setUsers] = useState<DisplayUser[]>([]);
   const [stores, setStores] = useState<ApiStore[]>([]);
@@ -79,6 +90,29 @@ export default function StaffPage() {
     memo: '',
     stores: [] as string[]
   });
+
+  // 初期化：URLパラメータとユーザー情報の確認
+  useEffect(() => {
+    // URLパラメータからタブを設定
+    const tab = searchParams.get('tab') as TabType;
+    if (tab === 'company-registration') {
+      setActiveTab('company-registration');
+    }
+    
+    // ローカルストレージからユーザー情報を取得
+    const userData = localStorage.getItem('currentUser');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        setCurrentUser(user);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        router.push('/login');
+      }
+    } else {
+      router.push('/login');
+    }
+  }, [searchParams, router]);
 
   // データ取得関数
   const fetchUsers = async () => {
@@ -406,18 +440,88 @@ export default function StaffPage() {
         )}
 
         {/* ヘッダー */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">スタッフ管理</h1>
-            <p className="text-gray-600 mt-2">スタッフの登録・編集・権限管理を行えます</p>
+        <div className="bg-white rounded-xl border shadow-sm p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">スタッフ管理</h1>
+              <p className="text-gray-600 mt-2">スタッフの登録・編集・権限管理を行えます</p>
+            </div>
           </div>
-          <Button onClick={handleAddUser} disabled={loading || saving}>
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            新しいスタッフを追加
-          </Button>
+          
+          {/* タブナビゲーション */}
+          <div className="mt-6 border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('staff-list')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'staff-list'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                👥 スタッフ一覧
+              </button>
+              
+              {/* 企業未登録の場合のみ表示 */}
+              {!currentUser?.company_id && (
+                <button
+                  onClick={() => setActiveTab('company-registration')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'company-registration'
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  🏢 企業情報登録
+                </button>
+              )}
+            </nav>
+          </div>
         </div>
+
+        {/* タブコンテンツ */}
+        {activeTab === 'company-registration' ? (
+          <CompanyRegistrationForm 
+            currentUser={currentUser}
+            onSuccess={() => {
+              setActiveTab('staff-list');
+              fetchUsers(); // データを再取得
+            }}
+          />
+        ) : (
+          /* スタッフ一覧タブのコンテンツ */
+          <>
+            {/* 企業未登録の警告 */}
+            {!currentUser?.company_id && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">企業情報が未登録です</h3>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      スタッフを追加する前に、まず「🏢 企業情報登録」タブで企業情報を登録してください。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* スタッフ追加ボタン */}
+            <div className="flex justify-end">
+              <Button 
+                onClick={handleAddUser} 
+                disabled={loading || saving || !currentUser?.company_id}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                新しいスタッフを追加
+              </Button>
+            </div>
 
         {/* 統計カード */}
         <div className="grid grid-cols-2 gap-3 sm:gap-6">
@@ -924,6 +1028,8 @@ export default function StaffPage() {
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </AuthenticatedLayout>

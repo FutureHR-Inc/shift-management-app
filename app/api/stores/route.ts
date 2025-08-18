@@ -74,19 +74,25 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, required_staff } = body;
+    const { id, name, required_staff, work_rules } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
     }
 
+    console.log('🏪 店舗更新:', { id, name, required_staff, work_rules });
+
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (name !== undefined) updateData.name = name;
+    if (required_staff !== undefined) updateData.required_staff = required_staff;
+    if (work_rules !== undefined) updateData.work_rules = work_rules;
+
     const { data, error } = await supabase
       .from('stores')
-      .update({
-        name,
-        required_staff,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();

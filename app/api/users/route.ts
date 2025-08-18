@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('store_id');
     const role = searchParams.get('role');
     const loginId = searchParams.get('login_id');
+    const email = searchParams.get('email');
+    const loginType = searchParams.get('login_type');
     const id = searchParams.get('id'); // ID指定での取得を追加
 
     // idが指定されている場合は、そのユーザーのみを取得
@@ -52,6 +54,35 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error('Error fetching user by login_id:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ data }, { status: 200 });
+    }
+
+    // emailが指定されている場合は、そのユーザーを取得（店長用）
+    if (email) {
+      let query = supabase
+        .from('users')
+        .select(`
+          *,
+          user_stores(
+            store_id,
+            is_flexible,
+            stores(id, name)
+          )
+        `)
+        .eq('email', email);
+
+      // login_typeが指定されていれば追加
+      if (loginType) {
+        query = query.eq('login_type', loginType);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching user by email:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 

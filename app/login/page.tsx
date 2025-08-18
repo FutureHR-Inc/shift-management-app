@@ -6,14 +6,20 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
+type LoginType = 'manager' | 'staff';
+
 export default function LoginPage() {
+  const [loginType, setLoginType] = useState<LoginType>('staff');
   const [loginId, setLoginId] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [showManagerRegister, setShowManagerRegister] = useState(false);
+  const [managerName, setManagerName] = useState('');
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -23,18 +29,20 @@ export default function LoginPage() {
 
     try {
       // 1. 入力値チェック
-      if (!loginId.trim()) {
-        throw new Error('ログインIDを入力してください');
+      const loginCredential = loginType === 'manager' ? email : loginId;
+      if (!loginCredential.trim()) {
+        throw new Error(loginType === 'manager' ? 'メールアドレスを入力してください' : 'スタッフIDを入力してください');
       }
 
       if (!password) {
         throw new Error('パスワードを入力してください');
       }
 
-      // 2. APIでユーザー情報を取得
-      const response = await fetch(`/api/users?login_id=${loginId}`);
+      // 2. APIでユーザー情報を取得（ログインタイプも含める）
+      const queryParam = loginType === 'manager' ? `email=${email}&login_type=manager` : `login_id=${loginId}&login_type=staff`;
+      const response = await fetch(`/api/users?${queryParam}`);
       if (!response.ok) {
-        throw new Error('ログインIDが見つかりません');
+        throw new Error(loginType === 'manager' ? 'メールアドレスが見つかりません' : 'スタッフIDが見つかりません');
       }
 
       const result = await response.json();
@@ -58,7 +66,8 @@ export default function LoginPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          login_id: loginId,
+          login_credential: loginCredential,
+          login_type: loginType,
           password: password,
         }),
       });
@@ -81,11 +90,23 @@ export default function LoginPage() {
 
       localStorage.setItem('currentUser', JSON.stringify(userInfo));
 
-      // 6. ロール別リダイレクト
+      // 6. 企業ID確認とロール別リダイレクト
       if (user.role === 'manager') {
-        router.push('/dashboard');
+        if (!user.company_id) {
+          // 企業ID未設定の管理者 → スタッフ管理画面の企業登録タブへ
+          router.push('/staff?tab=company-registration');
+        } else {
+          // 企業ID設定済み → 管理者ダッシュボードへ
+          router.push('/dashboard');
+        }
       } else {
-        router.push('/staff-dashboard');
+        if (!user.company_id) {
+          // 企業ID未設定のスタッフ → 待機画面へ
+          router.push('/waiting-for-company');
+        } else {
+          // 企業ID設定済み → スタッフダッシュボードへ
+          router.push('/staff-dashboard');
+        }
       }
 
     } catch (error) {
@@ -209,10 +230,179 @@ export default function LoginPage() {
   const handleBackToLogin = () => {
     setShowPasswordReset(false);
     setIsFirstLogin(false);
+    setShowManagerRegister(false);
     setPassword('');
     setConfirmPassword('');
+    setManagerName('');
     setError('');
   };
+
+  // 店長登録処理
+  const handleManagerRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // バリデーション
+      if (!managerName || !email || !password) {
+        throw new Error('すべての項目を入力してください');
+      }
+
+      if (!confirmPassword || password !== confirmPassword) {
+        throw new Error('パスワードが一致しません');
+      }
+
+      // 店長登録API呼び出し
+      const response = await fetch('/api/auth/register-manager', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: managerName,
+          email: email,
+          password: password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '登録に失敗しました');
+      }
+
+      // 登録成功
+      alert('店長アカウントが作成されました。ログインしてください。');
+      setShowManagerRegister(false);
+      setManagerName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setLoginType('manager'); // 店長ログイン画面にセット
+
+    } catch (error) {
+      console.error('Manager registration error:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('登録に失敗しました');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 店長登録画面
+  if (showManagerRegister) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-3 sm:p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-500 rounded-2xl mx-auto mb-3 sm:mb-4 flex items-center justify-center">
+              <svg className="w-8 h-8 sm:w-10 sm:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">店長アカウント作成</h1>
+            <p className="text-gray-600 text-sm sm:text-base px-2">新しい企業の店長アカウントを作成します</p>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg sm:text-xl text-center">店長情報入力</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6">
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleManagerRegister} className="space-y-4 sm:space-y-5">
+                <div className="space-y-2">
+                  <label htmlFor="managerName" className="block text-sm font-medium text-gray-700">
+                    店長名
+                  </label>
+                  <Input
+                    id="managerName"
+                    type="text"
+                    placeholder="店長名を入力"
+                    value={managerName}
+                    onChange={(e) => setManagerName(e.target.value)}
+                    required
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    メールアドレス
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="メールアドレスを入力"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    パスワード
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="パスワード（6文字以上）"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                    パスワード確認
+                  </label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="パスワードを再入力"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-11 sm:h-10 text-base sm:text-sm"
+                  disabled={isLoading}
+                >
+                  {isLoading ? '作成中...' : '店長アカウント作成'}
+                </Button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleBackToLogin}
+                    className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  >
+                    ログイン画面に戻る
+                  </button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // パスワードリセット画面
   if (showPasswordReset) {
@@ -340,22 +530,68 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={isFirstLogin ? handleFirstTimePasswordSet : handleLogin} className="space-y-4 sm:space-y-5">
-              <div className="space-y-2">
-                <label htmlFor="loginId" className="block text-sm font-medium text-gray-700">
-                  ログイン用ID
-                </label>
-                <Input
-                  id="loginId"
-                  type="text"
-                  placeholder="ログインIDを入力"
-                  value={loginId}
-                  onChange={(e) => setLoginId(e.target.value)}
-                  required
-                  disabled={isFirstLogin}
-                  className="text-base sm:text-sm h-11 sm:h-10"
-                />
+            {!isFirstLogin && (
+              <div className="mb-6">
+                <div className="flex rounded-lg bg-gray-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setLoginType('staff')}
+                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
+                      loginType === 'staff'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    👤 スタッフ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLoginType('manager')}
+                    className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
+                      loginType === 'manager'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    👔 店長
+                  </button>
+                </div>
               </div>
+            )}
+
+            <form onSubmit={isFirstLogin ? handleFirstTimePasswordSet : handleLogin} className="space-y-4 sm:space-y-5">
+              {loginType === 'manager' && !isFirstLogin ? (
+                <div className="space-y-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    メールアドレス
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="メールアドレスを入力"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor="loginId" className="block text-sm font-medium text-gray-700">
+                    {loginType === 'staff' || isFirstLogin ? 'スタッフID' : 'ログイン用ID'}
+                  </label>
+                  <Input
+                    id="loginId"
+                    type="text"
+                    placeholder={loginType === 'staff' || isFirstLogin ? "スタッフIDを入力" : "ログインIDを入力"}
+                    value={loginId}
+                    onChange={(e) => setLoginId(e.target.value)}
+                    required
+                    disabled={isFirstLogin}
+                    className="text-base sm:text-sm h-11 sm:h-10"
+                  />
+                </div>
+              )}
               
               <div className="space-y-2">
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700">
@@ -404,7 +640,7 @@ export default function LoginPage() {
 
             {/* パスワードを忘れた方へのリンク（通常ログイン時のみ表示） */}
             {!isFirstLogin && (
-              <div className="mt-4 text-center">
+              <div className="mt-4 text-center space-y-2">
                 <button
                   type="button"
                   onClick={handlePasswordResetRequest}
@@ -412,6 +648,19 @@ export default function LoginPage() {
                 >
                   パスワードを忘れた方はこちら
                 </button>
+                
+                {/* 店長登録ボタン（店長ログイン時のみ表示） */}
+                {loginType === 'manager' && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowManagerRegister(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 underline py-2 px-4 min-h-[44px] inline-flex items-center justify-center"
+                    >
+                      👔 初めての方は店長アカウント作成
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
