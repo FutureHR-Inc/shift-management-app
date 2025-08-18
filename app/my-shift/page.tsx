@@ -75,7 +75,7 @@ export default function MyShiftPage() {
     }
   }, [router]);
 
-  // シフトデータ取得
+  // シフトデータ取得（通常シフト + 固定シフト統合）
   useEffect(() => {
     if (!currentUser) return;
 
@@ -88,17 +88,61 @@ export default function MyShiftPage() {
         const weekStart = new Date(selectedWeek);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
+        const dateToString = weekEnd.toISOString().split('T')[0];
 
-        const response = await fetch(
-          `/api/shifts?user_id=${currentUser.id}&date_from=${selectedWeek}&date_to=${weekEnd.toISOString().split('T')[0]}`
-        );
+        // 通常シフトと固定シフトを並行取得
+        const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
+          fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${selectedWeek}&date_to=${dateToString}`),
+          fetch(`/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`)
+        ]);
 
-        if (!response.ok) {
+        if (!shiftsResponse.ok) {
           throw new Error('シフトデータの取得に失敗しました');
         }
 
-        const result = await response.json();
-        setMyShifts(result.data || []);
+        const shiftsResult = await shiftsResponse.json();
+        const normalShifts = shiftsResult.data || [];
+
+        // 固定シフトからこの週のシフトを生成
+        const generatedShifts = [];
+        if (fixedShiftsResponse.ok) {
+          const fixedShiftsResult = await fixedShiftsResponse.json();
+          const fixedShifts = fixedShiftsResult.data || [];
+
+          // この週の各日を確認
+          for (let i = 0; i < 7; i++) {
+            const currentDate = new Date(weekStart);
+            currentDate.setDate(weekStart.getDate() + i);
+            const dateString = currentDate.toISOString().split('T')[0];
+            const dayOfWeek = currentDate.getDay();
+
+            // その日に通常シフトが既にあるかチェック
+            const hasNormalShift = normalShifts.some((shift: Shift) => shift.date === dateString);
+
+            if (!hasNormalShift) {
+              // その曜日の固定シフトがあるかチェック
+              const dayFixedShift = fixedShifts.find((fs: any) => fs.day_of_week === dayOfWeek);
+              
+              if (dayFixedShift) {
+                // 固定シフトから仮想シフトオブジェクトを作成
+                generatedShifts.push({
+                  id: `fixed-${dayFixedShift.id}-${dateString}`, // 仮想ID
+                  date: dateString,
+                  user_id: currentUser.id,
+                  store_id: dayFixedShift.store_id,
+                  time_slot_id: dayFixedShift.time_slot_id,
+                  status: 'confirmed', // 固定シフトは確定扱い
+                  stores: dayFixedShift.stores,
+                  time_slots: dayFixedShift.time_slots,
+                  notes: '固定シフト（未生成）'
+                } as Shift);
+              }
+            }
+          }
+        }
+
+        // 通常シフトと生成された固定シフトをマージ
+        setMyShifts([...normalShifts, ...generatedShifts]);
 
       } catch (error) {
         console.error('シフトデータ取得エラー:', error);
@@ -239,7 +283,13 @@ export default function MyShiftPage() {
         {/* 週間スケジュール */}
         <Card>
           <CardHeader>
-            <CardTitle>週間スケジュール</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              週間スケジュール
+              <div className="flex items-center gap-2 text-sm font-normal">
+                <span className="inline-block w-3 h-3 bg-purple-500 rounded-full"></span>
+                <span className="text-gray-600">固定シフト</span>
+              </div>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
@@ -302,6 +352,8 @@ export default function MyShiftPage() {
                         <div
                           className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${
                             shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
+                          } ${
+                            shift.id.startsWith('fixed-') ? 'border-2 border-dashed border-white/50' : ''
                           }`}
                           style={{ backgroundColor: getDisplayColor() }}
                         >
@@ -309,6 +361,11 @@ export default function MyShiftPage() {
                           {shift.status === 'confirmed' && (
                             <span className="absolute -top-1 -right-1 bg-yellow-400 text-yellow-900 text-xs rounded-full w-5 h-5 flex items-center justify-center">
                               ✓
+                            </span>
+                          )}
+                          {shift.id.startsWith('fixed-') && (
+                            <span className="absolute -top-1 -left-1 bg-purple-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                              固
                             </span>
                           )}
                         </div>
@@ -319,7 +376,11 @@ export default function MyShiftPage() {
                           {store.name}
                         </div>
                         <div className="text-center">
-                          {shift.status === 'confirmed' ? (
+                          {shift.id.startsWith('fixed-') ? (
+                            <span className="inline-block px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                              固定シフト
+                            </span>
+                          ) : shift.status === 'confirmed' ? (
                             <span className="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
                               確定済み
                             </span>
