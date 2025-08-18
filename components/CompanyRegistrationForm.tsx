@@ -40,14 +40,8 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
         throw new Error('企業名は必須です');
       }
 
-      // 既に企業に所属していないかDBで確認
-      const checkResponse = await fetch(`/api/debug/check-user?user_id=${currentUser?.id}`);
-      if (checkResponse.ok) {
-        const checkResult = await checkResponse.json();
-        if (checkResult.user && checkResult.user.company_id) {
-          throw new Error('既に企業に所属しています。企業情報は登録済みです。');
-        }
-      }
+      // 🔧 修正: 不要な事前チェックを削除（APIサイドで適切に処理される）
+      // 既存の company_id がある場合は API側で 409 エラーを返すため、フロントエンド側での事前チェックは不要
 
       // 企業登録API呼び出し
       const response = await fetch('/api/companies/register-simple', {
@@ -70,7 +64,7 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
       }
 
       const result = await response.json();
-      
+
       // ローカルストレージのユーザー情報を更新
       const updatedUser = {
         ...currentUser,
@@ -80,10 +74,10 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
 
       // 成功メッセージ
       alert(`企業「${result.company.name}」の登録が完了しました！\nスタッフ管理画面で従業員を追加できます。`);
-      
+
       // 成功コールバック（更新されたユーザー情報を渡す）
       onSuccess(updatedUser);
-      
+
       // フォームをリセット
       setFormData({
         companyName: '',
@@ -107,7 +101,7 @@ export default function CompanyRegistrationForm({ currentUser, onSuccess }: Comp
         <p className="text-gray-600 text-center text-sm">
           新しい企業をシステムに登録して、スタッフ管理を開始しましょう
         </p>
-        
+
         {/* 進行状況インジケーター */}
         <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex items-center">

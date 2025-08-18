@@ -4,20 +4,20 @@ import { supabase } from '@/lib/supabase';
 // 現在のユーザーIDから企業IDを取得するヘルパー関数
 async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
   console.log('🔍 [API DEBUG] getCurrentUserCompanyId - userId:', userId);
-  
+
   const { data, error } = await supabase
     .from('users')
     .select('id, name, email, company_id')
     .eq('id', userId)
     .single();
-    
+
   console.log('🔍 [API DEBUG] getCurrentUserCompanyId - result:', { data, error });
-    
+
   if (error || !data) {
     console.log('🔍 [API DEBUG] getCurrentUserCompanyId - returning null due to error or no data');
     return null;
   }
-  
+
   console.log('🔍 [API DEBUG] getCurrentUserCompanyId - returning company_id:', data.company_id);
   return data.company_id;
 }
@@ -113,9 +113,9 @@ export async function GET(request: NextRequest) {
     // 企業IDによるフィルタリングのためのユーザーIDを取得
     const currentUserId = searchParams.get('current_user_id');
     let companyIdFilter: string | null = null;
-    
+
     console.log('🔍 [API DEBUG] Users GET - currentUserId:', currentUserId);
-    
+
     if (currentUserId) {
       companyIdFilter = await getCurrentUserCompanyId(currentUserId);
       console.log('🔍 [API DEBUG] Users GET - companyIdFilter:', companyIdFilter);
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, phone, email, role, skill_level, hourly_wage, memo, stores, current_user_id } = body;
-    
+
     // 作成者の企業IDを取得
     let creatorCompanyId: string | null = null;
     if (current_user_id) {
@@ -246,65 +246,68 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ログインID生成関数
-    const generateLoginId = async (role: 'manager' | 'staff', stores: string[]) => {
-      if (role === 'manager') {
-        // 既存の管理者数を取得
-        const { data: managers, error } = await supabase
+    // 🔧 改善: ランダムログインID生成関数
+    const generateRandomLoginId = async (role: 'manager' | 'staff'): Promise<string> => {
+      const maxAttempts = 10; // 最大試行回数
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        // ランダムID生成
+        const randomId = role === 'manager'
+          ? generateManagerId()
+          : generateStaffId();
+
+        console.log(`🔍 [LOGIN_ID] Attempt ${attempt}: Generated "${randomId}"`);
+
+        // 重複チェック
+        const { data: existingUser, error } = await supabase
           .from('users')
-          .select('login_id')
-          .eq('role', 'manager')
-          .not('login_id', 'is', null);
+          .select('id')
+          .eq('login_id', randomId)
+          .maybeSingle(); // 0件または1件の結果を期待
 
         if (error) {
-          console.error('Error fetching managers:', error);
-          return 'mgr-001'; // エラー時のデフォルト
+          console.error('🚨 [LOGIN_ID] Error checking duplicate:', error);
+          continue; // エラーの場合は次の試行へ
         }
 
-        const managerCount = managers?.length || 0;
-        return `mgr-${String(managerCount + 1).padStart(3, '0')}`;
-      } else {
-        // スタッフの場合は店舗ベースでID生成
-        if (!stores || stores.length === 0) {
-          return 'stf-001'; // 店舗なしの場合のデフォルト
+        if (!existingUser) {
+          console.log(`✅ [LOGIN_ID] Unique ID generated: "${randomId}"`);
+          return randomId; // 重複なし、このIDを使用
         }
 
-        // 最初の店舗を基準にID生成
-        const { data: storeData, error: storeError } = await supabase
-          .from('stores')
-          .select('id, name')
-          .eq('id', stores[0])
-          .single();
-
-        if (storeError || !storeData) {
-          return 'stf-001'; // エラー時のデフォルト
-        }
-
-        // 店舗名から接頭辞を生成
-        const storePrefix = storeData.name === '京橋店' ? 'kyb' :
-                           storeData.name === '天満店' ? 'ten' :
-                           storeData.name === '本町店' ? 'hon' : 'stf';
-
-        // 同じ店舗の既存スタッフ数を取得
-        const { data: existingStaff, error: staffError } = await supabase
-          .from('users')
-          .select('login_id, user_stores!inner(store_id)')
-          .eq('role', 'staff')
-          .eq('user_stores.store_id', stores[0])
-          .not('login_id', 'is', null);
-
-        if (staffError) {
-          console.error('Error fetching existing staff:', staffError);
-          return `${storePrefix}-001`; // エラー時のデフォルト
-        }
-
-        const staffCount = existingStaff?.length || 0;
-        return `${storePrefix}-${String(staffCount + 1).padStart(3, '0')}`;
+        console.log(`⚠️ [LOGIN_ID] Duplicate found for "${randomId}", retrying...`);
       }
+
+      // 最大試行回数に達した場合のフォールバック
+      const fallbackId = `${role}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      console.log(`🔄 [LOGIN_ID] Using fallback ID: "${fallbackId}"`);
+      return fallbackId;
     };
 
-    // ログインIDを生成
-    const loginId = await generateLoginId(role, stores || []);
+    // 店長用ランダムID生成
+    const generateManagerId = (): string => {
+      // パターン: MGR + 4桁ランダム英数字
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = 'MGR';
+      for (let i = 0; i < 4; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    // スタッフ用ランダムID生成
+    const generateStaffId = (): string => {
+      // パターン: STF + 4桁ランダム英数字
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = 'STF';
+      for (let i = 0; i < 4; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    // ランダムログインIDを生成
+    const loginId = await generateRandomLoginId(role);
 
     // ユーザー作成
     const { data: user, error: userError } = await supabase
@@ -351,7 +354,7 @@ export async function POST(request: NextRequest) {
       if (relationError) {
         console.error('Error creating user-store relations:', relationError);
         // ユーザーは作成されているので、関連のみエラー
-        return NextResponse.json({ 
+        return NextResponse.json({
           data: user,
           warning: 'User created but store relations failed'
         }, { status: 201 });
@@ -556,7 +559,7 @@ export async function DELETE(request: NextRequest) {
 
     // 関連レコードを並行削除（エラーがあっても続行）
     const results = await Promise.allSettled(deleteOperations);
-    
+
     // エラーがあったレコードをログ出力（削除を止めない）
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
@@ -572,22 +575,22 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting user:', error);
-      
+
       // 外部キー制約エラーの場合、詳細なエラーメッセージを返す
       if (error.code === '23503') {
-        return NextResponse.json({ 
-          error: 'このユーザーに関連するデータが存在するため削除できません。関連するシフト、希望休、代打募集などを先に削除してください。' 
+        return NextResponse.json({
+          error: 'このユーザーに関連するデータが存在するため削除できません。関連するシフト、希望休、代打募集などを先に削除してください。'
         }, { status: 409 });
       }
-      
+
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ message: 'User deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      error: 'ユーザーの削除中に予期しないエラーが発生しました。関連するデータがある場合は、先にそれらを削除してください。' 
+    return NextResponse.json({
+      error: 'ユーザーの削除中に予期しないエラーが発生しました。関連するデータがある場合は、先にそれらを削除してください。'
     }, { status: 500 });
   }
 } 

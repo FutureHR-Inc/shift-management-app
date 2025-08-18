@@ -75,17 +75,23 @@ export default function StoreSettingsPage() {
   const [stores, setStores] = useState<DisplayStore[]>([]);
   const [users, setUsers] = useState<DisplayUser[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   // UI state
   const [selectedStore, setSelectedStore] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingStore, setIsCreatingStore] = useState(false);
+  const [showCreateStore, setShowCreateStore] = useState(false);
 
   // Loading and error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 新規店舗作成用state
+  const [newStoreName, setNewStoreName] = useState('');
+
   // フォーム用state
-  const [requiredStaffData, setRequiredStaffData] = useState<{[day: string]: {[timeSlot: string]: number}}>({});
+  const [requiredStaffData, setRequiredStaffData] = useState<{ [day: string]: { [timeSlot: string]: number } }>({});
   const [flexibleStaffData, setFlexibleStaffData] = useState<string[]>([]);
   const [workRulesData, setWorkRulesData] = useState({
     maxWeeklyHours: 28,
@@ -99,10 +105,19 @@ export default function StoreSettingsPage() {
   // データ取得関数
   const fetchStores = async () => {
     try {
-      const response = await fetch('/api/stores');
+      // 🔧 企業フィルタリング追加: current_user_idパラメータを必須にする
+      if (!currentUser?.id) {
+        console.log('🔍 [STORE SETTINGS] currentUser.id not found, returning empty array');
+        return [];
+      }
+
+      const currentUserIdParam = `?current_user_id=${currentUser.id}`;
+      console.log('🔍 [STORE SETTINGS] API URL:', `/api/stores${currentUserIdParam}`);
+
+      const response = await fetch(`/api/stores${currentUserIdParam}`);
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
-      
+
       // API response を DisplayStore 型に変換
       const storesData = result.data?.map((store: ApiStore) => ({
         id: store.id,
@@ -115,7 +130,7 @@ export default function StoreSettingsPage() {
         },
         flexibleStaff: store.user_stores?.filter(us => us.is_flexible).map(us => us.user_id) || []
       })) || [];
-      
+
       return storesData;
     } catch (error) {
       console.error('Error fetching stores:', error);
@@ -125,10 +140,17 @@ export default function StoreSettingsPage() {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users');
+      // 🔧 企業フィルタリング追加: current_user_idパラメータを必須にする
+      if (!currentUser?.id) {
+        console.log('🔍 [STORE SETTINGS] fetchUsers - currentUser.id not found, returning empty array');
+        return [];
+      }
+
+      const currentUserIdParam = `?current_user_id=${currentUser.id}`;
+      const response = await fetch(`/api/users${currentUserIdParam}`);
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
-      
+
       // API response を DisplayUser 型に変換
       const usersData = result.data?.map((user: ApiUser) => ({
         id: user.id,
@@ -137,7 +159,7 @@ export default function StoreSettingsPage() {
         skillLevel: user.skill_level,
         stores: user.user_stores?.map(us => us.store_id) || []
       })) || [];
-      
+
       return usersData;
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -145,26 +167,52 @@ export default function StoreSettingsPage() {
     }
   };
 
-  // 初期データ読み込み
+  // ユーザー情報取得
   useEffect(() => {
+    const userData = localStorage.getItem('currentUser');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        setCurrentUser(user);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        setError('ユーザー情報の読み込みに失敗しました');
+      }
+    } else {
+      setError('ユーザー情報が見つかりません');
+    }
+  }, []);
+
+  // 初期データ読み込み（currentUserが設定された後に実行）
+  useEffect(() => {
+    if (!currentUser) {
+      console.log('🔍 [STORE SETTINGS] currentUser not set, skipping data load');
+      return;
+    }
+
     const loadInitialData = async () => {
       try {
         setLoading(true);
         setError(null);
-        
+
+        console.log('🔍 [STORE SETTINGS] Loading data for user:', currentUser.id);
+
         const [storesData, usersData] = await Promise.all([
           fetchStores(),
           fetchUsers()
         ]);
-        
+
         setStores(storesData);
         setUsers(usersData);
-        
+
+        console.log('🔍 [STORE SETTINGS] Loaded stores:', storesData.length);
+        console.log('🔍 [STORE SETTINGS] Loaded users:', usersData.length);
+
         // 最初の店舗を選択
         if (storesData.length > 0) {
           setSelectedStore(storesData[0].id);
         }
-        
+
       } catch (error) {
         setError(error instanceof Error ? error.message : '初期データの読み込みに失敗しました');
       } finally {
@@ -173,7 +221,7 @@ export default function StoreSettingsPage() {
     };
 
     loadInitialData();
-  }, []);
+  }, [currentUser]);
 
   // 選択された店舗が変更された時にフォームデータを更新
   useEffect(() => {
@@ -206,7 +254,8 @@ export default function StoreSettingsPage() {
             max_weekly_hours: workRulesData.maxWeeklyHours,
             max_consecutive_days: workRulesData.maxConsecutiveDays,
             min_rest_hours: workRulesData.minRestHours
-          }
+          },
+          current_user_id: currentUser?.id // 企業分離のため追加
         }),
       });
 
@@ -233,14 +282,14 @@ export default function StoreSettingsPage() {
       }
 
       // ローカル状態を更新
-      setStores(stores.map(store => 
-        store.id === selectedStore 
+      setStores(stores.map(store =>
+        store.id === selectedStore
           ? {
-              ...store,
-              requiredStaff: requiredStaffData,
-              workRules: workRulesData,
-              flexibleStaff: flexibleStaffData
-            }
+            ...store,
+            requiredStaff: requiredStaffData,
+            workRules: workRulesData,
+            flexibleStaff: flexibleStaffData
+          }
           : store
       ));
 
@@ -278,6 +327,77 @@ export default function StoreSettingsPage() {
       ...workRulesData,
       [field]: value
     });
+  };
+
+  // 新規店舗作成
+  const handleCreateStore = async () => {
+    if (!newStoreName.trim()) {
+      setError('店舗名を入力してください');
+      return;
+    }
+
+    if (!currentUser?.id) {
+      setError('ユーザー情報が見つかりません');
+      return;
+    }
+
+    setIsCreatingStore(true);
+    setError(null);
+
+    try {
+      // 店舗IDを生成（企業名ベース）
+      const storeId = `${currentUser.company_id || 'company'}_${Date.now()}`;
+
+      const response = await fetch('/api/stores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: storeId,
+          name: newStoreName.trim(),
+          required_staff: {},
+          work_rules: {
+            max_weekly_hours: 28,
+            max_consecutive_days: 7,
+            min_rest_hours: 11
+          },
+          company_id: currentUser.company_id,
+          current_user_id: currentUser.id
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '店舗の作成に失敗しました');
+      }
+
+      const result = await response.json();
+
+      // ローカル状態を更新
+      const newStore: DisplayStore = {
+        id: result.data.id,
+        name: result.data.name,
+        requiredStaff: {},
+        workRules: {
+          maxWeeklyHours: 28,
+          maxConsecutiveDays: 7,
+          minRestHours: 11
+        },
+        flexibleStaff: []
+      };
+
+      setStores(prev => [...prev, newStore]);
+      setSelectedStore(newStore.id);
+      setNewStoreName('');
+      setShowCreateStore(false);
+
+      alert('店舗を作成しました');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '店舗の作成に失敗しました');
+    } finally {
+      setIsCreatingStore(false);
+    }
   };
 
   const getTimeSlotLabel = (slotId: string) => {
@@ -362,32 +482,133 @@ export default function StoreSettingsPage() {
           </Button>
         </div>
 
-        {/* 店舗選択 */}
+        {/* 店舗選択・作成 */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <label className="text-sm font-medium text-gray-700">
-                設定する店舗:
-              </label>
-              <select
-                value={selectedStore}
-                onChange={(e) => setSelectedStore(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={loading || isSaving}
-              >
-                {stores.map(store => (
-                  <option key={store.id} value={store.id}>{store.name}</option>
-                ))}
-              </select>
-            </div>
+            {stores.length > 0 ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <label className="text-sm font-medium text-gray-700">
+                    設定する店舗:
+                  </label>
+                  <select
+                    value={selectedStore}
+                    onChange={(e) => setSelectedStore(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={loading || isSaving}
+                  >
+                    {stores.map(store => (
+                      <option key={store.id} value={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  onClick={() => setShowCreateStore(true)}
+                  variant="secondary"
+                  disabled={loading || isSaving}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  新しい店舗を追加
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-blue-100 rounded-xl mx-auto mb-4 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">店舗が登録されていません</h3>
+                <p className="text-gray-600 mb-6">まず最初の店舗を作成してください</p>
+                <Button
+                  onClick={() => setShowCreateStore(true)}
+                  disabled={loading || isSaving}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  最初の店舗を作成
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* 店舗作成モーダル */}
+        {showCreateStore && (
+          <div
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowCreateStore(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">新しい店舗を作成</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCreateStore(false)}
+                    disabled={isCreatingStore}
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      店舗名 *
+                    </label>
+                    <Input
+                      placeholder="例：渋谷店、本店、第2店舗"
+                      value={newStoreName}
+                      onChange={(e) => setNewStoreName(e.target.value)}
+                      disabled={isCreatingStore}
+                    />
+                  </div>
+
+                  <div className="flex space-x-3 pt-4">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowCreateStore(false)}
+                      disabled={isCreatingStore}
+                      className="flex-1"
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={handleCreateStore}
+                      disabled={isCreatingStore || !newStoreName.trim()}
+                      className="flex-1"
+                    >
+                      {isCreatingStore ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          作成中...
+                        </>
+                      ) : (
+                        '店舗を作成'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {currentStore && (
           <>
             {/* 時間帯設定 */}
-            <TimeSlotManager 
-              storeId={selectedStore} 
+            <TimeSlotManager
+              storeId={selectedStore}
               onTimeSlotsChange={handleTimeSlotsChange}
             />
 
@@ -406,56 +627,56 @@ export default function StoreSettingsPage() {
                     <p className="text-sm">まず上記の「時間帯設定」で時間帯を追加してください</p>
                   </div>
                 ) : (
-                <>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left p-3 font-medium text-gray-900 bg-gray-50">時間帯</th>
-                        {dayLabels.map((day, index) => (
-                          <th key={index} className="text-center p-3 font-medium text-gray-900 bg-gray-50 min-w-20">
-                            {day}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {timeSlots.map((timeSlot) => (
-                        <tr key={timeSlot.id} className="border-b border-gray-100">
-                          <td className="p-3 bg-gray-50 font-medium text-gray-900">
-                            {getTimeSlotLabel(timeSlot.id)}
-                          </td>
-                          {dayNames.map((dayName, dayIndex) => {
-                            const currentValue = requiredStaffData[dayName]?.[timeSlot.id] || 0;
-                            return (
-                              <td key={dayIndex} className="p-2 text-center">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="10"
-                                  value={currentValue}
-                                  onChange={(e) => handleRequiredStaffChange(dayName, timeSlot.id, parseInt(e.target.value) || 0)}
-                                  className="w-16 text-center"
-                                  disabled={isSaving}
-                                />
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="text-left p-3 font-medium text-gray-900 bg-gray-50">時間帯</th>
+                            {dayLabels.map((day, index) => (
+                              <th key={index} className="text-center p-3 font-medium text-gray-900 bg-gray-50 min-w-20">
+                                {day}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeSlots.map((timeSlot) => (
+                            <tr key={timeSlot.id} className="border-b border-gray-100">
+                              <td className="p-3 bg-gray-50 font-medium text-gray-900">
+                                {getTimeSlotLabel(timeSlot.id)}
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                <div className="mt-4 p-4 bg-blue-50 rounded-xl">
-                  <h4 className="font-medium text-blue-900 mb-2">設定のヒント</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• 平日と週末で異なる人数設定が可能です</li>
-                    <li>• 繁忙時間帯（ランチ、ディナー）は多めに設定することをお勧めします</li>
-                    <li>• 0を設定すると該当時間帯は営業していないことを表します</li>
-                  </ul>
-                </div>
-                </>
+                              {dayNames.map((dayName, dayIndex) => {
+                                const currentValue = requiredStaffData[dayName]?.[timeSlot.id] || 0;
+                                return (
+                                  <td key={dayIndex} className="p-2 text-center">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="10"
+                                      value={currentValue}
+                                      onChange={(e) => handleRequiredStaffChange(dayName, timeSlot.id, parseInt(e.target.value) || 0)}
+                                      className="w-16 text-center"
+                                      disabled={isSaving}
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mt-4 p-4 bg-blue-50 rounded-xl">
+                      <h4 className="font-medium text-blue-900 mb-2">設定のヒント</h4>
+                      <ul className="text-sm text-blue-800 space-y-1">
+                        <li>• 平日と週末で異なる人数設定が可能です</li>
+                        <li>• 繁忙時間帯（ランチ、ディナー）は多めに設定することをお勧めします</li>
+                        <li>• 0を設定すると該当時間帯は営業していないことを表します</li>
+                      </ul>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -475,7 +696,7 @@ export default function StoreSettingsPage() {
                   <p className="text-sm text-gray-600">
                     シフト作成時に自動で警告される勤怠ルールを設定してください
                   </p>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -569,7 +790,7 @@ export default function StoreSettingsPage() {
                   <p className="text-sm text-gray-600">
                     この店舗に所属していないスタッフの中から、応援可能な人を選択してください
                   </p>
-                  
+
                   {users.filter(user => user.role === 'staff' && !user.stores.includes(selectedStore)).length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {users
@@ -580,7 +801,7 @@ export default function StoreSettingsPage() {
                             const store = stores.find(s => s.id === storeId);
                             return store?.name;
                           }).filter(Boolean).join(', ');
-                          
+
                           return (
                             <div key={user.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-xl">
                               <input
