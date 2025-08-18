@@ -108,8 +108,11 @@ export async function GET(request: NextRequest) {
     const currentUserId = searchParams.get('current_user_id');
     let companyIdFilter: string | null = null;
     
+    console.log('🔍 [API DEBUG] Users GET - currentUserId:', currentUserId);
+    
     if (currentUserId) {
       companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+      console.log('🔍 [API DEBUG] Users GET - companyIdFilter:', companyIdFilter);
     }
 
     // 通常のユーザー一覧取得
@@ -117,7 +120,7 @@ export async function GET(request: NextRequest) {
       .from('users')
       .select(`
         *,
-        user_stores!inner(
+        user_stores(
           store_id,
           stores(id, name)
         )
@@ -125,10 +128,14 @@ export async function GET(request: NextRequest) {
 
     // 企業IDでフィルタリング（company_idがnullの場合は既存企業として扱う）
     if (companyIdFilter) {
+      console.log('🔍 [API DEBUG] Users GET - フィルタリング: company_id =', companyIdFilter);
       query = query.eq('company_id', companyIdFilter);
     } else if (currentUserId) {
       // ログインユーザーがcompany_idを持たない場合は、既存企業のユーザーのみ表示
+      console.log('🔍 [API DEBUG] Users GET - フィルタリング: company_id IS NULL (既存企業)');
       query = query.is('company_id', null);
+    } else {
+      console.log('🔍 [API DEBUG] Users GET - フィルタリングなし（全ユーザー）');
     }
 
     // 店舗でフィルタリング
@@ -147,6 +154,11 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching users:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    console.log('🔍 [API DEBUG] Users GET - 結果:', {
+      userCount: data?.length || 0,
+      userCompanyIds: data?.map(u => ({ name: u.name, company_id: u.company_id })) || []
+    });
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
