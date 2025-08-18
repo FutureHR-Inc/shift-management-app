@@ -1,15 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// 現在のユーザーIDから企業IDを取得するヘルパー関数
+async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', userId)
+    .single();
+    
+  if (error || !data) {
+    return null;
+  }
+  
+  return data.company_id;
+}
+
 // GET - 店舗一覧取得
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     console.log('🏪 店舗データ取得開始');
     
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const currentUserId = searchParams.get('current_user_id');
+    let companyIdFilter: string | null = null;
+    
+    if (currentUserId) {
+      companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+    }
+
+    let query = supabase
       .from('stores')
       .select('*')
       .order('name');
+
+    // 企業IDでフィルタリング
+    if (companyIdFilter) {
+      query = query.eq('company_id', companyIdFilter);
+    } else if (currentUserId) {
+      // ログインユーザーがcompany_idを持たない場合は、既存企業の店舗のみ表示
+      query = query.is('company_id', null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Stores fetch error:', error);

@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// 現在のユーザーIDから企業IDを取得するヘルパー関数
+async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('company_id')
+    .eq('id', userId)
+    .single();
+    
+  if (error || !data) {
+    return null;
+  }
+  
+  return data.company_id;
+}
+
 // GET - ユーザー一覧取得
 export async function GET(request: NextRequest) {
   try {
@@ -89,6 +104,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data }, { status: 200 });
     }
 
+    // 企業IDによるフィルタリングのためのユーザーIDを取得
+    const currentUserId = searchParams.get('current_user_id');
+    let companyIdFilter: string | null = null;
+    
+    if (currentUserId) {
+      companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+    }
+
     // 通常のユーザー一覧取得
     let query = supabase
       .from('users')
@@ -99,6 +122,14 @@ export async function GET(request: NextRequest) {
           stores(id, name)
         )
       `);
+
+    // 企業IDでフィルタリング（company_idがnullの場合は既存企業として扱う）
+    if (companyIdFilter) {
+      query = query.eq('company_id', companyIdFilter);
+    } else if (currentUserId) {
+      // ログインユーザーがcompany_idを持たない場合は、既存企業のユーザーのみ表示
+      query = query.is('company_id', null);
+    }
 
     // 店舗でフィルタリング
     if (storeId) {
@@ -128,7 +159,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone, email, role, skill_level, hourly_wage, memo, stores } = body;
+    const { name, phone, email, role, skill_level, hourly_wage, memo, stores, current_user_id } = body;
+    
+    // 作成者の企業IDを取得
+    let creatorCompanyId: string | null = null;
+    if (current_user_id) {
+      creatorCompanyId = await getCurrentUserCompanyId(current_user_id);
+    }
 
     // バリデーション
     if (!name || !phone || !email || !role || !skill_level) {
@@ -263,7 +300,8 @@ export async function POST(request: NextRequest) {
           return defaultWages[skill_level as keyof typeof defaultWages] || 1000;
         })(),
         memo: memo ? memo.trim() : null,
-        login_id: loginId
+        login_id: loginId,
+        company_id: creatorCompanyId // 作成者と同じ企業IDを設定
       })
       .select()
       .single();

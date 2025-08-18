@@ -118,7 +118,8 @@ function StaffPageContent() {
   // データ取得関数
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users');
+      const currentUserIdParam = currentUser?.id ? `?current_user_id=${currentUser.id}` : '';
+      const response = await fetch(`/api/users${currentUserIdParam}`);
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
       
@@ -145,7 +146,8 @@ function StaffPageContent() {
 
   const fetchStores = async () => {
     try {
-      const response = await fetch('/api/stores');
+      const currentUserIdParam = currentUser?.id ? `?current_user_id=${currentUser.id}` : '';
+      const response = await fetch(`/api/stores${currentUserIdParam}`);
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
       return result.data || [];
@@ -244,7 +246,8 @@ function StaffPageContent() {
         skill_level: formData.skill_level,
         hourly_wage: formData.hourly_wage,
         memo: formData.memo || null,
-        stores: formData.stores
+        stores: formData.stores,
+        current_user_id: currentUser?.id // 現在のユーザーIDを追加
       };
 
       const response = await fetch(endpoint, {
