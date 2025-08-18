@@ -125,14 +125,13 @@ function StaffPageContent() {
       }
       
       const currentUserIdParam = `?current_user_id=${currentUser.id}`;
-      console.log('🔍 [DEBUG] fetchUsers - currentUser:', currentUser);
-      console.log('🔍 [DEBUG] fetchUsers - API URL:', `/api/users${currentUserIdParam}`);
+
       
       const response = await fetch(`/api/users${currentUserIdParam}`);
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
       
-      console.log('🔍 [DEBUG] fetchUsers - API response:', result);
+
       
       // API response を DisplayUser 型に変換
       const usersData = result.data?.map((user: ApiUser) => ({
@@ -183,7 +182,7 @@ function StaffPageContent() {
         return;
       }
       
-      console.log('🔍 [FRONTEND DEBUG] loadInitialData - currentUser:', currentUser);
+
       
       try {
         setLoading(true);
@@ -194,8 +193,7 @@ function StaffPageContent() {
           fetchStores()
         ]);
         
-        console.log('🔍 [FRONTEND DEBUG] loadInitialData - usersData:', usersData);
-        console.log('🔍 [FRONTEND DEBUG] loadInitialData - storesData:', storesData);
+
         
         setUsers(usersData);
         setStores(storesData);
