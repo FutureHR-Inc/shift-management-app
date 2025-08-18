@@ -134,7 +134,7 @@ const Navigation = () => {
   };
 
   const renderIcon = (iconName: string) => {
-    const iconProps = "w-4 h-4 lg:w-5 lg:h-5 xl:w-6 xl:h-6";
+    const iconProps = "w-5 h-5 lg:w-5 lg:h-5 flex-shrink-0";
     switch (iconName) {
       case 'home':
         return (
@@ -157,7 +157,7 @@ const Navigation = () => {
       case 'users':
         return (
           <svg className={iconProps} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         );
       case 'user':
@@ -210,30 +210,30 @@ const Navigation = () => {
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
-        <div className="flex justify-between h-16 sm:h-18">
-          {/* ロゴとブランド - モバイル最適化 */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16 sm:h-18">
+          {/* ロゴとブランド */}
           <div className="flex items-center">
             <Link 
               href={currentUser?.role === 'manager' ? '/dashboard' : '/staff-dashboard'} 
-              className="flex items-center space-x-2 sm:space-x-3"
+              className="flex items-center space-x-3"
             >
-              <div className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 bg-blue-500 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-blue-500 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <span className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900 whitespace-nowrap">シフト管理</span>
+              <span className="text-xl sm:text-2xl font-semibold text-gray-900 whitespace-nowrap">シフト管理</span>
             </Link>
           </div>
 
           {/* デスクトップメニュー */}
-          <div className="hidden md:flex items-center space-x-2 lg:space-x-3 xl:space-x-4">
+          <div className="hidden md:flex items-center space-x-4 lg:space-x-6">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center space-x-1 lg:space-x-2 px-2 lg:px-3 py-2 rounded-lg text-sm lg:text-base font-medium transition-colors duration-200 relative whitespace-nowrap ${
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 relative whitespace-nowrap ${
                   pathname === item.href
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -241,20 +241,19 @@ const Navigation = () => {
               >
                 <div className="relative flex-shrink-0">
                   {renderIcon(item.icon)}
-                  {/* 通知バッジを削除 */}
                 </div>
-                <span className="hidden xl:inline">{item.label}</span>
+                <span className="hidden lg:inline">{item.label}</span>
               </Link>
             ))}
           </div>
 
           {/* ユーザー情報とメニューボタン */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex items-center space-x-3 sm:space-x-4">
             {/* ユーザー情報（デスクトップのみ） */}
             {currentUser && (
-              <div className="hidden md:block text-right">
-                <p className="text-sm lg:text-base font-medium text-gray-900 whitespace-nowrap">{currentUser.name}</p>
-                <p className="text-xs lg:text-sm text-gray-500 whitespace-nowrap">
+              <div className="hidden lg:block text-right">
+                <p className="text-sm font-medium text-gray-900 whitespace-nowrap">{currentUser.name}</p>
+                <p className="text-xs text-gray-500 whitespace-nowrap">
                   {currentUser.role === 'manager' ? '店長' : 'スタッフ'}
                 </p>
               </div>
@@ -263,7 +262,7 @@ const Navigation = () => {
             {/* ログアウトボタン（デスクトップのみ） */}
             <button
               onClick={handleLogout}
-              className="hidden md:block text-sm lg:text-base text-gray-600 hover:text-gray-900 transition-colors duration-200 px-2 lg:px-3 py-2 rounded whitespace-nowrap"
+              className="hidden md:block text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200 px-3 py-2 rounded whitespace-nowrap"
             >
               ログアウト
             </button>
@@ -319,7 +318,7 @@ const Navigation = () => {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <div className="flex-shrink-0 relative">
+                <div className="flex-shrink-0 relative flex items-center justify-center min-w-[20px] min-h-[20px]">
                   {renderIcon(item.icon)}
                   {/* 通知バッジを削除 */}
                 </div>
