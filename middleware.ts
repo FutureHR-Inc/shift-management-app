@@ -29,13 +29,12 @@ export function middleware(request: NextRequest) {
     });
   }
   
-  // 本番環境でのサブドメイン処理（将来の実装）
-  const companySlug = hostname.split('.')[0];
+  // 本番環境では legacy-main として処理（現在は単一ドメイン運用）
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-company-slug', companySlug);
-  requestHeaders.set('x-is-legacy', 'false');
+  requestHeaders.set('x-company-slug', 'legacy-main');
+  requestHeaders.set('x-is-legacy', 'true');
   
-  console.log(`[MIDDLEWARE] Production mode - company: ${companySlug}`);
+  console.log(`[MIDDLEWARE] Production mode - using legacy-main (single domain)`);
   
   return NextResponse.next({
     request: { headers: requestHeaders }

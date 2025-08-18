@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
     
     // そのユーザーの企業に属する他のユーザーも取得
-    let companyUsers = [];
+    let companyUsers: any[] = [];
     if (user.company_id) {
       const { data: companyUsersData } = await supabase
         .from('users')
