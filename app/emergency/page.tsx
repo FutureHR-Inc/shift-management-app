@@ -279,6 +279,7 @@ export default function EmergencyPage() {
           date: selectedShift.date,
           time_slot_id: selectedShift.time_slot_id,
           reason: reason.trim(),
+          request_type: 'substitute', // 代打募集として設定
         }),
       });
 
