@@ -52,14 +52,42 @@ const Navigation = () => {
 
     const fetchNotifications = async () => {
       try {
-        // 通知機能を無効化 - 常に0を設定
+        // 管理者の場合のみシフト希望数を取得
+        if (currentUser.role === 'manager') {
+          // 未処理のシフト希望数を取得
+          const shiftRequestsResponse = await fetch('/api/shift-requests?status=submitted');
+          let shiftRequestsCount = 0;
+          
+          if (shiftRequestsResponse.ok) {
+            const shiftRequestsData = await shiftRequestsResponse.json();
+            // 変換済みを除外してカウント
+            const unprocessedRequests = (shiftRequestsData.data || []).filter(
+              (request: any) => request.status !== 'converted_to_shift'
+            );
+            shiftRequestsCount = unprocessedRequests.length;
+          }
+
+          setNotifications({
+            emergencyRequestsCount: 0,
+            shiftRequestsCount: shiftRequestsCount,
+            confirmedShiftsCount: 0
+          });
+        } else {
+          // スタッフの場合は全て0
+          setNotifications({
+            emergencyRequestsCount: 0,
+            shiftRequestsCount: 0,
+            confirmedShiftsCount: 0
+          });
+        }
+      } catch (error) {
+        console.error('通知データの取得に失敗:', error);
+        // エラー時は0を設定
         setNotifications({
           emergencyRequestsCount: 0,
           shiftRequestsCount: 0,
           confirmedShiftsCount: 0
         });
-      } catch (error) {
-        console.error('通知データの取得に失敗:', error);
       }
     };
 
@@ -126,8 +154,12 @@ const Navigation = () => {
   const NotificationBadge = ({ count }: { count: number }) => {
     if (count === 0) return null;
     
+    // 数値が99を超えた場合は99+と表示
+    const displayCount = count > 99 ? '99+' : count.toString();
+    
     return (
-      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-3 h-3 bg-red-500 rounded-full">
+      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-xs font-bold rounded-full">
+        {displayCount}
       </span>
     );
   };
@@ -240,6 +272,10 @@ const Navigation = () => {
               >
                 <div className="relative flex-shrink-0">
                   {renderIcon(item.icon)}
+                  {/* シフト希望確認にバッジ表示 */}
+                  {item.href === '/shift-requests' && (
+                    <NotificationBadge count={notifications.shiftRequestsCount} />
+                  )}
                 </div>
                 <span className="hidden lg:inline">{item.label}</span>
               </Link>
@@ -319,7 +355,10 @@ const Navigation = () => {
               >
                 <div className="flex-shrink-0 relative flex items-center justify-center min-w-[20px] min-h-[20px]">
                   {renderIcon(item.icon)}
-                  {/* 通知バッジを削除 */}
+                  {/* シフト希望確認にバッジ表示 */}
+                  {item.href === '/shift-requests' && (
+                    <NotificationBadge count={notifications.shiftRequestsCount} />
+                  )}
                 </div>
                 <span className="flex-1">{item.label}</span>
                 {pathname === item.href && (
