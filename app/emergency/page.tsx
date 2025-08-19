@@ -131,8 +131,8 @@ export default function EmergencyPage() {
 
     const fetchData = async () => {
       try {
-        // 代打募集データを取得
-        const emergencyResponse = await fetch('/api/emergency-requests');
+        // 代打募集データを取得（企業フィルタリング付き）
+        const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
           // オープン状態で、自分が作成したもの以外の代打募集のみを表示
@@ -152,7 +152,7 @@ export default function EmergencyPage() {
             const shiftsData = await shiftsResponse.json();
             
             // 既に代打募集があるシフトを除外
-            const allEmergencyResponse = await fetch('/api/emergency-requests');
+            const allEmergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
             if (allEmergencyResponse.ok) {
               const allEmergencyData = await allEmergencyResponse.json();
               const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
@@ -295,7 +295,7 @@ export default function EmergencyPage() {
       
       // データを再取得
       const fetchData = async () => {
-        const emergencyResponse = await fetch('/api/emergency-requests');
+        const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser!.id}`);
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
           const openRequests = emergencyData.data.filter((req: EmergencyRequest) => req.status === 'open');

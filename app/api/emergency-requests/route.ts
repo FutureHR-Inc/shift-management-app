@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+// 現在のユーザーの企業IDを取得するヘルパー関数
+async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  try {
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('company_id')
+      .eq('id', userId)
+      .single();
+
+    if (error || !userData) {
+      console.error('User not found:', error);
+      return null;
+    }
+
+    return userData.company_id;
+  } catch (error) {
+    console.error('Error fetching user company:', error);
+    return null;
+  }
+}
+
 // GET: 緊急募集リクエスト一覧取得
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -11,15 +32,22 @@ export async function GET(request: Request) {
   const endDate = searchParams.get('date_to') || searchParams.get('endDate');
   const status = searchParams.get('status');
   const id = searchParams.get('id'); // 単一リクエスト取得用
+  const currentUserId = searchParams.get('current_user_id'); // 企業フィルタリング用
 
   try {
+    // 企業フィルタリングの準備
+    let companyIdFilter: string | null = null;
+    if (currentUserId) {
+      companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+    }
+
     // まず基本的なクエリから開始（時間帯情報は別途取得）
     let query = supabase
       .from('emergency_requests')
       .select(`
         *,
-        original_user:users!original_user_id(id, name, email, phone),
-        stores(id, name),
+        original_user:users!original_user_id(id, name, email, phone, company_id),
+        stores(id, name, company_id),
         emergency_volunteers(
           id,
           user_id,
@@ -28,6 +56,15 @@ export async function GET(request: Request) {
           users(id, name, email, phone)
         )
       `);
+
+    // 企業フィルタリング（company_idがある場合）
+    if (companyIdFilter) {
+      // stores テーブル経由で同じ企業の代打募集のみ取得
+      query = query.eq('stores.company_id', companyIdFilter);
+    } else if (currentUserId) {
+      // レガシー企業の場合（company_idがnull）
+      query = query.is('stores.company_id', null);
+    }
 
     // 単一リクエスト取得の場合
     if (id) {

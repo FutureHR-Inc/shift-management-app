@@ -128,7 +128,7 @@ export default function EmergencyManagementPage() {
 
       // 並行してデータ取得
       const [emergencyResult, shiftsResult, storesResult, timeSlotsResult, usersResult] = await Promise.all([
-        fetch('/api/emergency-requests').then(res => res.json()),
+        fetch(`/api/emergency-requests?current_user_id=${currentUser?.id}`).then(res => res.json()),
         fetch('/api/shifts?user_id=current&include_future=true').then(res => res.json()),
         fetch('/api/stores').then(res => res.json()),
         fetch('/api/time-slots').then(res => res.json()),
