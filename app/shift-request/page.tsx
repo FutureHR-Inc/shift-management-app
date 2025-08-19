@@ -96,9 +96,9 @@ export default function ShiftRequestPage() {
         setSelectedPeriod(defaultPeriod);
       }
 
-      // ユーザーの所属店舗を取得
+      // 🔧 企業分離対応: ユーザーの所属店舗を取得
       try {
-        const userResponse = await fetch(`/api/users?id=${user.id}`);
+        const userResponse = await fetch(`/api/users?id=${user.id}&current_user_id=${user.id}`);
         if (!userResponse.ok) {
           throw new Error('ユーザー情報の取得に失敗しました');
         }
@@ -188,10 +188,10 @@ export default function ShiftRequestPage() {
         setError('時間帯情報の取得に失敗しました');
       }
 
-      // 既存の提出データを取得
+      // 🔧 企業分離対応: 既存の提出データを取得
       try {
         const existingResponse = await fetch(
-          `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&submission_period=${selectedPeriod.id}`
+          `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&submission_period=${selectedPeriod.id}&current_user_id=${user.id}`
         );
         if (!existingResponse.ok) {
           throw new Error('既存データの取得に失敗しました');

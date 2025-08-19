@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// GET - シフト希望一覧取得
+// 現在のユーザーIDから企業IDを取得するヘルパー関数
+async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - userId:', userId);
+  
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email, company_id')
+    .eq('id', userId)
+    .single();
+    
+  console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - result:', { data, error });
+    
+  if (error || !data) {
+    console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - returning null due to error or no data');
+    return null;
+  }
+  
+  console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - returning company_id:', data.company_id);
+  return data.company_id;
+}
+
+// 🔧 企業分離対応: シフト希望一覧取得
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -9,17 +30,43 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('store_id');
     const submissionPeriod = searchParams.get('submission_period');
     const status = searchParams.get('status');
+    const currentUserId = searchParams.get('current_user_id');
+
+    console.log('🔍 [SHIFT REQUESTS API] GET request params:', { userId, storeId, submissionPeriod, status, currentUserId });
+
+    // 企業IDによるフィルタリングのためのユーザーIDを取得
+    let companyIdFilter: string | null = null;
+    
+    if (currentUserId) {
+      companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+      console.log('🔍 [SHIFT REQUESTS API] companyIdFilter:', companyIdFilter);
+    }
 
     let query = supabase
       .from('shift_requests')
       .select(`
         *,
         users(id, name, email, role, skill_level),
-        stores(id, name),
+        stores(id, name, company_id),
         time_slots(id, name, start_time, end_time)
       `)
       .order('date', { ascending: true })
       .order('priority', { ascending: true });
+
+    // 🔧 企業分離: 店舗の企業IDでフィルタリング
+    if (currentUserId) {
+      if (companyIdFilter) {
+        console.log('🔍 [SHIFT REQUESTS API] 新企業フィルタリング: stores.company_id =', companyIdFilter);
+        query = query.eq('stores.company_id', companyIdFilter);
+      } else {
+        // ログインユーザーがcompany_idを持たない場合は、既存企業のシフト希望のみ表示
+        console.log('🔍 [SHIFT REQUESTS API] 既存企業フィルタリング: stores.company_id IS NULL');
+        query = query.is('stores.company_id', null);
+      }
+    } else {
+      console.log('🔍 [SHIFT REQUESTS API] current_user_idが未指定、全シフト希望表示');
+      // current_user_idが指定されていない場合は全シフト希望（後方互換性）
+    }
 
     // フィルタリング条件
     if (userId) {
@@ -47,6 +94,11 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    console.log('🔍 [SHIFT REQUESTS API] 結果:', {
+      requestCount: data?.length || 0,
+      storeCompanyIds: data?.map(r => ({ storeName: r.stores?.name, companyId: r.stores?.company_id })) || []
+    });
 
     return NextResponse.json({ data: data || [] });
   } catch (error) {

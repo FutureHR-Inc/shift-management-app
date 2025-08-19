@@ -1,23 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// GET: シフト一覧取得
+// 現在のユーザーIDから企業IDを取得するヘルパー関数
+async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
+  console.log('🔍 [SHIFTS API] getCurrentUserCompanyId - userId:', userId);
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email, company_id')
+    .eq('id', userId)
+    .single();
+
+  console.log('🔍 [SHIFTS API] getCurrentUserCompanyId - result:', { data, error });
+
+  if (error || !data) {
+    console.log('🔍 [SHIFTS API] getCurrentUserCompanyId - returning null due to error or no data');
+    return null;
+  }
+
+  console.log('🔍 [SHIFTS API] getCurrentUserCompanyId - returning company_id:', data.company_id);
+  return data.company_id;
+}
+
+// 🔧 企業分離対応: シフト一覧取得
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId') || searchParams.get('store_id');
   const userId = searchParams.get('user_id') || searchParams.get('userId');
   const startDate = searchParams.get('startDate') || searchParams.get('date_from');
   const endDate = searchParams.get('endDate') || searchParams.get('date_to');
+  const currentUserId = searchParams.get('current_user_id');
+
+  console.log('🔍 [SHIFTS API] GET request params:', { storeId, userId, startDate, endDate, currentUserId });
 
   try {
+    // 企業IDによるフィルタリングのためのユーザーIDを取得
+    let companyIdFilter: string | null = null;
+
+    if (currentUserId) {
+      companyIdFilter = await getCurrentUserCompanyId(currentUserId);
+      console.log('🔍 [SHIFTS API] companyIdFilter:', companyIdFilter);
+    }
+
     let query = supabase
       .from('shifts')
       .select(`
         *,
         users(id, name, email, phone, role, skill_level, hourly_wage),
-        stores(id, name),
+        stores(id, name, company_id),
         time_slots(id, name, start_time, end_time)
       `);
+
+    // 🔧 企業分離: 店舗の企業IDでフィルタリング
+    if (currentUserId) {
+      if (companyIdFilter) {
+        console.log('🔍 [SHIFTS API] 新企業フィルタリング: stores.company_id =', companyIdFilter);
+        query = query.eq('stores.company_id', companyIdFilter);
+      } else {
+        // ログインユーザーがcompany_idを持たない場合は、既存企業のシフトのみ表示
+        console.log('🔍 [SHIFTS API] 既存企業フィルタリング: stores.company_id IS NULL');
+        query = query.is('stores.company_id', null);
+      }
+    } else {
+      console.log('🔍 [SHIFTS API] current_user_idが未指定、全シフト表示');
+      // current_user_idが指定されていない場合は全シフト（後方互換性）
+    }
 
     // フィルタリング条件を適用
     if (storeId) {
@@ -43,16 +90,21 @@ export async function GET(request: Request) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { error: 'シフトデータの取得に失敗しました' }, 
+        { error: 'シフトデータの取得に失敗しました' },
         { status: 500 }
       );
     }
+
+    console.log('🔍 [SHIFTS API] 結果:', {
+      shiftCount: data?.length || 0,
+      storeCompanyIds: data?.map(s => ({ storeName: s.stores?.name, companyId: s.stores?.company_id })) || []
+    });
 
     return NextResponse.json({ data: data || [] });
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' }, 
+      { error: 'サーバーエラーが発生しました' },
       { status: 500 }
     );
   }
@@ -76,7 +128,7 @@ export async function POST(request: Request) {
     // 必須フィールドの検証
     if (!user_id || !store_id || !date) {
       return NextResponse.json(
-        { error: 'user_id, store_id, dateは必須です' }, 
+        { error: 'user_id, store_id, dateは必須です' },
         { status: 400 }
       );
     }
@@ -85,7 +137,7 @@ export async function POST(request: Request) {
     const finalTimeSlotId = time_slot_id || pattern_id;
     if (!finalTimeSlotId) {
       return NextResponse.json(
-        { error: 'time_slot_idまたはpattern_idが必要です' }, 
+        { error: 'time_slot_idまたはpattern_idが必要です' },
         { status: 400 }
       );
     }
@@ -94,7 +146,7 @@ export async function POST(request: Request) {
     if (custom_start_time && custom_start_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
       console.error('無効なcustom_start_time:', custom_start_time);
       return NextResponse.json(
-        { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
+        { error: 'custom_start_timeは HH:MM 形式で入力してください' },
         { status: 400 }
       );
     }
@@ -102,7 +154,7 @@ export async function POST(request: Request) {
     if (custom_end_time && custom_end_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
       console.error('無効なcustom_end_time:', custom_end_time);
       return NextResponse.json(
-        { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
+        { error: 'custom_end_timeは HH:MM 形式で入力してください' },
         { status: 400 }
       );
     }
@@ -130,7 +182,7 @@ export async function POST(request: Request) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { error: 'シフトの作成に失敗しました' }, 
+        { error: 'シフトの作成に失敗しました' },
         { status: 500 }
       );
     }
@@ -139,7 +191,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' }, 
+      { error: 'サーバーエラーが発生しました' },
       { status: 500 }
     );
   }
@@ -163,7 +215,7 @@ export async function PUT(request: Request) {
 
     if (!id) {
       return NextResponse.json(
-        { error: 'idは必須です' }, 
+        { error: 'idは必須です' },
         { status: 400 }
       );
     }
@@ -175,7 +227,7 @@ export async function PUT(request: Request) {
     if (custom_start_time && custom_start_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_start_time)) {
       console.error('無効なcustom_start_time（更新）:', custom_start_time);
       return NextResponse.json(
-        { error: 'custom_start_timeは HH:MM 形式で入力してください' }, 
+        { error: 'custom_start_timeは HH:MM 形式で入力してください' },
         { status: 400 }
       );
     }
@@ -183,7 +235,7 @@ export async function PUT(request: Request) {
     if (custom_end_time && custom_end_time.trim() !== '' && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(custom_end_time)) {
       console.error('無効なcustom_end_time（更新）:', custom_end_time);
       return NextResponse.json(
-        { error: 'custom_end_timeは HH:MM 形式で入力してください' }, 
+        { error: 'custom_end_timeは HH:MM 形式で入力してください' },
         { status: 400 }
       );
     }
@@ -214,7 +266,7 @@ export async function PUT(request: Request) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { error: 'シフトの更新に失敗しました' }, 
+        { error: 'シフトの更新に失敗しました' },
         { status: 500 }
       );
     }
@@ -223,7 +275,7 @@ export async function PUT(request: Request) {
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' }, 
+      { error: 'サーバーエラーが発生しました' },
       { status: 500 }
     );
   }
@@ -280,7 +332,7 @@ export async function PATCH(request: NextRequest) {
     // 週の開始日と終了日を計算
     const weekStartDate = new Date(week_start);
     let weekEndDate: Date;
-    
+
     if (week_end) {
       weekEndDate = new Date(week_end);
     } else {
@@ -338,18 +390,18 @@ export async function PATCH(request: NextRequest) {
       try {
         console.log('🔄 シフト確定メール送信開始:', {
           shiftCount: updatedShifts.length,
-          shifts: updatedShifts.map(s => ({ 
-            id: s.id, 
-            userId: s.user_id, 
+          shifts: updatedShifts.map(s => ({
+            id: s.id,
+            userId: s.user_id,
             userEmail: s.users?.email,
             userName: s.users?.name,
-            date: s.date 
+            date: s.date
           }))
         });
 
         // スタッフごとにグループ化
         const staffGroups = new Map();
-        
+
         updatedShifts.forEach((shift: any) => {
           const userId = shift.user_id;
           if (!staffGroups.has(userId)) {
@@ -418,7 +470,7 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: updatedShifts,
       message: `Successfully updated ${updatedShifts.length} shifts to ${status}`,
       updated_count: updatedShifts.length

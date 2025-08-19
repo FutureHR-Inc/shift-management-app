@@ -92,8 +92,29 @@ export default function ShiftRequestsPage() {
     try {
       setLoading(true);
 
-      // 店舗情報を取得
-      const storesResponse = await fetch('/api/stores');
+      // 🔧 企業分離対応: ユーザー情報を取得
+      const userInfo = localStorage.getItem('currentUser');
+      if (!userInfo) {
+        setError('ユーザー情報が見つかりません。再ログインしてください。');
+        return;
+      }
+
+      let user;
+      try {
+        user = JSON.parse(userInfo);
+      } catch (parseError) {
+        console.error('User info parse error:', parseError);
+        setError('ユーザー情報の解析に失敗しました。再ログインしてください。');
+        return;
+      }
+
+      if (!user || !user.id) {
+        setError('ユーザーIDが見つかりません。再ログインしてください。');
+        return;
+      }
+
+      // 🔧 企業分離対応: 店舗情報を取得
+      const storesResponse = await fetch(`/api/stores?current_user_id=${user.id}`);
       const storesData = await storesResponse.json();
       setStores(storesData.data || []);
       
@@ -110,8 +131,8 @@ export default function ShiftRequestsPage() {
         setSelectedPeriod(submissionPeriods[0]);
       }
 
-      // ユーザー情報を取得
-      const usersResponse = await fetch('/api/users');
+      // 🔧 企業分離対応: ユーザー情報を取得
+      const usersResponse = await fetch(`/api/users?current_user_id=${user.id}`);
       const usersData = await usersResponse.json();
       setUsers(usersData.data || []);
 
@@ -130,9 +151,25 @@ export default function ShiftRequestsPage() {
       setLoading(true);
       setError(null);
 
-      // シフト希望データを取得（変換済みを除外）
+      // 🔧 企業分離対応: ユーザー情報を取得
+      const userInfo = localStorage.getItem('currentUser');
+      if (!userInfo) {
+        setError('ユーザー情報が見つかりません。再ログインしてください。');
+        return;
+      }
+
+      let user;
+      try {
+        user = JSON.parse(userInfo);
+      } catch (parseError) {
+        console.error('User info parse error:', parseError);
+        setError('ユーザー情報の解析に失敗しました。再ログインしてください。');
+        return;
+      }
+
+      // 🔧 企業分離対応: シフト希望データを取得（変換済みを除外）
       const response = await fetch(
-        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}&status=submitted`
+        `/api/shift-requests?store_id=${selectedStore}&submission_period=${selectedPeriod.id}&status=submitted&current_user_id=${user.id}`
       );
       
       if (!response.ok) {
