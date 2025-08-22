@@ -586,12 +586,16 @@ export default function StoreSettingsPage() {
         )}
 
         {/* ヘッダー */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">店舗設定</h1>
-            <p className="text-gray-600 mt-2">各店舗の必要人数と応援可能スタッフを設定できます</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">店舗設定</h1>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">各店舗の必要人数と応援可能スタッフを設定できます</p>
           </div>
-          <Button onClick={handleSave} disabled={isSaving || !selectedStore}>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving || !selectedStore}
+            className="w-full sm:w-auto sm:self-start"
+          >
             {isSaving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -608,15 +612,15 @@ export default function StoreSettingsPage() {
           <CardContent className="pt-6">
             {stores.length > 0 ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <label className="text-sm font-medium text-gray-700">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <label className="text-sm font-medium text-gray-700 flex-shrink-0">
                       設定する店舗:
                     </label>
                     <select
                       value={selectedStore}
                       onChange={(e) => setSelectedStore(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={loading || isSaving}
                     >
                       {stores.map(store => (
@@ -628,6 +632,7 @@ export default function StoreSettingsPage() {
                     onClick={() => setShowCreateStore(true)}
                     variant="secondary"
                     disabled={loading || isSaving}
+                    className="w-full lg:w-auto text-sm"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -638,31 +643,34 @@ export default function StoreSettingsPage() {
 
                 {/* 店舗管理ボタン */}
                 {selectedStore && (
-                  <div className="flex items-center space-x-3 pt-2 border-t border-gray-200">
-                    <span className="text-sm text-gray-600">店舗管理:</span>
-                    <Button
-                      onClick={openEditModal}
-                      variant="secondary"
-                      size="sm"
-                      disabled={loading || isSaving || isDeleting}
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                      店舗名を編集
-                    </Button>
-                    <Button
-                      onClick={openDeleteModal}
-                      variant="secondary"
-                      size="sm"
-                      disabled={loading || isSaving || isDeleting}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      店舗を削除
-                    </Button>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-200">
+                    <span className="text-sm text-gray-600 font-medium">店舗管理:</span>
+                    <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                      <Button
+                        onClick={openEditModal}
+                        variant="secondary"
+                        size="sm"
+                        disabled={loading || isSaving || isDeleting}
+                        className="w-full sm:w-auto text-sm"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        店舗名を編集
+                      </Button>
+                      <Button
+                        onClick={openDeleteModal}
+                        variant="secondary"
+                        size="sm"
+                        disabled={loading || isSaving || isDeleting}
+                        className="w-full sm:w-auto text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        店舗を削除
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -926,7 +934,44 @@ export default function StoreSettingsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
+                    {/* モバイル表示 */}
+                    <div className="block lg:hidden space-y-4">
+                      {timeSlots.map((timeSlot) => (
+                        <Card key={timeSlot.id} className="border border-gray-200">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-medium text-gray-900">
+                              {getTimeSlotLabel(timeSlot.id)}
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-0">
+                            <div className="grid grid-cols-2 gap-3">
+                              {dayNames.map((dayName, dayIndex) => {
+                                const currentValue = requiredStaffData[dayName]?.[timeSlot.id] || 0;
+                                return (
+                                  <div key={dayIndex} className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-700">
+                                      {dayLabels[dayIndex]}
+                                    </label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="10"
+                                      value={currentValue}
+                                      onChange={(e) => handleRequiredStaffChange(dayName, timeSlot.id, parseInt(e.target.value) || 0)}
+                                      className="w-16 text-center"
+                                      disabled={isSaving}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* デスクトップ表示 */}
+                    <div className="hidden lg:block overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead>
                           <tr className="border-b border-gray-200">
@@ -995,7 +1040,7 @@ export default function StoreSettingsPage() {
                     シフト作成時に自動で警告される勤怠ルールを設定してください
                   </p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         週間上限時間

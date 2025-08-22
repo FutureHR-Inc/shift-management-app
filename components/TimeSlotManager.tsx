@@ -101,7 +101,7 @@ function TimeSlotModal({ isOpen, onClose, onSave, editingSlot, existingSlots }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     setSaving(true);
@@ -118,11 +118,11 @@ function TimeSlotModal({ isOpen, onClose, onSave, editingSlot, existingSlots }: 
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -251,7 +251,7 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
   // 時間帯データを取得
   const fetchTimeSlots = useCallback(async () => {
     if (!storeId) return;
-    
+
     try {
       setLoading(true);
       setError(null);
@@ -289,7 +289,7 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
     try {
       const url = editingSlot ? `/api/time-slots` : `/api/time-slots`;
       const method = editingSlot ? 'PUT' : 'POST';
-      const body = editingSlot 
+      const body = editingSlot
         ? { id: editingSlot.id, ...timeSlotData }
         : { store_id: storeId, ...timeSlotData };
 
@@ -319,7 +319,7 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
 
     try {
       setDeletingSlotId(slotId);
-      
+
       const response = await fetch(`/api/time-slots?id=${slotId}`, {
         method: 'DELETE'
       });
@@ -361,9 +361,12 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>時間帯設定</CardTitle>
-          <Button onClick={handleAddTimeSlot}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="text-lg sm:text-xl">時間帯設定</CardTitle>
+          <Button
+            onClick={handleAddTimeSlot}
+            className="w-full sm:w-auto text-sm"
+          >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
@@ -398,25 +401,26 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
         ) : (
           <div className="space-y-3">
             {timeSlots.map((slot) => (
-              <div key={slot.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+              <div key={slot.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
                 <div className="flex-1">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{slot.name}</h4>
+                      <h4 className="font-medium text-gray-900 text-base">{slot.name}</h4>
                       <p className="text-sm text-gray-500">
                         {slot.start_time} - {slot.end_time}
                       </p>
                     </div>
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-400 self-start sm:self-center">
                       順序: {slot.display_order}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => handleEditTimeSlot(slot)}
+                    className="flex-1 sm:flex-none text-sm"
                   >
                     編集
                   </Button>
@@ -425,7 +429,7 @@ export default function TimeSlotManager({ storeId, onTimeSlotsChange }: TimeSlot
                     variant="secondary"
                     onClick={() => handleDeleteTimeSlot(slot.id)}
                     disabled={deletingSlotId === slot.id}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="flex-1 sm:flex-none text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
                   >
                     {deletingSlotId === slot.id ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>

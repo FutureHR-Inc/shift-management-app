@@ -439,20 +439,20 @@ export default function EmergencyPage() {
             {/* 緊急度の説明 */}
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <h3 className="font-medium text-gray-900">緊急度の目安</h3>
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                      <span className="text-sm text-gray-600">緊急</span>
+                  <div className="flex items-center gap-3 sm:gap-2 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></div>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">緊急</span>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                      <span className="text-sm text-gray-600">急募</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full flex-shrink-0"></div>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">急募</span>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <span className="text-sm text-gray-600">募集中</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0"></div>
+                      <span className="text-sm text-gray-600 whitespace-nowrap">募集中</span>
                     </div>
                   </div>
                 </div>
@@ -483,10 +483,10 @@ export default function EmergencyPage() {
                   return (
                     <Card key={request.id} className={urgencyStyle}>
                       <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-lg font-semibold text-gray-900">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
+                              <h3 className="text-lg font-semibold text-gray-900 leading-tight">
                                 {new Date(request.date).toLocaleDateString('ja-JP', {
                                   year: 'numeric',
                                   month: 'long',
@@ -494,7 +494,7 @@ export default function EmergencyPage() {
                                   weekday: 'long'
                                 })}
                               </h3>
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${urgencyLabel.color}`}>
+                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${urgencyLabel.color} flex-shrink-0`}>
                                 {urgencyLabel.text}
                               </span>
                             </div>
@@ -545,10 +545,10 @@ export default function EmergencyPage() {
                             )}
                           </div>
 
-                          <div className="ml-6">
+                          <div className="lg:ml-6 lg:flex-shrink-0 lg:w-80">
                             {alreadyApplied ? (
                               <div className="text-center">
-                                <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium">
+                                <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium text-sm">
                                   応募済み
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">結果をお待ちください</p>

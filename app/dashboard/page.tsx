@@ -353,7 +353,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 統計カード */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           <Card>
             <CardHeader className="pb-2 sm:pb-3">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">今日のシフト</CardTitle>
@@ -424,12 +424,12 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span>代打募集</span>
-                <div className="flex flex-wrap gap-2">
+                <span className="text-base sm:text-lg">代打募集</span>
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button
                     onClick={() => router.push('/emergency-management')}
                     size="sm"
-                    className="flex-1 sm:flex-none text-xs sm:text-sm"
+                    className="w-full sm:w-auto text-xs sm:text-sm"
                   >
                     募集作成
                   </Button>
@@ -438,7 +438,7 @@ export default function DashboardPage() {
                       onClick={() => router.push('/emergency-management?tab=manage')}
                       variant="secondary"
                       size="sm"
-                      className="flex-1 sm:flex-none text-xs sm:text-sm"
+                      className="w-full sm:w-auto text-xs sm:text-sm"
                     >
                       応募管理
                     </Button>
