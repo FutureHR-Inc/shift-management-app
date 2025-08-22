@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json(
-        { error: 'シフトパターンの取得に失敗しました' }, 
+        { error: 'シフトパターンの取得に失敗しました' },
         { status: 500 }
       );
     }
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' }, 
+      { error: 'サーバーエラーが発生しました' },
       { status: 500 }
     );
   }
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -92,7 +92,7 @@ export async function PUT(request: Request) {
     );
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -105,6 +105,6 @@ export async function DELETE(request: Request) {
     );
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 

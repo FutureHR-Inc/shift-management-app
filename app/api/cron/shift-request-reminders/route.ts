@@ -8,16 +8,16 @@ export async function GET(request: NextRequest) {
     // Vercel Cron Jobの認証チェック（オプション）
     const authHeader = request.headers.get('authorization');
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
     }
 
     console.log('Starting shift request reminder notifications...');
-    
+
     // 今日の日付を取得（JST）
     const today = new Date();
     const jstOffset = 9 * 60 * 60 * 1000; // JST = UTC + 9時間
     const jstToday = new Date(today.getTime() + jstOffset);
-    
+
     // 現在の提出期間を取得
     const currentPeriods = getSubmissionPeriods();
     let activeSubmissionPeriod = null;
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     for (const period of currentPeriods) {
       const deadlineDate = new Date(period.submissionDeadline);
       const reminderDate = new Date(deadlineDate.getTime() - 24 * 60 * 60 * 1000); // 締切1日前
-      
+
       if (jstToday >= reminderDate && jstToday <= deadlineDate) {
         activeSubmissionPeriod = period.label;
         deadline = period.submissionDeadline;
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     );
 
     // 未提出のスタッフを特定
-    const unsubmittedStaff = allStaff.filter(staff => 
+    const unsubmittedStaff = allStaff.filter(staff =>
       !submittedUserIds.has(staff.id) && staff.email
     );
 

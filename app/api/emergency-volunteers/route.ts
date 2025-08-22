@@ -37,13 +37,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching emergency volunteers:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: 'データの取得に失敗しました' }, { status: 500 });
     }
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -51,17 +51,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Emergency Volunteers POST API 開始 ===');
-    
+
     const body = await request.json();
     console.log('Request body:', body);
-    
+
     const { emergency_request_id, user_id, notes } = body;
 
     // バリデーション
     if (!emergency_request_id || !user_id) {
       console.error('バリデーションエラー:', { emergency_request_id, user_id });
       return NextResponse.json(
-        { error: 'Required fields: emergency_request_id, user_id' },
+        { error: '必須フィールドが不足しています: emergency_request_id, user_id' },
         { status: 400 }
       );
     }
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       .select('status, date')
       .eq('id', emergency_request_id)
       .single();
-    
+
     console.log('代打募集データ:', emergencyRequest);
 
     if (!emergencyRequest || emergencyRequest.status !== 'open') {
@@ -119,12 +119,17 @@ export async function POST(request: NextRequest) {
     if (existingShifts && existingShifts.length > 0) {
       const existingShift = existingShifts[0];
       const storeData = existingShift.stores as { name?: string } | null;
-      
+
       console.log('シフト重複検出:', { existingShift, storeData });
-      
+
+      // ステータスを日本語に変換
+      const statusText = existingShift.status === 'confirmed' ? '確定済み' :
+        existingShift.status === 'draft' ? '下書き' :
+          existingShift.status === 'completed' ? '完了済み' : existingShift.status;
+
       return NextResponse.json(
-        { 
-          error: `Cannot apply for this emergency request: You already have a ${existingShift.status} shift at ${storeData?.name || '不明な店舗'} on this date`,
+        {
+          error: `この代打募集には応募できません。${storeData?.name || '不明な店舗'}で同じ日に${statusText}のシフトがあります`,
           conflictingStore: storeData?.name || '不明な店舗',
           conflictingStoreId: existingShift.store_id,
           conflictType: existingShift.status
@@ -134,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('データ挿入開始:', { emergency_request_id, user_id, notes: notes || null });
-    
+
     const { data, error } = await supabase
       .from('emergency_volunteers')
       .insert({
@@ -163,7 +168,7 @@ export async function POST(request: NextRequest) {
     console.log('データ挿入成功:', data);
     console.log('=== Emergency Volunteers POST API 終了 ===');
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data,
       message: '代打募集への応募が完了しました'
     }, { status: 201 });
@@ -172,7 +177,7 @@ export async function POST(request: NextRequest) {
     console.error('Error type:', typeof error);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -209,6 +214,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Emergency volunteer deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 

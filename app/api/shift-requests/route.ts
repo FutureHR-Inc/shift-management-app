@@ -4,20 +4,20 @@ import { supabase } from '@/lib/supabase';
 // 現在のユーザーIDから企業IDを取得するヘルパー関数
 async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
   console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - userId:', userId);
-  
+
   const { data, error } = await supabase
     .from('users')
     .select('id, name, email, company_id')
     .eq('id', userId)
     .single();
-    
+
   console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - result:', { data, error });
-    
+
   if (error || !data) {
     console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - returning null due to error or no data');
     return null;
   }
-  
+
   console.log('🔍 [SHIFT REQUESTS API] getCurrentUserCompanyId - returning company_id:', data.company_id);
   return data.company_id;
 }
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     // 企業IDによるフィルタリングのためのユーザーIDを取得
     let companyIdFilter: string | null = null;
-    
+
     if (currentUserId) {
       companyIdFilter = await getCurrentUserCompanyId(currentUserId);
       console.log('🔍 [SHIFT REQUESTS API] companyIdFilter:', companyIdFilter);
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       }
 
       const existingRequests = existingRequestsResponse.data || [];
-      
+
       // 完全に同一のリクエストを除外
       const filteredRequests = requests.filter((newReq: any) => {
         return !existingRequests.some((existing: any) => {
@@ -177,9 +177,9 @@ export async function POST(request: NextRequest) {
           const notesMatch = (existing.notes || '') === (newReq.notes || '');
           const isSubmitted = existing.status === 'submitted';
 
-          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch && 
-                              endTimeMatch && priorityMatch && notesMatch && isSubmitted;
-          
+          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch &&
+            endTimeMatch && priorityMatch && notesMatch && isSubmitted;
+
           return isExactMatch;
         });
       });
@@ -258,9 +258,9 @@ export async function POST(request: NextRequest) {
       // メール送信失敗でも提出は成功とする
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data,
-      message: is_incremental 
+      message: is_incremental
         ? `${data.length}件のシフト希望を追加しました`
         : `${data.length}件のシフト希望を提出しました`
     });
@@ -372,6 +372,6 @@ export async function DELETE(request: NextRequest) {
     }
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 

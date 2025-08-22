@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     // バリデーション
     if (!name || !phone || !email || !role || !skill_level) {
       return NextResponse.json(
-        { error: 'Required fields: name, phone, email, role, skill_level' },
+        { error: '必須フィールドが不足しています: name, phone, email, role, skill_level' },
         { status: 400 }
       );
     }
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { error: 'Invalid email format' },
+        { error: 'メールアドレスの形式が正しくありません' },
         { status: 400 }
       );
     }
@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: user }, { status: 201 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -505,7 +505,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ data: user }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 

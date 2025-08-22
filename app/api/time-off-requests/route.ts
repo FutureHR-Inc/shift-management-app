@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const requestDate = new Date(date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (isNaN(requestDate.getTime())) {
       return NextResponse.json(
         { error: 'Invalid date format' },
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -177,7 +177,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -204,9 +204,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Time off request deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
-} 
+}
 
 // PATCH - 希望休申請一括承認・却下
 export async function PATCH(request: NextRequest) {
@@ -252,7 +252,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data,
       message: `Successfully ${status === 'approved' ? 'approved' : 'rejected'} ${data.length} requests`,
       updated_count: data.length
@@ -260,6 +260,6 @@ export async function PATCH(request: NextRequest) {
 
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 

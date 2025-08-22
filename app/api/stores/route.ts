@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -187,7 +187,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ data }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -267,6 +267,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Store deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 

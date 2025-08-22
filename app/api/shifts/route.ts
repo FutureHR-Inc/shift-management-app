@@ -311,7 +311,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ message: 'Shift deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 }
 
@@ -485,6 +485,6 @@ export async function PATCH(request: NextRequest) {
 
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'サーバー内部エラーが発生しました' }, { status: 500 });
   }
 } 
