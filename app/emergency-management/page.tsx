@@ -607,8 +607,8 @@ export default function EmergencyManagementPage() {
             <button
               onClick={() => setActiveTab('browse')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'browse'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               募集一覧
@@ -616,8 +616,8 @@ export default function EmergencyManagementPage() {
             <button
               onClick={() => setActiveTab('create')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'create'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               募集作成
@@ -625,8 +625,8 @@ export default function EmergencyManagementPage() {
             <button
               onClick={() => setActiveTab('manage')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'manage'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               募集管理
@@ -697,433 +697,49 @@ export default function EmergencyManagementPage() {
             {/* シフト選択（シフト表を表示） */}
             <Card>
               <CardHeader>
-                <CardTitle>シフト選択</CardTitle>
-                <p className="text-sm text-gray-600">代打を募集したいシフトを選択してください</p>
-              </CardHeader>
-              <CardContent>
-                {/* 店舗・週選択 */}
-                <div className="space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      店舗選択
-                    </label>
-                    <select
-                      value={selectedStore}
-                      onChange={(e) => {
-                        console.log('🏪 店舗変更:', e.target.value);
-                        setSelectedStore(e.target.value);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">店舗を選択してください</option>
-                      {stores.map(store => (
-                        <option key={store.id} value={store.id}>{store.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {selectedStore && (
-                    <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-                      <h3 className="text-base sm:text-lg font-medium text-gray-900">
-                        {viewWeek.getFullYear()}年 {viewWeek.getMonth() + 1}月 第{Math.ceil(viewWeek.getDate() / 7)}週
-                      </h3>
-                      <div className="flex space-x-2 justify-center sm:justify-end">
-                        <Button variant="secondary" size="sm" onClick={() => changeWeek('prev')} className="text-xs sm:text-sm">
-                          ← 前週
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => changeWeek('next')} className="text-xs sm:text-sm">
-                          次週 →
-                        </Button>
+                <CardTitle>代打募集の作成</CardTitle>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    💡 代打募集を作成するには、<strong>シフト作成画面</strong>から代打を募集したいスタッフ枠を選択して、代打募集をしてください
+                  </p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-start space-x-2">
+                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-sm">
+                        <p className="font-medium text-blue-800 mb-1">代打募集の手順:</p>
+                        <ol className="text-blue-700 space-y-1">
+                          <li>1. シフト作成画面に移動</li>
+                          <li>2. 既存のスタッフ枠を右クリック</li>
+                          <li>3. 「代打を募集」を選択</li>
+                          <li>4. 募集理由を入力して作成完了</li>
+                        </ol>
                       </div>
                     </div>
-                  )}
+                  </div>
+                  <div className="pt-2">
+                    <Button
+                      onClick={() => router.push('/shift/create')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      📅 シフト作成画面に移動
+                    </Button>
+                  </div>
                 </div>
-
-                {!selectedStore && (
-                  <div className="text-center py-8 text-gray-500">
-                    👆 まず店舗を選択してください
-                  </div>
-                )}
-
-                {selectedStore && timeSlots.filter(ts => ts.store_id === selectedStore).length === 0 && (
-                  <div className="text-center py-8 text-yellow-600 bg-yellow-50 rounded-lg">
-                    ⚠️ 選択した店舗に時間帯設定がありません
-                  </div>
-                )}
-
-                {selectedStore && timeSlots.filter(ts => ts.store_id === selectedStore).length > 0 && (
-                  <>
-                    {/* 週統計サマリー */}
-                    {shiftTableData.length > 0 && (
-                      <div className="mb-6">
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <div className="text-lg font-bold text-blue-600">
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
-                              )}名
-                            </div>
-                            <p className="text-xs text-blue-700 mt-1">配置済みスタッフ</p>
-                          </div>
-                          <div className="bg-green-50 p-4 rounded-lg">
-                            <div className="text-lg font-bold text-green-600">
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
-                              )}名
-                            </div>
-                            <p className="text-xs text-green-700 mt-1">必要スタッフ</p>
-                          </div>
-                          <div className="bg-red-50 p-4 rounded-lg">
-                            <div className="text-lg font-bold text-red-600">
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.shortage, 0), 0
-                              )}名
-                            </div>
-                            <p className="text-xs text-red-700 mt-1">不足スタッフ</p>
-                          </div>
-                          <div className="bg-purple-50 p-4 rounded-lg">
-                            <div className="text-lg font-bold text-purple-600">
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) =>
-                                  dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
-                                ), 0
-                              )}名
-                            </div>
-                            <p className="text-xs text-purple-700 mt-1">確定済みシフト</p>
-                          </div>
-                        </div>
-
-                        {/* 詳細情報 */}
-                        <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div>
-                              <span className="font-medium">下書き:</span>{' '}
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) =>
-                                  dayTotal + slot.shifts.filter(shift => shift.status === 'draft').length, 0
-                                ), 0
-                              )}名
-                            </div>
-                            <div>
-                              <span className="font-medium">確定済み:</span>{' '}
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) =>
-                                  dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
-                                ), 0
-                              )}名
-                            </div>
-                            <div>
-                              <span className="font-medium">完了:</span>{' '}
-                              {shiftTableData.reduce((total, day) =>
-                                total + day.timeSlots.reduce((dayTotal, slot) =>
-                                  dayTotal + slot.shifts.filter(shift => shift.status === 'completed').length, 0
-                                ), 0
-                              )}名
-                            </div>
-                            <div>
-                              <span className="font-medium">充足率:</span>{' '}
-                              {(() => {
-                                const totalRequired = shiftTableData.reduce((total, day) =>
-                                  total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
-                                );
-                                const totalCurrent = shiftTableData.reduce((total, day) =>
-                                  total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
-                                );
-                                return totalRequired > 0 ? Math.round((totalCurrent / totalRequired) * 100) : 0;
-                              })()}%
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* シフト表 */}
-                    {shiftTableData.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        📊 シフト表を読み込み中...
-                      </div>
-                    ) : (
-                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                        <div className="overflow-x-auto">
-                          <div className="min-w-full">
-                            <table className="w-full border-collapse" style={{ minWidth: '800px' }}>
-                              <thead>
-                                <tr className="bg-gray-50">
-                                  <th className="border border-gray-300 px-3 py-4 text-left text-sm font-semibold text-gray-900 sticky left-0 bg-gray-50 z-10">
-                                    時間帯
-                                  </th>
-                                  {shiftTableData.map((day) => (
-                                    <th key={day.date} className="border border-gray-300 px-2 py-4 text-center text-sm font-semibold text-gray-900 min-w-32">
-                                      <div className="space-y-1">
-                                        <div className="font-bold">{day.dayName}</div>
-                                        <div className="text-xs text-gray-600">
-                                          {new Date(day.date).getMonth() + 1}/{new Date(day.date).getDate()}
-                                        </div>
-                                      </div>
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {timeSlots.filter(ts => ts.store_id === selectedStore).map((timeSlot) => (
-                                  <tr key={timeSlot.id}>
-                                    <td className="border border-gray-300 px-3 py-4 text-sm font-medium bg-gray-50 sticky left-0 z-10">
-                                      <div className="space-y-1">
-                                        <div className="font-semibold">{timeSlot.name}</div>
-                                        <div className="text-xs text-gray-600">
-                                          {formatTime(timeSlot.start_time)}-{formatTime(timeSlot.end_time)}
-                                        </div>
-                                      </div>
-                                    </td>
-                                    {shiftTableData.map((day) => {
-                                      const daySlot = day.timeSlots.find(ts => ts.id === timeSlot.id);
-                                      if (!daySlot) return <td key={day.date} className="border border-gray-300 px-2 py-4 min-w-32"></td>;
-
-                                      const isPast = new Date(day.date) < new Date();
-                                      const hasShifts = daySlot.shifts.length > 0;
-                                      const isShortage = daySlot.shortage > 0;
-                                      const isOverStaffed = daySlot.currentStaff > daySlot.requiredStaff;
-                                      const canCreateRequest = !isPast && (hasShifts || isShortage);
-
-                                      return (
-                                        <td
-                                          key={day.date}
-                                          className={`border border-gray-300 px-2 py-4 text-sm min-w-32 ${isPast
-                                              ? 'bg-gray-50'
-                                              : (hasShifts || isShortage)
-                                                ? 'bg-blue-50 cursor-pointer hover:bg-blue-100'
-                                                : 'bg-white'
-                                            }`}
-                                          onClick={() => {
-                                            if (!isPast && (hasShifts || isShortage)) {
-                                              console.log('🎯 代打募集作成クリック:', { date: day.date, timeSlot: daySlot });
-                                              handleCreateEmergencyFromSlot(day.date, daySlot);
-                                            }
-                                          }}
-                                        >
-                                          <div className="space-y-2 min-h-16">
-                                            {/* 人数表示 */}
-                                            <div className="flex items-center justify-between">
-                                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${isShortage
-                                                  ? 'bg-red-100 text-red-700'
-                                                  : isOverStaffed
-                                                    ? 'bg-orange-100 text-orange-700'
-                                                    : 'bg-green-100 text-green-700'
-                                                }`}>
-                                                {daySlot.currentStaff}/{daySlot.requiredStaff}人
-                                              </span>
-                                              {isShortage && (
-                                                <span className="text-xs text-red-600 font-bold">
-                                                  不足{daySlot.shortage}
-                                                </span>
-                                              )}
-                                            </div>
-
-                                            {/* スタッフ表示 */}
-                                            {daySlot.shifts.length > 0 ? (
-                                              <div className="space-y-1">
-                                                {daySlot.shifts.map((shift) => {
-                                                  const isConfirmed = shift.status === 'confirmed';
-                                                  const isCompleted = shift.status === 'completed';
-                                                  const isDraft = shift.status === 'draft';
-                                                  const hasCustomTime = shift.custom_start_time && shift.custom_end_time;
-
-                                                  return (
-                                                    <div
-                                                      key={shift.id}
-                                                      className={`text-xs p-2 rounded-md border transition-all ${isCompleted
-                                                          ? 'bg-green-100 border-green-300 text-green-800'
-                                                          : isConfirmed
-                                                            ? 'bg-blue-100 border-blue-300 text-blue-800'
-                                                            : isDraft
-                                                              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
-                                                              : 'bg-white border-gray-200 text-gray-700'
-                                                        } ${!isPast && (hasShifts || isShortage) ? 'hover:shadow-sm' : ''}`}
-                                                    >
-                                                      <div className="font-medium truncate">
-                                                        {shift.user_name}
-                                                      </div>
-                                                      {hasCustomTime && (
-                                                        <div className="text-xs text-purple-600 mt-1">
-                                                          ⏰ {shift.custom_start_time}-{shift.custom_end_time}
-                                                        </div>
-                                                      )}
-                                                      <div className="flex items-center justify-between mt-1">
-                                                        <div className={`text-xs px-1.5 py-0.5 rounded-full ${isCompleted
-                                                            ? 'bg-green-200 text-green-700'
-                                                            : isConfirmed
-                                                              ? 'bg-blue-200 text-blue-700'
-                                                              : 'bg-yellow-200 text-yellow-700'
-                                                          }`}>
-                                                          {isCompleted ? '完了' : isConfirmed ? '確定' : '下書き'}
-                                                        </div>
-                                                        {(isConfirmed || isCompleted) && (
-                                                          <div className="text-xs">
-                                                            {isCompleted ? '✅' : '✓'}
-                                                          </div>
-                                                        )}
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            ) : (
-                                              <div className="flex items-center justify-center h-12 text-gray-400">
-                                                <div className="text-center">
-                                                  <div className="text-lg mb-1">-</div>
-                                                  <div className="text-xs">未配置</div>
-                                                </div>
-                                              </div>
-                                            )}
-
-                                            {/* 代打募集ボタン */}
-                                            {canCreateRequest && (
-                                              <div className="text-center pt-1">
-                                                <div className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${isShortage
-                                                    ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                                                    : hasShifts
-                                                      ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
-                                                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                                                  }`}>
-                                                  <span className="sm:hidden">
-                                                    {isShortage
-                                                      ? '🆘 人手不足'
-                                                      : hasShifts
-                                                        ? '📝 代打募集'
-                                                        : '➕ 新規募集'
-                                                    }
-                                                  </span>
-                                                  <span className="hidden sm:inline">
-                                                    {isShortage
-                                                      ? '🆘 人手不足募集'
-                                                      : hasShifts
-                                                        ? '📝 代打募集作成'
-                                                        : '➕ 新規シフト募集'
-                                                    }
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            )}
-
-                                            {/* 空の時間帯表示 */}
-                                            {!hasShifts && !isShortage && !isPast && (
-                                              <div className="text-center pt-1">
-                                                <div className="text-xs text-gray-400">
-                                                  配置なし
-                                                </div>
-                                              </div>
-                                            )}
-
-                                            {/* 過去の日付表示 */}
-                                            {isPast && (
-                                              <div className="text-center pt-1">
-                                                <div className="text-xs text-gray-400">
-                                                  過去の日付
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 理由入力（シフト選択後） */}
-            {selectedSlot && (
-              <Card data-reason-section>
-                <CardHeader>
-                  <CardTitle>代打募集の理由</CardTitle>
-                  <p className="text-sm text-gray-600">代打が必要な理由を入力してください</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900">選択されたシフト</h4>
-                    <p className="text-sm text-blue-800">
-                      📅 {formatDate(selectedSlot.date)} ({getDayName(selectedSlot.date)})
-                    </p>
-                    <p className="text-sm text-blue-800">
-                      ⏰ {selectedSlot.timeSlot.name} ({formatTime(selectedSlot.timeSlot.start_time)}-{formatTime(selectedSlot.timeSlot.end_time)})
-                    </p>
-                    <p className="text-sm text-blue-800">
-                      👥 必要人数: {selectedSlot.timeSlot.requiredStaff}名 / 現在: {selectedSlot.timeSlot.currentStaff}名
-                    </p>
-                    {selectedSlot.timeSlot.shifts.length > 0 ? (
-                      <p className="text-sm text-blue-800">
-                        🏷️ 現在の配置: {selectedSlot.timeSlot.shifts.map((s: any) => s.user_name).join('、')}
-                      </p>
-                    ) : (
-                      <p className="text-sm text-red-800">
-                        ⚠️ まだ誰も配置されていません（人手不足 {selectedSlot.timeSlot.shortage}名）
-                      </p>
-                    )}
-                    {selectedSlot.timeSlot.shortage > 0 && (
-                      <p className="text-sm text-red-800 font-medium">
-                        🚨 不足人数: {selectedSlot.timeSlot.shortage}名
-                      </p>
-                    )}
-                  </div>
-                  <textarea
-                    rows={4}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder={selectedSlot.timeSlot.shortage > 0
-                      ? "例：人手が足りないため、急な欠員のため、業務量増加のため など"
-                      : "例：急な用事のため、体調不良のため、家庭の事情のため など"
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* アクションボタン */}
-            {selectedSlot && (
-              <div className="flex space-x-4">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setSelectedSlot(null);
-                    setReason('');
-                  }}
-                  className="flex-1"
-                >
-                  キャンセル
-                </Button>
-                <Button
-                  onClick={handleCreateEmergencyRequest}
-                  disabled={!reason.trim() || creating}
-                  className="flex-1"
-                >
-                  {creating ? '作成中...' : '代打募集を作成'}
-                </Button>
-              </div>
-            )}
-
-            {/* 注意事項 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">代打募集に関する注意事項</CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li>• 代打募集の作成後は内容の変更ができません</li>
-                  <li>• 複数の応募者がいる場合、最終的な選考を行ってください</li>
-                  <li>• 応募があった場合はメールで通知されます</li>
-                  <li>• 代打が決定したら速やかに確定処理を行ってください</li>
-                </ul>
+
+
+
+
+
               </CardContent>
             </Card>
+
+
+
+
           </div>
         )}
 

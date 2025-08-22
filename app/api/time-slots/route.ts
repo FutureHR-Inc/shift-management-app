@@ -4,27 +4,27 @@ import { supabase } from '@/lib/supabase';
 // 時間フォーマットを正規化する関数
 function normalizeTimeFormat(timeString: string): string {
   if (!timeString) return '';
-  
+
   // HH:MM:SS形式をHH:MM形式に変換（秒を削除）
   if (/^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$/.test(timeString)) {
     return timeString.substring(0, 5); // 最初の5文字（HH:MM）を取得
   }
-  
+
   // 既にHH:MM形式の場合はそのまま返す
   if (/^[0-2][0-9]:[0-5][0-9]$/.test(timeString)) {
     return timeString;
   }
-  
+
   // H:MM:SS形式をHH:MM形式に変換
   if (/^[0-9]:[0-5][0-9]:[0-5][0-9]$/.test(timeString)) {
     return '0' + timeString.substring(0, 4); // 0 + H:MM
   }
-  
+
   // H:MM形式を HH:MM形式に変換
   if (/^[0-9]:[0-5][0-9]$/.test(timeString)) {
     return '0' + timeString;
   }
-  
+
   return timeString; // その他はそのまま返す（バリデーションで弾かれる）
 }
 
@@ -32,7 +32,7 @@ function normalizeTimeFormat(timeString: string): string {
 export async function GET(request: NextRequest) {
   try {
     console.log('⏰ 時間帯データ取得開始');
-    
+
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('store_id') || searchParams.get('storeId');
     const currentUserId = searchParams.get('current_user_id');
@@ -85,9 +85,9 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ 時間帯データ取得成功:', data?.length || 0, '件');
 
-    return NextResponse.json({ 
-      success: true, 
-      data: data || [] 
+    return NextResponse.json({
+      success: true,
+      data: data || []
     });
   } catch (error) {
     console.error('Time slots API error:', error);
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     // 時間フォーマットの検証（HH:MM形式）
     const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(normalizedStartTime) || !timeRegex.test(normalizedEndTime)) {
-      console.error('Time format validation failed:', { 
+      console.error('Time format validation failed:', {
         original: { start_time, end_time },
         normalized: { normalizedStartTime, normalizedEndTime }
       });
@@ -204,7 +204,7 @@ export async function PUT(request: NextRequest) {
       normalizedStartTime = normalizeTimeFormat(start_time);
       const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timeRegex.test(normalizedStartTime)) {
-        console.error('Start time format validation failed:', { 
+        console.error('Start time format validation failed:', {
           original: start_time,
           normalized: normalizedStartTime
         });
@@ -220,7 +220,7 @@ export async function PUT(request: NextRequest) {
       normalizedEndTime = normalizeTimeFormat(end_time);
       const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timeRegex.test(normalizedEndTime)) {
-        console.error('End time format validation failed:', { 
+        console.error('End time format validation failed:', {
           original: end_time,
           normalized: normalizedEndTime
         });
@@ -299,7 +299,7 @@ export async function DELETE(request: NextRequest) {
       // 現在は直接的なチェックはスキップ（shiftsテーブルにtime_slot_idカラムが存在しないため）
       // 将来的な拡張のためのプレースホルダー
       console.log(`Attempting to delete time slot: ${timeSlotInfo.name} (${timeSlotInfo.start_time}-${timeSlotInfo.end_time})`);
-      
+
     } catch (error) {
       console.error('Error checking time slot deletion safety:', error);
       // チェックに失敗した場合でも削除を続行（警告として扱う）
