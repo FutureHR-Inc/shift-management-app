@@ -46,7 +46,7 @@ export interface DatabaseFixedShift {
   time_slots?: any;
 }
 
-export const useShiftData = (selectedStore: string, selectedWeek: string, viewMode: string) => {
+export const useShiftData = (selectedStore: string, selectedWeek: string, viewMode: string, currentUser?: { id: string }) => {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
@@ -92,7 +92,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
       const response = await fetch(`/api/shifts?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}`);
       if (!response.ok) throw new Error('シフトデータの取得に失敗しました');
       const result = await response.json();
-      
+
       return (result.data || []).map((shift: any) => ({
         id: shift.id,
         userId: shift.user_id,
@@ -115,7 +115,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
       const response = await fetch('/api/users');
       if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
-      
+
       return (result.data || []).map((user: any) => ({
         id: user.id,
         name: user.name,
@@ -131,9 +131,13 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
     }
   };
 
-  const fetchEmergencyRequests = async (storeId: string, startDate: string, endDate: string) => {
+  const fetchEmergencyRequests = async (storeId: string, startDate: string, endDate: string, currentUserId?: string) => {
     try {
-      const response = await fetch(`/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${endDate}`);
+      let url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${endDate}`;
+      if (currentUserId) {
+        url += `&current_user_id=${currentUserId}`;
+      }
+      const response = await fetch(url);
       if (!response.ok) throw new Error('代打募集データの取得に失敗しました');
       const result = await response.json();
       return result.data || [];
@@ -159,7 +163,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
   useEffect(() => {
     const loadData = async () => {
       if (!selectedStore) return;
-      
+
       try {
         setLoading(true);
         setError(null);
@@ -170,7 +174,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
           fetchFixedShifts(selectedStore),
           fetchUsers()
         ]);
-        
+
         setTimeSlots(timeSlotsData);
         setFixedShifts(fixedShiftsData);
         setUsers(usersData);
@@ -179,7 +183,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
         if (selectedWeek) {
           const startDate = selectedWeek;
           let endDate = selectedWeek;
-          
+
           if (viewMode === 'week') {
             const end = new Date(selectedWeek);
             end.setDate(end.getDate() + 6);
@@ -194,13 +198,13 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
             const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
             endDate = end.toISOString().split('T')[0];
           }
-          
+
           const [shiftsData, timeOffData, emergencyData] = await Promise.all([
             fetchShifts(selectedStore, startDate, endDate),
             fetchApprovedTimeOffRequests(startDate, endDate),
-            fetchEmergencyRequests(selectedStore, startDate, endDate)
+            fetchEmergencyRequests(selectedStore, startDate, endDate, currentUser?.id)
           ]);
-          
+
           setShifts(shiftsData);
           setApprovedTimeOffRequests(timeOffData);
           setEmergencyRequests(emergencyData);
@@ -225,7 +229,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
       // 通常のシフトを取得
       const regularShifts = shifts.filter(shift => {
         if (shift.date !== date || shift.storeId !== selectedStore) return false;
-        
+
         const pattern = timeSlots.find(ts => ts.id === timeSlot);
         if (!pattern || !pattern.start_time || !pattern.end_time) return false;
 
@@ -234,7 +238,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
 
       // 固定シフトをチェックして追加
       const dayOfWeek = new Date(date).getDay();
-      const fixedShiftsForSlot = fixedShifts.filter(fixedShift => 
+      const fixedShiftsForSlot = fixedShifts.filter(fixedShift =>
         fixedShift.day_of_week === dayOfWeek &&
         fixedShift.time_slot_id === timeSlot &&
         fixedShift.store_id === selectedStore &&
@@ -243,7 +247,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
 
       // 固定シフトユーザーが既に通常のシフトに入っているかチェック
       const existingUserIds = regularShifts.map(shift => shift.userId);
-      
+
       // 固定シフトをshiftオブジェクトとして変換
       const fixedShiftsAsShifts = fixedShiftsForSlot
         .filter(fixedShift => !existingUserIds.includes(fixedShift.user_id))
@@ -278,7 +282,7 @@ export const useShiftData = (selectedStore: string, selectedWeek: string, viewMo
     approvedTimeOffRequests,
     loading,
     error,
-    
+
     // 関数
     getShiftForSlot,
     setShifts,

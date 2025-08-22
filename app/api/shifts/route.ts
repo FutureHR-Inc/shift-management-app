@@ -72,7 +72,14 @@ export async function GET(request: Request) {
     }
 
     if (userId) {
-      query = query.eq('user_id', userId);
+      // "current"の場合はcurrent_user_idを使用
+      const actualUserId = userId === 'current' ? currentUserId : userId;
+      if (actualUserId) {
+        console.log('🔍 [SHIFTS API] User IDフィルタリング:', { original: userId, actual: actualUserId });
+        query = query.eq('user_id', actualUserId);
+      } else {
+        console.warn('🔍 [SHIFTS API] user_id="current"だがcurrent_user_idが未指定');
+      }
     }
 
     if (startDate) {

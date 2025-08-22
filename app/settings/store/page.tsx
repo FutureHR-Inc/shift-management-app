@@ -90,6 +90,12 @@ export default function StoreSettingsPage() {
   // 新規店舗作成用state
   const [newStoreName, setNewStoreName] = useState('');
 
+  // 店舗編集・削除用state
+  const [showEditStore, setShowEditStore] = useState(false);
+  const [showDeleteStore, setShowDeleteStore] = useState(false);
+  const [editStoreName, setEditStoreName] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // フォーム用state
   const [requiredStaffData, setRequiredStaffData] = useState<{ [day: string]: { [timeSlot: string]: number } }>({});
   const [flexibleStaffData, setFlexibleStaffData] = useState<string[]>([]);
@@ -400,6 +406,121 @@ export default function StoreSettingsPage() {
     }
   };
 
+  // 店舗編集機能
+  const handleEditStore = async () => {
+    if (!editStoreName.trim()) {
+      setError('店舗名を入力してください');
+      return;
+    }
+
+    if (!selectedStore) {
+      setError('編集する店舗を選択してください');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/stores', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: selectedStore,
+          name: editStoreName.trim(),
+          current_user_id: currentUser?.id
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '店舗の更新に失敗しました');
+      }
+
+      // ローカル状態を更新
+      setStores(prev => prev.map(store =>
+        store.id === selectedStore
+          ? { ...store, name: editStoreName.trim() }
+          : store
+      ));
+
+      setEditStoreName('');
+      setShowEditStore(false);
+
+      alert('店舗名を更新しました');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '店舗の更新に失敗しました');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 店舗削除機能
+  const handleDeleteStore = async () => {
+    if (!selectedStore) {
+      setError('削除する店舗を選択してください');
+      return;
+    }
+
+    const storeName = stores.find(s => s.id === selectedStore)?.name || '';
+
+    if (!confirm(`店舗「${storeName}」を削除してもよろしいですか？\n\n注意：関連するシフト、時間帯、スタッフ配属データがある場合は削除できません。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/stores?id=${selectedStore}&current_user_id=${currentUser?.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (response.status === 409) {
+          setError(`削除できません: ${errorData.details || errorData.error}`);
+        } else {
+          throw new Error(errorData.error || '店舗の削除に失敗しました');
+        }
+        return;
+      }
+
+      // ローカル状態を更新
+      setStores(prev => prev.filter(store => store.id !== selectedStore));
+      setSelectedStore(stores.length > 1 ? stores.find(s => s.id !== selectedStore)?.id || '' : '');
+      setShowDeleteStore(false);
+
+      alert('店舗を削除しました');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '店舗の削除に失敗しました');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 店舗編集モーダルを開く
+  const openEditModal = () => {
+    if (!selectedStore) {
+      setError('編集する店舗を選択してください');
+      return;
+    }
+    const storeName = stores.find(s => s.id === selectedStore)?.name || '';
+    setEditStoreName(storeName);
+    setShowEditStore(true);
+  };
+
+  // 店舗削除モーダルを開く
+  const openDeleteModal = () => {
+    if (!selectedStore) {
+      setError('削除する店舗を選択してください');
+      return;
+    }
+    setShowDeleteStore(true);
+  };
+
   const getTimeSlotLabel = (slotId: string) => {
     const slot = timeSlots.find(ts => ts.id === slotId);
     return slot ? `${slot.name} (${slot.start_time}-${slot.end_time})` : slotId;
@@ -486,32 +607,64 @@ export default function StoreSettingsPage() {
         <Card>
           <CardContent className="pt-6">
             {stores.length > 0 ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <label className="text-sm font-medium text-gray-700">
-                    設定する店舗:
-                  </label>
-                  <select
-                    value={selectedStore}
-                    onChange={(e) => setSelectedStore(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <label className="text-sm font-medium text-gray-700">
+                      設定する店舗:
+                    </label>
+                    <select
+                      value={selectedStore}
+                      onChange={(e) => setSelectedStore(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={loading || isSaving}
+                    >
+                      {stores.map(store => (
+                        <option key={store.id} value={store.id}>{store.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    onClick={() => setShowCreateStore(true)}
+                    variant="secondary"
                     disabled={loading || isSaving}
                   >
-                    {stores.map(store => (
-                      <option key={store.id} value={store.id}>{store.name}</option>
-                    ))}
-                  </select>
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    新しい店舗を追加
+                  </Button>
                 </div>
-                <Button
-                  onClick={() => setShowCreateStore(true)}
-                  variant="secondary"
-                  disabled={loading || isSaving}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  新しい店舗を追加
-                </Button>
+
+                {/* 店舗管理ボタン */}
+                {selectedStore && (
+                  <div className="flex items-center space-x-3 pt-2 border-t border-gray-200">
+                    <span className="text-sm text-gray-600">店舗管理:</span>
+                    <Button
+                      onClick={openEditModal}
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading || isSaving || isDeleting}
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      店舗名を編集
+                    </Button>
+                    <Button
+                      onClick={openDeleteModal}
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading || isSaving || isDeleting}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      店舗を削除
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8">
@@ -595,6 +748,151 @@ export default function StoreSettingsPage() {
                         </>
                       ) : (
                         '店舗を作成'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 店舗編集モーダル */}
+        {showEditStore && (
+          <div
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowEditStore(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">店舗名を編集</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowEditStore(false)}
+                    disabled={isSaving}
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      店舗名 *
+                    </label>
+                    <Input
+                      placeholder="新しい店舗名を入力"
+                      value={editStoreName}
+                      onChange={(e) => setEditStoreName(e.target.value)}
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  <div className="flex space-x-3 pt-4">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowEditStore(false)}
+                      disabled={isSaving}
+                      className="flex-1"
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={handleEditStore}
+                      disabled={isSaving || !editStoreName.trim()}
+                      className="flex-1"
+                    >
+                      {isSaving ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          更新中...
+                        </>
+                      ) : (
+                        '店舗名を更新'
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 店舗削除モーダル */}
+        {showDeleteStore && (
+          <div
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowDeleteStore(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-red-600">店舗を削除</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDeleteStore(false)}
+                    disabled={isDeleting}
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3 p-4 bg-red-50 rounded-xl">
+                    <svg className="w-8 h-8 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <div>
+                      <h3 className="font-medium text-red-900">この操作は取り消せません</h3>
+                      <p className="text-sm text-red-700 mt-1">
+                        店舗「{stores.find(s => s.id === selectedStore)?.name}」を完全に削除します。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-yellow-50 rounded-xl">
+                    <h4 className="font-medium text-yellow-900 mb-2">削除前の注意事項</h4>
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>• 関連するシフトデータがある場合は削除できません</li>
+                      <li>• 時間帯設定やスタッフの配属も全て削除されます</li>
+                      <li>• 代打募集データも全て削除されます</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex space-x-3 pt-4">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowDeleteStore(false)}
+                      disabled={isDeleting}
+                      className="flex-1"
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={handleDeleteStore}
+                      disabled={isDeleting}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          削除中...
+                        </>
+                      ) : (
+                        '削除を実行'
                       )}
                     </Button>
                   </div>

@@ -86,7 +86,7 @@ export default function EmergencyManagementPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     const manageParam = urlParams.get('manage');
-    
+
     // タブパラメータがある場合は該当タブを開く
     if (tabParam === 'manage') {
       setActiveTab('manage');
@@ -95,7 +95,7 @@ export default function EmergencyManagementPage() {
     } else if (tabParam === 'browse') {
       setActiveTab('browse');
     }
-    
+
     // 特定の募集を管理する場合
     if (manageParam && emergencyRequests.length > 0) {
       const targetRequest = emergencyRequests.find(req => req.id === manageParam);
@@ -113,14 +113,14 @@ export default function EmergencyManagementPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // 現在のユーザー情報をlocalStorageから取得
       const userInfo = localStorage.getItem('currentUser');
       if (!userInfo) {
         router.push('/login');
         return;
       }
-      
+
       const user = JSON.parse(userInfo);
       setCurrentUser(user);
 
@@ -205,10 +205,10 @@ export default function EmergencyManagementPage() {
       // 1週間分の日付を生成
       const startDate = new Date(viewWeek);
       startDate.setDate(startDate.getDate() - startDate.getDay()); // 週の始まり（日曜日）
-      
+
       const endDate = new Date(startDate);
       endDate.setDate(startDate.getDate() + 6); // 週の終わり（土曜日）
-      
+
       console.log('📅 期間:', {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0]
@@ -224,7 +224,7 @@ export default function EmergencyManagementPage() {
       const shiftsData = shiftsResponse.ok ? await shiftsResponse.json() : { data: [] };
       const usersData = usersResponse.ok ? await usersResponse.json() : { data: [] };
       const storesData = storeDetailResponse.ok ? await storeDetailResponse.json() : { data: [] };
-      
+
       console.log('📋 取得データ:', {
         shifts: shiftsData.data?.length || 0,
         users: usersData.data?.length || 0,
@@ -234,36 +234,36 @@ export default function EmergencyManagementPage() {
       // 選択店舗の詳細データを取得
       const selectedStoreData = storesData.data?.find((s: any) => s.id === selectedStore);
       const storeTimeSlots = timeSlots.filter(ts => ts.store_id === selectedStore);
-      
+
       console.log('🏪 店舗詳細:', {
         storeName: selectedStoreData?.name,
         requiredStaff: selectedStoreData?.required_staff,
         timeSlots: storeTimeSlots.length
       });
-      
+
       const days: ShiftTableDay[] = [];
-      
+
       for (let i = 0; i < 7; i++) {
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + i);
         const dateStr = currentDate.toISOString().split('T')[0];
-        
+
         // その日のシフトデータを取得
-        const dayShifts = (shiftsData.data || []).filter((shift: any) => 
+        const dayShifts = (shiftsData.data || []).filter((shift: any) =>
           shift.date === dateStr
         );
-        
+
         console.log(`📋 ${dateStr}のシフト:`, dayShifts.length, '件');
-        
+
         // 必要人数の設定を取得
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayName = dayNames[currentDate.getDay()];
-        
+
         const timeSlotData = storeTimeSlots.map(slot => {
-          const slotShifts = dayShifts.filter((shift: any) => 
+          const slotShifts = dayShifts.filter((shift: any) =>
             shift.time_slot_id === slot.id
           );
-          
+
           // 店舗の必要人数設定から正確に取得
           let requiredStaff = 0;
           if (selectedStoreData?.required_staff) {
@@ -272,17 +272,17 @@ export default function EmergencyManagementPage() {
               requiredStaff = dayRequiredStaff[slot.id] || 0;
             }
           }
-          
+
           const currentStaff = slotShifts.length;
           const shortage = Math.max(0, requiredStaff - currentStaff);
-          
+
           console.log(`🔢 ${slot.name} (${dayName}):`, {
             required: requiredStaff,
             current: currentStaff,
             shortage,
             shifts: slotShifts.map((s: any) => ({ name: s.users?.name, status: s.status }))
           });
-          
+
           return {
             id: slot.id,
             name: slot.name,
@@ -312,7 +312,7 @@ export default function EmergencyManagementPage() {
           timeSlots: timeSlotData
         });
       }
-      
+
       console.log('✅ シフト表データ取得完了:', days);
       setShiftTableData(days);
     } catch (error) {
@@ -348,25 +348,25 @@ export default function EmergencyManagementPage() {
       alert('過去の日付には代打募集を作成できません');
       return;
     }
-    
+
     // シフトが配置されていない場合でも人手不足なら作成可能
     const hasShifts = timeSlot.shifts.length > 0;
     const isShortage = timeSlot.shortage > 0;
-    
+
     if (!hasShifts && !isShortage) {
       alert('この時間帯には募集が必要な状況ではありません');
       return;
     }
-    
-    console.log('🎯 代打募集作成開始:', { 
-      date, 
+
+    console.log('🎯 代打募集作成開始:', {
+      date,
       timeSlot,
       hasShifts,
       isShortage,
       requiredStaff: timeSlot.requiredStaff,
       currentStaff: timeSlot.currentStaff
     });
-    
+
     setSelectedSlot({ date, timeSlot });
   };
 
@@ -378,7 +378,7 @@ export default function EmergencyManagementPage() {
     }
 
     setCreating(true);
-    
+
     try {
       // 募集タイプを判定
       const hasShifts = selectedSlot.timeSlot.shifts.length > 0;
@@ -425,19 +425,19 @@ export default function EmergencyManagementPage() {
 
       if (response.ok) {
         console.log('✅ 代打募集作成成功:', result);
-        
+
         // 募集タイプに応じた成功メッセージ
         const shiftStaff = selectedSlot.timeSlot.shifts.map((s: any) => s.user_name).join('、');
         const messageType = requestType === 'shortage' ? '人手不足募集' : '代打募集';
-        const situationDesc = requestType === 'shortage' 
+        const situationDesc = requestType === 'shortage'
           ? `👥 現在の配置: ${shiftStaff || 'なし'}\n⚠️ 不足人数: ${selectedSlot.timeSlot.shortage}名`
           : `👥 現在の配置: ${shiftStaff}`;
-        
+
         alert(`✅ ${messageType}を作成しました！\n\n📅 日時: ${formatDate(selectedSlot.date)}\n⏰ 時間: ${selectedSlot.timeSlot.name}\n${situationDesc}\n📝 理由: ${reason.trim()}\n\n📧 該当スタッフにメール通知を送信しています...`);
-        
+
         setReason('');
         setSelectedSlot(null);
-        
+
         // データを再取得
         await fetchData();
         await fetchShiftTableData();
@@ -474,7 +474,7 @@ export default function EmergencyManagementPage() {
 
   // 応募者の採用・拒否
   const handleVolunteerAction = async (
-    volunteerId: string, 
+    volunteerId: string,
     action: 'accept' | 'reject',
     customStartTime?: string,
     customEndTime?: string
@@ -504,8 +504,8 @@ export default function EmergencyManagementPage() {
       }
 
       const result = await response.json();
-      alert(action === 'accept' ? 
-        `${volunteers.find(v => v.id === volunteerId)?.user?.name}さんを採用しました` : 
+      alert(action === 'accept' ?
+        `${volunteers.find(v => v.id === volunteerId)?.user?.name}さんを採用しました` :
         '応募を拒否しました'
       );
 
@@ -572,8 +572,8 @@ export default function EmergencyManagementPage() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <p className="text-red-600 text-lg">❌ {error}</p>
-            <Button 
-              onClick={fetchData} 
+            <Button
+              onClick={fetchData}
               className="mt-4"
             >
               🔄 再読み込み
@@ -586,9 +586,9 @@ export default function EmergencyManagementPage() {
 
   // 現在の募集（自分が作成したもの）
   const myEmergencyRequests = emergencyRequests.filter(req => req.original_user_id === currentUser?.id);
-  
+
   // 他のスタッフの募集（自分以外）
-  const otherEmergencyRequests = emergencyRequests.filter(req => 
+  const otherEmergencyRequests = emergencyRequests.filter(req =>
     req.status === 'open' && req.original_user_id !== currentUser?.id
   );
 
@@ -606,42 +606,39 @@ export default function EmergencyManagementPage() {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('browse')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'browse'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'browse'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               募集一覧
             </button>
             <button
               onClick={() => setActiveTab('create')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'create'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'create'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               募集作成
             </button>
             <button
               onClick={() => setActiveTab('manage')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'manage'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'manage'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               募集管理
-              {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) => 
+              {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) =>
                 total + (req.emergency_volunteers?.length || 0), 0
               ) > 0 && (
-                <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
-                  {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) => 
-                    total + (req.emergency_volunteers?.length || 0), 0
-                  )}
-                </span>
-              )}
+                  <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+                    {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) =>
+                      total + (req.emergency_volunteers?.length || 0), 0
+                    )}
+                  </span>
+                )}
             </button>
           </nav>
         </div>
@@ -663,8 +660,9 @@ export default function EmergencyManagementPage() {
                     {otherEmergencyRequests.map((request) => {
                       const user = users.find(u => u.id === request.original_user_id);
                       const store = stores.find(s => s.id === request.store_id);
-                      const timeSlot = timeSlots.find(ts => ts.id === request.time_slot_id);
-                      
+                      // APIで取得されたtime_slotsデータを直接使用
+                      const timeSlot = request.time_slots || timeSlots.find(ts => ts.id === request.time_slot_id);
+
                       return (
                         <div key={request.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex justify-between items-start">
@@ -761,7 +759,7 @@ export default function EmergencyManagementPage() {
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                           <div className="bg-blue-50 p-4 rounded-lg">
                             <div className="text-lg font-bold text-blue-600">
-                              {shiftTableData.reduce((total, day) => 
+                              {shiftTableData.reduce((total, day) =>
                                 total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
                               )}名
                             </div>
@@ -769,7 +767,7 @@ export default function EmergencyManagementPage() {
                           </div>
                           <div className="bg-green-50 p-4 rounded-lg">
                             <div className="text-lg font-bold text-green-600">
-                              {shiftTableData.reduce((total, day) => 
+                              {shiftTableData.reduce((total, day) =>
                                 total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
                               )}名
                             </div>
@@ -777,7 +775,7 @@ export default function EmergencyManagementPage() {
                           </div>
                           <div className="bg-red-50 p-4 rounded-lg">
                             <div className="text-lg font-bold text-red-600">
-                              {shiftTableData.reduce((total, day) => 
+                              {shiftTableData.reduce((total, day) =>
                                 total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.shortage, 0), 0
                               )}名
                             </div>
@@ -785,8 +783,8 @@ export default function EmergencyManagementPage() {
                           </div>
                           <div className="bg-purple-50 p-4 rounded-lg">
                             <div className="text-lg font-bold text-purple-600">
-                              {shiftTableData.reduce((total, day) => 
-                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                              {shiftTableData.reduce((total, day) =>
+                                total + day.timeSlots.reduce((dayTotal, slot) =>
                                   dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
                                 ), 0
                               )}名
@@ -794,30 +792,30 @@ export default function EmergencyManagementPage() {
                             <p className="text-xs text-purple-700 mt-1">確定済みシフト</p>
                           </div>
                         </div>
-                        
+
                         {/* 詳細情報 */}
                         <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                               <span className="font-medium">下書き:</span>{' '}
-                              {shiftTableData.reduce((total, day) => 
-                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                              {shiftTableData.reduce((total, day) =>
+                                total + day.timeSlots.reduce((dayTotal, slot) =>
                                   dayTotal + slot.shifts.filter(shift => shift.status === 'draft').length, 0
                                 ), 0
                               )}名
                             </div>
                             <div>
                               <span className="font-medium">確定済み:</span>{' '}
-                              {shiftTableData.reduce((total, day) => 
-                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                              {shiftTableData.reduce((total, day) =>
+                                total + day.timeSlots.reduce((dayTotal, slot) =>
                                   dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
                                 ), 0
                               )}名
                             </div>
                             <div>
                               <span className="font-medium">完了:</span>{' '}
-                              {shiftTableData.reduce((total, day) => 
-                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                              {shiftTableData.reduce((total, day) =>
+                                total + day.timeSlots.reduce((dayTotal, slot) =>
                                   dayTotal + slot.shifts.filter(shift => shift.status === 'completed').length, 0
                                 ), 0
                               )}名
@@ -825,10 +823,10 @@ export default function EmergencyManagementPage() {
                             <div>
                               <span className="font-medium">充足率:</span>{' '}
                               {(() => {
-                                const totalRequired = shiftTableData.reduce((total, day) => 
+                                const totalRequired = shiftTableData.reduce((total, day) =>
                                   total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
                                 );
-                                const totalCurrent = shiftTableData.reduce((total, day) => 
+                                const totalCurrent = shiftTableData.reduce((total, day) =>
                                   total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
                                 );
                                 return totalRequired > 0 ? Math.round((totalCurrent / totalRequired) * 100) : 0;
@@ -880,23 +878,22 @@ export default function EmergencyManagementPage() {
                                     {shiftTableData.map((day) => {
                                       const daySlot = day.timeSlots.find(ts => ts.id === timeSlot.id);
                                       if (!daySlot) return <td key={day.date} className="border border-gray-300 px-2 py-4 min-w-32"></td>;
-                                      
+
                                       const isPast = new Date(day.date) < new Date();
                                       const hasShifts = daySlot.shifts.length > 0;
                                       const isShortage = daySlot.shortage > 0;
                                       const isOverStaffed = daySlot.currentStaff > daySlot.requiredStaff;
                                       const canCreateRequest = !isPast && (hasShifts || isShortage);
-                                      
+
                                       return (
-                                        <td 
-                                          key={day.date} 
-                                          className={`border border-gray-300 px-2 py-4 text-sm min-w-32 ${
-                                            isPast 
-                                              ? 'bg-gray-50' 
+                                        <td
+                                          key={day.date}
+                                          className={`border border-gray-300 px-2 py-4 text-sm min-w-32 ${isPast
+                                              ? 'bg-gray-50'
                                               : (hasShifts || isShortage)
-                                                ? 'bg-blue-50 cursor-pointer hover:bg-blue-100' 
+                                                ? 'bg-blue-50 cursor-pointer hover:bg-blue-100'
                                                 : 'bg-white'
-                                          }`}
+                                            }`}
                                           onClick={() => {
                                             if (!isPast && (hasShifts || isShortage)) {
                                               console.log('🎯 代打募集作成クリック:', { date: day.date, timeSlot: daySlot });
@@ -907,13 +904,12 @@ export default function EmergencyManagementPage() {
                                           <div className="space-y-2 min-h-16">
                                             {/* 人数表示 */}
                                             <div className="flex items-center justify-between">
-                                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                                isShortage 
-                                                  ? 'bg-red-100 text-red-700' 
-                                                  : isOverStaffed 
+                                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${isShortage
+                                                  ? 'bg-red-100 text-red-700'
+                                                  : isOverStaffed
                                                     ? 'bg-orange-100 text-orange-700'
                                                     : 'bg-green-100 text-green-700'
-                                              }`}>
+                                                }`}>
                                                 {daySlot.currentStaff}/{daySlot.requiredStaff}人
                                               </span>
                                               {isShortage && (
@@ -931,19 +927,18 @@ export default function EmergencyManagementPage() {
                                                   const isCompleted = shift.status === 'completed';
                                                   const isDraft = shift.status === 'draft';
                                                   const hasCustomTime = shift.custom_start_time && shift.custom_end_time;
-                                                  
+
                                                   return (
-                                                    <div 
+                                                    <div
                                                       key={shift.id}
-                                                      className={`text-xs p-2 rounded-md border transition-all ${
-                                                        isCompleted
+                                                      className={`text-xs p-2 rounded-md border transition-all ${isCompleted
                                                           ? 'bg-green-100 border-green-300 text-green-800'
-                                                          : isConfirmed 
-                                                            ? 'bg-blue-100 border-blue-300 text-blue-800' 
+                                                          : isConfirmed
+                                                            ? 'bg-blue-100 border-blue-300 text-blue-800'
                                                             : isDraft
                                                               ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
                                                               : 'bg-white border-gray-200 text-gray-700'
-                                                      } ${!isPast && (hasShifts || isShortage) ? 'hover:shadow-sm' : ''}`}
+                                                        } ${!isPast && (hasShifts || isShortage) ? 'hover:shadow-sm' : ''}`}
                                                     >
                                                       <div className="font-medium truncate">
                                                         {shift.user_name}
@@ -954,13 +949,12 @@ export default function EmergencyManagementPage() {
                                                         </div>
                                                       )}
                                                       <div className="flex items-center justify-between mt-1">
-                                                        <div className={`text-xs px-1.5 py-0.5 rounded-full ${
-                                                          isCompleted
+                                                        <div className={`text-xs px-1.5 py-0.5 rounded-full ${isCompleted
                                                             ? 'bg-green-200 text-green-700'
                                                             : isConfirmed
                                                               ? 'bg-blue-200 text-blue-700'
                                                               : 'bg-yellow-200 text-yellow-700'
-                                                        }`}>
+                                                          }`}>
                                                           {isCompleted ? '完了' : isConfirmed ? '確定' : '下書き'}
                                                         </div>
                                                         {(isConfirmed || isCompleted) && (
@@ -985,25 +979,24 @@ export default function EmergencyManagementPage() {
                                             {/* 代打募集ボタン */}
                                             {canCreateRequest && (
                                               <div className="text-center pt-1">
-                                                <div className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${
-                                                  isShortage
+                                                <div className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${isShortage
                                                     ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                                                    : hasShifts 
+                                                    : hasShifts
                                                       ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
                                                       : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                                                }`}>
+                                                  }`}>
                                                   <span className="sm:hidden">
-                                                    {isShortage 
+                                                    {isShortage
                                                       ? '🆘 人手不足'
-                                                      : hasShifts 
+                                                      : hasShifts
                                                         ? '📝 代打募集'
                                                         : '➕ 新規募集'
                                                     }
                                                   </span>
                                                   <span className="hidden sm:inline">
-                                                    {isShortage 
+                                                    {isShortage
                                                       ? '🆘 人手不足募集'
-                                                      : hasShifts 
+                                                      : hasShifts
                                                         ? '📝 代打募集作成'
                                                         : '➕ 新規シフト募集'
                                                     }
@@ -1084,8 +1077,8 @@ export default function EmergencyManagementPage() {
                     rows={4}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder={selectedSlot.timeSlot.shortage > 0 
-                      ? "例：人手が足りないため、急な欠員のため、業務量増加のため など" 
+                    placeholder={selectedSlot.timeSlot.shortage > 0
+                      ? "例：人手が足りないため、急な欠員のため、業務量増加のため など"
                       : "例：急な用事のため、体調不良のため、家庭の事情のため など"
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
@@ -1169,7 +1162,7 @@ export default function EmergencyManagementPage() {
                         const timeSlot = timeSlots.find(ts => ts.id === request.time_slot_id);
                         const volunteerCount = request.emergency_volunteers?.length || 0;
                         const isMyRequest = request.original_user_id === currentUser?.id;
-                        
+
                         return (
                           <div key={request.id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
@@ -1180,9 +1173,8 @@ export default function EmergencyManagementPage() {
                                     {user?.name || '不明なユーザー'}
                                     {isMyRequest && <span className="text-blue-600">（自分）</span>}
                                   </span>
-                                  <span className={`px-2 py-1 text-xs rounded-full ${
-                                    volunteerCount > 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${volunteerCount > 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
                                     {volunteerCount > 0 ? `応募者${volunteerCount}名` : '応募者募集中'}
                                   </span>
                                 </div>
@@ -1238,7 +1230,7 @@ export default function EmergencyManagementPage() {
 
         {/* 代打募集応募管理モーダル（glassmorphism） */}
         {showManagementModal && selectedRequestForManagement && (
-          <div 
+          <div
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {

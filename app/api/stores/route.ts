@@ -194,11 +194,63 @@ export async function PUT(request: NextRequest) {
 // DELETE - 店舗削除
 export async function DELETE(request: NextRequest) {
   try {
+    console.log('🗑️ [STORE DELETE] Store deletion started');
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const currentUserId = searchParams.get('current_user_id');
 
     if (!id) {
       return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
+    }
+
+    // 企業分離：削除権限チェック
+    if (currentUserId) {
+      const userCompanyId = await getCurrentUserCompanyId(currentUserId);
+
+      // 対象店舗の企業IDを確認
+      const { data: storeData, error: storeError } = await supabase
+        .from('stores')
+        .select('company_id')
+        .eq('id', id)
+        .single();
+
+      if (storeError || !storeData) {
+        return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+      }
+
+      // 企業IDが一致しない場合は削除を拒否
+      if (storeData.company_id !== userCompanyId) {
+        console.error('🚨 [STORE DELETE] Company ID mismatch:', {
+          store_company_id: storeData.company_id,
+          user_company_id: userCompanyId
+        });
+        return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      }
+    }
+
+    // 関連データの存在チェック（シフト、代打募集、時間帯等）
+    console.log('🔍 [STORE DELETE] Checking related data...');
+    const [shiftsCheck, emergencyCheck, timeSlotsCheck, userStoresCheck] = await Promise.all([
+      supabase.from('shifts').select('id').eq('store_id', id).limit(1),
+      supabase.from('emergency_requests').select('id').eq('store_id', id).limit(1),
+      supabase.from('time_slots').select('id').eq('store_id', id).limit(1),
+      supabase.from('user_stores').select('id').eq('store_id', id).limit(1)
+    ]);
+
+    const relatedData = [];
+    if (shiftsCheck.data && shiftsCheck.data.length > 0) relatedData.push('shifts');
+    if (emergencyCheck.data && emergencyCheck.data.length > 0) relatedData.push('emergency_requests');
+    if (timeSlotsCheck.data && timeSlotsCheck.data.length > 0) relatedData.push('time_slots');
+    if (userStoresCheck.data && userStoresCheck.data.length > 0) relatedData.push('user_stores');
+
+    if (relatedData.length > 0) {
+      console.log('⚠️ [STORE DELETE] Found related data:', relatedData);
+      return NextResponse.json({
+        error: 'Cannot delete store with existing data',
+        details: `Found related data in: ${relatedData.join(', ')}. Please remove all related data before deleting the store.`,
+        relatedData
+      }, { status: 409 });
     }
 
     const { error } = await supabase
@@ -211,6 +263,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    console.log('✅ [STORE DELETE] Store deleted successfully:', id);
     return NextResponse.json({ message: 'Store deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error:', error);

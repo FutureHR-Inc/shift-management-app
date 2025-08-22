@@ -14,6 +14,7 @@ interface DesktopShiftTableProps {
   handleDeleteShift: (shiftId: string) => void;
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
+  currentUser?: { id: string };
 }
 
 export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
@@ -26,9 +27,10 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   handleCellClick,
   handleDeleteShift,
   setContextMenu,
-  setEmergencyManagement
+  setEmergencyManagement,
+  currentUser
 }) => {
-  const { users, timeSlots, getShiftForSlot } = useShiftData(selectedStore, selectedWeek, viewMode);
+  const { users, timeSlots, getShiftForSlot } = useShiftData(selectedStore, selectedWeek, viewMode, currentUser);
 
   return (
     <div className="hidden lg:block">
@@ -37,10 +39,10 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
           <colgroup>
             <col style={{ width: viewMode === 'week' ? '120px' : '100px' }} />
             {displayDates.map((_, index) => (
-              <col key={index} style={{ 
-                width: viewMode === 'month' ? '120px' : 
-                       viewMode === 'half-month' ? '150px' : 
-                       `calc((100% - 120px) / ${displayDates.length})`
+              <col key={index} style={{
+                width: viewMode === 'month' ? '120px' :
+                  viewMode === 'half-month' ? '150px' :
+                    `calc((100% - 120px) / ${displayDates.length})`
               }} />
             ))}
           </colgroup>
@@ -50,9 +52,9 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
               {displayDates.map((date, index) => (
                 <th key={index} className="text-center p-1 sm:p-2 lg:p-1 font-medium text-gray-900 bg-gray-50">
                   <div className="text-xs sm:text-sm lg:text-sm">
-                    {date.toLocaleDateString('ja-JP', { 
-                      month: viewMode === 'month' ? 'numeric' : 'short', 
-                      day: 'numeric' 
+                    {date.toLocaleDateString('ja-JP', {
+                      month: viewMode === 'month' ? 'numeric' : 'short',
+                      day: 'numeric'
                     })}
                   </div>
                   <div className="text-xs text-gray-500">
@@ -75,7 +77,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                     const dayShifts = getShiftForSlot(dateString, timeSlot.id);
                     const required = getRequiredStaff(date.getDay(), timeSlot.id);
                     const current = dayShifts ? dayShifts.length : 0;
-                    
+
                     // 人数過不足による色分け
                     let cellStyle = '';
                     if (current < required) {
@@ -87,10 +89,10 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                     } else {
                       cellStyle = 'border-gray-200 bg-gray-50';
                     }
-                    
+
                     return (
                       <td key={dayIndex} className="p-1 sm:p-2 lg:p-1 align-top">
-                        <div 
+                        <div
                           className={`min-h-16 border-2 rounded-lg sm:rounded-xl lg:rounded-lg p-1 sm:p-2 lg:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation h-auto ${cellStyle}`}
                           onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
                         >
@@ -105,7 +107,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                               </span>
                             )}
                           </div>
-                          
+
                           {/* スタッフ表示 */}
                           <div className="space-y-1 lg:space-y-0.5">
                             {/* 既存のシフト表示 */}
@@ -114,7 +116,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                 try {
                                   const user = users.find(u => u.id === shift.userId);
                                   const timeSlotData = timeSlots.find(ts => ts.id === shift.timeSlotId);
-                                
+
                                   if (!user || !timeSlotData) {
                                     return null;
                                   }
@@ -122,26 +124,25 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                   // 確定済みシフトかどうかを判定
                                   const isConfirmed = shift.status === 'confirmed';
                                   const isFixedShift = (shift as any).isFixedShift || shift.id?.startsWith('fixed-');
-                                  
+
                                   // 代打募集状況をチェック（固定シフトは代打募集不可）
                                   const emergencyRequest = isFixedShift ? null : getEmergencyRequestForShift(shift.id);
                                   const isEmergencyRequested = !!emergencyRequest;
 
                                   // 表示する時間を決定
-                                  const displayTime = shift.customStartTime && shift.customEndTime 
+                                  const displayTime = shift.customStartTime && shift.customEndTime
                                     ? `${shift.customStartTime}-${shift.customEndTime}`
                                     : `${timeSlotData.start_time}-${timeSlotData.end_time}`;
-                                  
+
                                   return (
-                                    <div 
+                                    <div
                                       key={shift.id}
-                                      className={`text-xs sm:text-sm lg:text-xs p-1.5 sm:p-2 lg:p-1.5 rounded-md border transition-all group relative ${
-                                        isFixedShift
+                                      className={`text-xs sm:text-sm lg:text-xs p-1.5 sm:p-2 lg:p-1.5 rounded-md border transition-all group relative ${isFixedShift
                                           ? 'bg-green-100 border-green-300 text-green-800'
-                                          : isConfirmed 
-                                            ? 'bg-blue-100 border-blue-300 text-blue-800' 
+                                          : isConfirmed
+                                            ? 'bg-blue-100 border-blue-300 text-blue-800'
                                             : 'bg-white border-gray-200 text-gray-700'
-                                      } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
+                                        } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         if (isFixedShift) {
@@ -150,20 +151,20 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                         if (isEmergencyRequested) {
                                           const volunteerCount = emergencyRequest.emergency_volunteers?.length || 0;
                                           if (volunteerCount > 0) {
-                                            setEmergencyManagement({ 
-                                              show: true, 
-                                              request: emergencyRequest 
+                                            setEmergencyManagement({
+                                              show: true,
+                                              request: emergencyRequest
                                             });
                                           } else {
                                             alert('まだ応募者がいません。');
                                           }
                                         } else {
-                                          setContextMenu({ 
-                                            show: true, 
-                                            x: e.pageX, 
-                                            y: e.pageY, 
-                                            shiftId: shift.id, 
-                                            shift: shift 
+                                          setContextMenu({
+                                            show: true,
+                                            x: e.pageX,
+                                            y: e.pageY,
+                                            shiftId: shift.id,
+                                            shift: shift
                                           });
                                         }
                                       }}
@@ -208,7 +209,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                             )}
 
                             {/* 常に表示されるスタッフ追加ボタン */}
-                            <div 
+                            <div
                               className="flex items-center justify-center p-1.5 sm:p-2 lg:p-1.5 border-2 border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
                               onClick={(e) => {
                                 e.stopPropagation();

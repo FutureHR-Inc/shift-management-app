@@ -138,11 +138,11 @@ export default function StaffDashboardPage() {
         }
 
         // 代打募集を取得（自分が作成したもの以外）
-        const emergencyResponse = await fetch('/api/emergency-requests?status=open');
+        const emergencyResponse = await fetch(`/api/emergency-requests?status=open&current_user_id=${currentUser.id}`);
         if (emergencyResponse.ok) {
           const emergencyResult = await emergencyResponse.json();
           // 自分が作成した代打募集を除外
-          const filteredEmergencyRequests = (emergencyResult.data || []).filter((req: EmergencyRequest) => 
+          const filteredEmergencyRequests = (emergencyResult.data || []).filter((req: EmergencyRequest) =>
             req.original_user_id !== currentUser.id
           );
           setEmergencyRequests(filteredEmergencyRequests);
@@ -162,16 +162,16 @@ export default function StaffDashboardPage() {
   const calculateWeeklyHours = () => {
     return weeklyShifts.reduce((total, shift) => {
       if (!shift.shift_patterns) return total;
-        const start = new Date(`2000-01-01T${shift.shift_patterns.start_time}`);
-        const end = new Date(`2000-01-01T${shift.shift_patterns.end_time}`);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      const start = new Date(`2000-01-01T${shift.shift_patterns.start_time}`);
+      const end = new Date(`2000-01-01T${shift.shift_patterns.end_time}`);
+      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       return total + hours;
     }, 0);
   };
 
   // 既に応募済みかチェック
   const isAlreadyApplied = (request: EmergencyRequest) => {
-    return request.emergency_volunteers?.some(volunteer => 
+    return request.emergency_volunteers?.some(volunteer =>
       volunteer.user_id === currentUser?.id
     );
   };
@@ -186,7 +186,7 @@ export default function StaffDashboardPage() {
     const requestDate = new Date(date);
     const today = new Date();
     const diffDays = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays <= 1) return 'urgent'; // 当日・翌日
     if (diffDays <= 3) return 'soon'; // 3日以内
     return 'normal'; // それ以降
@@ -235,7 +235,7 @@ export default function StaffDashboardPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-red-700">{error}</p>
-            <button 
+            <button
               onClick={() => setError(null)}
               className="ml-auto text-red-400 hover:text-red-600"
             >
@@ -260,7 +260,7 @@ export default function StaffDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p className="text-red-700">{error}</p>
-              <button 
+              <button
                 onClick={() => setError(null)}
                 className="ml-auto text-red-400 hover:text-red-600 p-1"
               >
@@ -309,11 +309,10 @@ export default function StaffDashboardPage() {
                   </div>
                 </div>
                 <div className="text-right ml-3">
-                  <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
-                    todayShift.status === 'confirmed' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${todayShift.status === 'confirmed'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {todayShift.status === 'confirmed' ? '確定' : '未確定'}
                   </div>
                 </div>
@@ -385,7 +384,7 @@ export default function StaffDashboardPage() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 text-sm sm:text-base">
-                            {new Date(request.date).toLocaleDateString('ja-JP')} 
+                            {new Date(request.date).toLocaleDateString('ja-JP')}
                             {request.time_slots?.name && ` - ${request.time_slots.name}`}
                           </p>
                           <p className="text-xs sm:text-sm text-gray-600 mt-1">
@@ -397,15 +396,14 @@ export default function StaffDashboardPage() {
                             </p>
                           )}
                         </div>
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${
-                          request.status === 'converted_to_shift' 
-                            ? 'bg-green-100 text-green-800'
-                            : request.status === 'submitted'
+                        <div className={`px-2 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${request.status === 'converted_to_shift'
+                          ? 'bg-green-100 text-green-800'
+                          : request.status === 'submitted'
                             ? 'bg-blue-100 text-blue-800'
                             : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {request.status === 'converted_to_shift' ? 'シフト作成済' : 
-                           request.status === 'submitted' ? '提出済' : '下書き'}
+                          }`}>
+                          {request.status === 'converted_to_shift' ? 'シフト作成済' :
+                            request.status === 'submitted' ? '提出済' : '下書き'}
                         </div>
                       </div>
                     </div>
@@ -420,8 +418,8 @@ export default function StaffDashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg sm:text-xl">代打募集</CardTitle>
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   size="sm"
                   onClick={() => router.push('/emergency')}
                   className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 h-auto"
@@ -442,11 +440,11 @@ export default function StaffDashboardPage() {
                     const urgencyStyle = getUrgencyStyle(urgency);
                     const urgencyLabel = getUrgencyLabel(urgency);
                     const alreadyApplied = isAlreadyApplied(request);
-                    
+
                     return (
                       <div key={request.id} className={`border rounded-lg p-3 sm:p-4 ${urgencyStyle}`}>
                         <div className="space-y-2">
-                        <div className="flex items-start justify-between">
+                          <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium text-gray-900 text-sm sm:text-base">
                                 {new Date(request.date).toLocaleDateString('ja-JP', {
@@ -460,30 +458,30 @@ export default function StaffDashboardPage() {
                               </span>
                             </div>
                             <div className="ml-2 flex-shrink-0">
-                            {alreadyApplied ? (
-                              <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                                応募済み
-                              </div>
+                              {alreadyApplied ? (
+                                <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                                  応募済み
+                                </div>
                               ) : hasShiftOnDate(request.date) ? (
                                 <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                                   シフト有り
                                 </div>
-                            ) : (
-                              <Button 
-                                size="sm" 
-                                onClick={() => router.push(`/emergency?apply=${request.id}`)}
-                                className="text-xs px-3 py-1 h-auto min-h-[32px] min-w-[60px]"
-                              >
-                                参加
-                              </Button>
-                            )}
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => router.push(`/emergency?apply=${request.id}`)}
+                                  className="text-xs px-3 py-1 h-auto min-h-[32px] min-w-[60px]"
+                                >
+                                  参加
+                                </Button>
+                              )}
                             </div>
                           </div>
                           <div className="space-y-1">
                             <p className="text-xs sm:text-sm text-gray-600">
-                              {request.time_slots 
+                              {request.time_slots
                                 ? `${request.time_slots.name} (${request.time_slots.start_time} - ${request.time_slots.end_time})`
-                                : request.shift_patterns 
+                                : request.shift_patterns
                                   ? `${request.shift_patterns.name} (${request.shift_patterns.start_time} - ${request.shift_patterns.end_time})`
                                   : '時間未設定'
                               }

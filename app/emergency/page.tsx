@@ -94,7 +94,7 @@ export default function EmergencyPage() {
   const [applicationNote, setApplicationNote] = useState<string>(''); // 応募メモ用state
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  
+
   const router = useRouter();
 
   useEffect(() => {
@@ -132,11 +132,11 @@ export default function EmergencyPage() {
     const fetchData = async () => {
       try {
         // 代打募集データを取得
-        const emergencyResponse = await fetch('/api/emergency-requests');
+        const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
           // オープン状態で、自分が作成したもの以外の代打募集のみを表示
-          const openRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          const openRequests = emergencyData.data.filter((req: EmergencyRequest) =>
             req.status === 'open' && req.original_user_id !== currentUser.id
           );
           setEmergencyRequests(openRequests);
@@ -150,23 +150,23 @@ export default function EmergencyPage() {
           );
           if (shiftsResponse.ok) {
             const shiftsData = await shiftsResponse.json();
-            
+
             // 既に代打募集があるシフトを除外
-            const allEmergencyResponse = await fetch('/api/emergency-requests');
+            const allEmergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
             if (allEmergencyResponse.ok) {
               const allEmergencyData = await allEmergencyResponse.json();
-              const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
+              const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) =>
                 req.original_user_id === currentUser.id && req.status === 'open'
               );
-              
+
               const filteredShifts = (shiftsData.data || []).filter((shift: Shift) => {
-                return !existingRequests.some((req: EmergencyRequest) => 
-                  req.date === shift.date && 
+                return !existingRequests.some((req: EmergencyRequest) =>
+                  req.date === shift.date &&
                   req.store_id === shift.store_id &&
                   req.time_slot_id === shift.time_slot_id
                 );
               });
-              
+
               setMyShifts(filteredShifts);
             } else {
               setMyShifts(shiftsData.data || []);
@@ -236,10 +236,10 @@ export default function EmergencyPage() {
       console.log('応募成功:', result);
 
       alert('代打募集に応募しました。結果をお待ちください。');
-      
+
       // フォームをリセット
       setApplicationNote('');
-      
+
       // データを再取得
       window.location.reload();
 
@@ -248,7 +248,7 @@ export default function EmergencyPage() {
       console.error('Error type:', typeof error);
       console.error('Error message:', error instanceof Error ? error.message : String(error));
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      
+
       const errorMessage = error instanceof Error ? error.message : '応募に失敗しました';
       setError(errorMessage);
     } finally {
@@ -292,10 +292,10 @@ export default function EmergencyPage() {
       setSelectedShift(null);
       setReason('');
       setActiveTab('browse');
-      
+
       // データを再取得
       const fetchData = async () => {
-        const emergencyResponse = await fetch('/api/emergency-requests');
+        const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser?.id}`);
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
           const openRequests = emergencyData.data.filter((req: EmergencyRequest) => req.status === 'open');
@@ -303,7 +303,7 @@ export default function EmergencyPage() {
         }
       };
       fetchData();
-      
+
     } catch (error) {
       console.error('代打募集作成エラー:', error);
       setError(error instanceof Error ? error.message : '代打募集の作成に失敗しました');
@@ -314,7 +314,7 @@ export default function EmergencyPage() {
 
   // 既に応募済みかチェック
   const isAlreadyApplied = (request: EmergencyRequest) => {
-    return request.emergency_volunteers?.some(volunteer => 
+    return request.emergency_volunteers?.some(volunteer =>
       volunteer.user_id === currentUser?.id
     );
   };
@@ -340,7 +340,7 @@ export default function EmergencyPage() {
     const requestDate = new Date(date);
     const today = new Date();
     const diffDays = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays <= 1) return 'urgent'; // 当日・翌日
     if (diffDays <= 3) return 'soon'; // 3日以内
     return 'normal'; // それ以降
@@ -391,33 +391,31 @@ export default function EmergencyPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">🆘 代打募集</h1>
             <p className="text-gray-600 mt-2">
-              {currentUser?.role === 'staff' 
+              {currentUser?.role === 'staff'
                 ? '代打を募集したり、募集中の代打に応募することができます'
                 : '代打募集の管理と承認を行うことができます'
               }
             </p>
           </div>
-          
+
           {/* タブ切り替え（ヘッダー右側に配置） */}
           {currentUser?.role === 'staff' && (
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`px-4 py-2 font-medium rounded-md transition-all ${
-                  activeTab === 'browse'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                className={`px-4 py-2 font-medium rounded-md transition-all ${activeTab === 'browse'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                  }`}
               >
                 募集中の代打
               </button>
               <button
                 onClick={() => setActiveTab('create')}
-                className={`px-4 py-2 font-medium rounded-md transition-all ${
-                  activeTab === 'create'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                className={`px-4 py-2 font-medium rounded-md transition-all ${activeTab === 'create'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                  }`}
               >
                 代打を募集
               </button>
@@ -481,7 +479,7 @@ export default function EmergencyPage() {
                   const urgencyStyle = getUrgencyStyle(urgency);
                   const urgencyLabel = getUrgencyLabel(urgency);
                   const alreadyApplied = isAlreadyApplied(request);
-                  
+
                   return (
                     <Card key={request.id} className={urgencyStyle}>
                       <CardContent className="pt-6">
@@ -500,7 +498,7 @@ export default function EmergencyPage() {
                                 {urgencyLabel.text}
                               </span>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                               <div>
                                 <h4 className="font-medium text-gray-700 mb-1">シフト情報</h4>
@@ -532,7 +530,7 @@ export default function EmergencyPage() {
                                 <h4 className="font-medium text-gray-700 mb-2">応募者（{request.emergency_volunteers.length}名）</h4>
                                 <div className="flex flex-wrap gap-2">
                                   {request.emergency_volunteers.map((volunteer) => (
-                                    <span 
+                                    <span
                                       key={volunteer.id}
                                       className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
                                     >
@@ -574,8 +572,8 @@ export default function EmergencyPage() {
                                     {applicationNote.length}/200文字
                                   </p>
                                 </div>
-                                
-                                <Button 
+
+                                <Button
                                   onClick={() => handleApplyEmergency(request.id)}
                                   disabled={applyingTo === request.id}
                                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 w-full"
@@ -634,11 +632,10 @@ export default function EmergencyPage() {
                     {myShifts.map((shift) => (
                       <div
                         key={shift.id}
-                        className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                          selectedShift?.id === shift.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
+                        className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${selectedShift?.id === shift.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                          }`}
                         onClick={() => setSelectedShift(shift)}
                       >
                         <div className="space-y-2">
@@ -654,7 +651,7 @@ export default function EmergencyPage() {
                               確定済み
                             </span>
                           </div>
-                          
+
                           <div className="text-sm text-gray-600">
                             <p>{getDisplayName(shift)}</p>
                             <p>{getDisplayTime(shift)}</p>
@@ -720,7 +717,7 @@ export default function EmergencyPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold mb-4">代打募集に応募</h3>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 要望・メッセージ（任意）

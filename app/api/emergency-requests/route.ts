@@ -45,7 +45,61 @@ export async function GET(request: Request) {
       console.log('🔍 [EMERGENCY API] companyIdFilter:', companyIdFilter);
     }
 
-    // まず基本的なクエリから開始（時間帯情報は別途取得）
+    // 🔧 企業分離: 企業に属する店舗IDを事前に取得してフィルタリング
+    let storeIdFilter: string[] | null = null;
+
+    if (currentUserId) {
+      if (companyIdFilter) {
+        console.log('🔍 [EMERGENCY API] 企業ID取得成功、該当企業の店舗IDを取得:', companyIdFilter);
+
+        // 該当企業の店舗IDを取得
+        const { data: companyStores, error: storeError } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('company_id', companyIdFilter);
+
+        if (storeError) {
+          console.error('🔍 [EMERGENCY API] 企業店舗取得エラー:', storeError);
+          return NextResponse.json(
+            { error: '企業データの取得に失敗しました', details: storeError.message },
+            { status: 500 }
+          );
+        }
+
+        storeIdFilter = companyStores?.map(store => store.id) || [];
+        console.log('🔍 [EMERGENCY API] 企業所属店舗ID:', storeIdFilter);
+
+        // 該当企業に店舗がない場合は空の結果を返す
+        if (storeIdFilter.length === 0) {
+          console.log('🔍 [EMERGENCY API] 該当企業に店舗なし、空の結果を返します');
+          return NextResponse.json({ data: [] });
+        }
+      } else {
+        // ログインユーザーがcompany_idを持たない場合は、レガシーデータ（company_id NULL）の店舗のみ
+        console.log('🔍 [EMERGENCY API] レガシーユーザー、company_id NULL店舗のみ対象');
+
+        const { data: legacyStores, error: legacyStoreError } = await supabase
+          .from('stores')
+          .select('id')
+          .is('company_id', null);
+
+        if (legacyStoreError) {
+          console.error('🔍 [EMERGENCY API] レガシー店舗取得エラー:', legacyStoreError);
+          return NextResponse.json(
+            { error: 'レガシー店舗データの取得に失敗しました', details: legacyStoreError.message },
+            { status: 500 }
+          );
+        }
+
+        storeIdFilter = legacyStores?.map(store => store.id) || [];
+        console.log('🔍 [EMERGENCY API] レガシー店舗ID:', storeIdFilter);
+      }
+    } else {
+      console.log('🔍 [EMERGENCY API] current_user_idが未指定、全緊急要請表示（後方互換性）');
+      // current_user_idが指定されていない場合は全緊急要請（後方互換性）
+    }
+
+    // 基本的なクエリを開始
     let query = supabase
       .from('emergency_requests')
       .select(`
@@ -61,19 +115,15 @@ export async function GET(request: Request) {
         )
       `);
 
-    // 🔧 企業分離: 店舗の企業IDでフィルタリング
-    if (currentUserId) {
-      if (companyIdFilter) {
-        console.log('🔍 [EMERGENCY API] 新企業フィルタリング: stores.company_id =', companyIdFilter);
-        query = query.eq('stores.company_id', companyIdFilter);
+    // 企業フィルタリング: 取得した店舗IDでフィルタリング
+    if (storeIdFilter !== null) {
+      if (storeIdFilter.length > 0) {
+        console.log('🔍 [EMERGENCY API] 店舗IDフィルタリング適用:', storeIdFilter);
+        query = query.in('store_id', storeIdFilter);
       } else {
-        // ログインユーザーがcompany_idを持たない場合は、既存企業の緊急要請のみ表示
-        console.log('🔍 [EMERGENCY API] 既存企業フィルタリング: stores.company_id IS NULL');
-        query = query.is('stores.company_id', null);
+        console.log('🔍 [EMERGENCY API] フィルタリング店舗なし、空の結果を返します');
+        return NextResponse.json({ data: [] });
       }
-    } else {
-      console.log('🔍 [EMERGENCY API] current_user_idが未指定、全緊急要請表示');
-      // current_user_idが指定されていない場合は全緊急要請（後方互換性）
     }
 
     // 単一リクエスト取得の場合
@@ -112,7 +162,8 @@ export async function GET(request: Request) {
 
     console.log('🔍 [EMERGENCY API] 結果:', {
       requestCount: data?.length || 0,
-      storeCompanyIds: data?.map(r => ({ storeName: r.stores?.name, companyId: r.stores?.company_id })) || []
+      storeCompanyIds: data?.map(r => ({ storeName: r.stores?.name, companyId: r.stores?.company_id })) || [],
+      hasTimeSlots: data?.map(r => ({ id: r.id, hasTimeSlot: !!r.time_slot_id, timeSlotData: !!r.time_slots })) || []
     });
 
     // データ処理: time_slot_idがある場合は別途取得
@@ -120,20 +171,29 @@ export async function GET(request: Request) {
       for (const request of data) {
         // time_slot_idがある場合は必ず別途取得
         if (request.time_slot_id) {
+          console.log('🔍 [EMERGENCY API] time_slot取得開始:', request.time_slot_id);
           try {
-            const { data: timeSlotData } = await supabase
+            // time_slotsを取得（企業フィルタリングなし - 代打募集作成時のtime_slot_idと一致させるため）
+            const { data: timeSlotData, error: timeSlotError } = await supabase
               .from('time_slots')
               .select('id, name, start_time, end_time')
               .eq('id', request.time_slot_id)
               .single();
 
+            console.log('🔍 [EMERGENCY API] time_slot取得結果:', { timeSlotData, timeSlotError });
+
             if (timeSlotData) {
               request.time_slots = timeSlotData;
+              console.log('🔍 [EMERGENCY API] time_slots設定完了:', request.time_slots);
+            } else {
+              console.warn('🔍 [EMERGENCY API] time_slotデータなし:', request.time_slot_id);
             }
           } catch (error) {
-            console.warn('Time slot data not found for:', request.time_slot_id, error);
+            console.warn('🔍 [EMERGENCY API] Time slot data not found for:', request.time_slot_id, error);
             // time_slotが見つからない場合は無視して続行
           }
+        } else {
+          console.log('🔍 [EMERGENCY API] time_slot_idがnull:', request.id);
         }
 
         // shift_pattern_idの処理は一時的に無効化（DBに存在しない可能性）
@@ -174,6 +234,11 @@ export async function GET(request: Request) {
 // POST: 緊急募集リクエスト作成
 export async function POST(request: Request) {
   try {
+    console.log('🔍 [EMERGENCY API] POST request received');
+
+    const requestData = await request.json();
+    console.log('🔍 [EMERGENCY API] Request data:', requestData);
+
     const {
       original_user_id,
       store_id,
@@ -181,10 +246,25 @@ export async function POST(request: Request) {
       time_slot_id, // time_slot_idのみ使用
       reason,
       request_type // 新規追加: 'substitute' (代打) or 'shortage' (人手不足)
-    } = await request.json();
+    } = requestData;
+
+    console.log('🔍 [EMERGENCY API] Extracted fields:', {
+      original_user_id,
+      store_id,
+      date,
+      time_slot_id,
+      reason,
+      request_type
+    });
 
     // 必須フィールドの検証
     if (!original_user_id || !store_id || !date || !reason) {
+      console.log('🔍 [EMERGENCY API] Missing required fields:', {
+        original_user_id: !!original_user_id,
+        store_id: !!store_id,
+        date: !!date,
+        reason: !!reason
+      });
       return NextResponse.json(
         { error: 'original_user_id, store_id, date, reasonは必須です' },
         { status: 400 }
@@ -193,6 +273,7 @@ export async function POST(request: Request) {
 
     // time_slot_idが必要
     if (!time_slot_id) {
+      console.log('🔍 [EMERGENCY API] Missing time_slot_id');
       return NextResponse.json(
         { error: 'time_slot_idが必要です' },
         { status: 400 }
@@ -201,6 +282,7 @@ export async function POST(request: Request) {
 
     // request_typeの検証
     if (!request_type || !['substitute', 'shortage'].includes(request_type)) {
+      console.log('🔍 [EMERGENCY API] Invalid request_type:', request_type);
       return NextResponse.json(
         { error: 'request_typeは "substitute" または "shortage" である必要があります' },
         { status: 400 }
