@@ -265,6 +265,18 @@ export interface DatabaseUser {
   user_stores?: UserStore[];
 }
 
+// APIレスポンス用のユーザー型（フロントエンド用）
+export interface ApiUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'manager' | 'staff';
+  skill_level: 'training' | 'regular' | 'veteran';
+  hourlyWage?: number; // camelCase for frontend
+  memo?: string;
+}
+
 // API エラー型
 export interface ApiError {
   code?: string;
