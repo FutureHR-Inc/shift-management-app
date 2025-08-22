@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useShiftData, User, TimeSlot, Shift } from '../../hooks/useShiftData';
+import type { Shift, ApiUser as User, TimeSlot } from '../../lib/types';
 
 interface MobileShiftTableProps {
   selectedStore: string;
@@ -15,6 +15,9 @@ interface MobileShiftTableProps {
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
   currentUser?: { id: string };
+  shifts: Shift[];
+  users: User[];
+  timeSlots: TimeSlot[];
 }
 
 export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
@@ -28,9 +31,20 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
   handleDeleteShift,
   setContextMenu,
   setEmergencyManagement,
-  currentUser
+  currentUser,
+  shifts,
+  users,
+  timeSlots
 }) => {
-  const { users, timeSlots, getShiftForSlot } = useShiftData(selectedStore, selectedWeek, viewMode, currentUser);
+  // getShiftForSlot関数を再実装
+  const getShiftForSlot = (date: string, timeSlotId: string) => {
+    const dateString = date;
+    return shifts.filter(shift =>
+      shift.date === dateString &&
+      shift.timeSlotId === timeSlotId &&
+      shift.storeId === selectedStore
+    );
+  };
 
   return (
     <div className="lg:hidden">
@@ -124,10 +138,10 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                     <div
                                       key={shift.id}
                                       className={`text-xs sm:text-sm p-1.5 sm:p-2 rounded-md border transition-all group relative ${isFixedShift
-                                          ? 'bg-green-100 border-green-300 text-green-800'
-                                          : isConfirmed
-                                            ? 'bg-blue-100 border-blue-300 text-blue-800'
-                                            : 'bg-white border-gray-200 text-gray-700'
+                                        ? 'bg-green-100 border-green-300 text-green-800'
+                                        : isConfirmed
+                                          ? 'bg-blue-100 border-blue-300 text-blue-800'
+                                          : 'bg-white border-gray-200 text-gray-700'
                                         } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();

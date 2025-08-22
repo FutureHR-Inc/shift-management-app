@@ -343,6 +343,14 @@ function StaffPageContent() {
       const updatedUsers = await fetchUsers();
       setUsers(updatedUsers);
 
+      // 他のタブ・ウィンドウにスタッフ更新を通知
+      localStorage.setItem('staff_updated', Date.now().toString());
+
+      // 同一タブ内の他のコンポーネントにも通知（postMessage）
+      window.postMessage({ type: 'STAFF_UPDATED' }, window.location.origin);
+
+      console.log('🔔 [STAFF] Staff update notification sent to other tabs/components');
+
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
@@ -374,6 +382,15 @@ function StaffPageContent() {
 
       // ローカル状態から削除
       setUsers(users.filter(user => user.id !== userId));
+
+      // 他のタブ・ウィンドウにスタッフ更新を通知
+      localStorage.setItem('staff_updated', Date.now().toString());
+
+      // 同一タブ内の他のコンポーネントにも通知（postMessage）
+      window.postMessage({ type: 'STAFF_UPDATED' }, window.location.origin);
+
+      console.log('🔔 [STAFF] Staff deletion notification sent to other tabs/components');
+
       alert(`${userName}を削除しました`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'ユーザーの削除に失敗しました';

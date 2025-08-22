@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
+import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -123,6 +123,10 @@ function ShiftCreatePageInner() {
   // Loading and error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshingStaff, setRefreshingStaff] = useState(false);
+
+  // デバウンス用のタイマー参照
+  const focusUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [saving, setSaving] = useState(false);
 
   // 代打募集関連のstate
@@ -194,15 +198,18 @@ function ShiftCreatePageInner() {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (retryCount = 0) => {
     if (!currentUser) {
       console.log('currentUser not available, skipping users fetch');
       return [];
     }
 
     try {
+      console.log(`🔄 [SHIFT CREATE] Fetching users (attempt ${retryCount + 1}/3)...`);
       const response = await fetch(`/api/users?current_user_id=${currentUser.id}`);
-      if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
+      if (!response.ok) {
+        throw new Error(`ユーザーデータの取得に失敗しました (Status: ${response.status})`);
+      }
       const result = await response.json();
 
       // ユーザーに所属店舗情報を追加
@@ -218,9 +225,19 @@ function ShiftCreatePageInner() {
         stores: user.user_stores?.map((us: UserStore) => us.store_id) || []
       })) || [];
 
+      console.log(`✅ [SHIFT CREATE] Users fetched successfully: ${usersWithStores.length} users`);
       return usersWithStores;
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error(`❌ [SHIFT CREATE] Error fetching users (attempt ${retryCount + 1}):`, error);
+
+      // 最大3回までリトライ
+      if (retryCount < 2) {
+        const delay = Math.pow(2, retryCount) * 1000; // 指数バックオフ: 1s, 2s
+        console.log(`⏳ [SHIFT CREATE] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchUsers(retryCount + 1);
+      }
+
       throw error;
     }
   };
@@ -408,6 +425,98 @@ function ShiftCreatePageInner() {
 
     loadInitialData();
   }, [currentUser, searchParams]);
+
+  // ページがフォーカスされた時にスタッフデータを再取得する
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!currentUser || refreshingStaff) return;
+
+      // 既存のタイマーをクリア
+      if (focusUpdateTimeoutRef.current) {
+        clearTimeout(focusUpdateTimeoutRef.current);
+      }
+
+      // デバウンス処理（500ms後に実行）
+      focusUpdateTimeoutRef.current = setTimeout(async () => {
+        try {
+          setRefreshingStaff(true);
+          console.log('🔄 [SHIFT CREATE] Page focused, refreshing staff data...');
+          const updatedUsers = await fetchUsers();
+          setUsers(updatedUsers);
+          console.log('✅ [SHIFT CREATE] Staff data refreshed:', updatedUsers.length, 'users');
+        } catch (error) {
+          console.error('Failed to refresh staff data on focus:', error);
+        } finally {
+          setRefreshingStaff(false);
+        }
+      }, 500);
+    };
+
+    // リアルタイムスタッフ更新のためのイベントリスナー
+    const handleStaffUpdate = async (event: StorageEvent) => {
+      if (event.key === 'staff_updated' && event.newValue && currentUser && !refreshingStaff) {
+        try {
+          setRefreshingStaff(true);
+          console.log('🔄 [SHIFT CREATE] Staff updated in other tab, refreshing...');
+          const updatedUsers = await fetchUsers();
+          setUsers(updatedUsers);
+          console.log('✅ [SHIFT CREATE] Staff data refreshed from cross-tab update:', updatedUsers.length, 'users');
+
+          // 一定時間後にストレージからフラグを削除
+          setTimeout(() => {
+            localStorage.removeItem('staff_updated');
+          }, 1000);
+        } catch (error) {
+          console.error('Failed to refresh staff data from cross-tab update:', error);
+        } finally {
+          setRefreshingStaff(false);
+        }
+      }
+    };
+
+    // PostMessage イベントリスナー（同一タブ内でのコミュニケーション用）
+    const handlePostMessage = async (event: MessageEvent) => {
+      if (event.data.type === 'STAFF_UPDATED' && currentUser && !refreshingStaff) {
+        try {
+          setRefreshingStaff(true);
+          console.log('🔄 [SHIFT CREATE] Staff updated, refreshing via postMessage...');
+          const updatedUsers = await fetchUsers();
+          setUsers(updatedUsers);
+          console.log('✅ [SHIFT CREATE] Staff data refreshed from postMessage:', updatedUsers.length, 'users');
+        } catch (error) {
+          console.error('Failed to refresh staff data from postMessage:', error);
+        } finally {
+          setRefreshingStaff(false);
+        }
+      }
+    };
+
+    // イベントリスナーを追加
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStaffUpdate);
+    window.addEventListener('message', handlePostMessage);
+
+    // visibilitychange イベントも追加（タブ切り替え時）
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        handleFocus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      // タイマーをクリア
+      if (focusUpdateTimeoutRef.current) {
+        clearTimeout(focusUpdateTimeoutRef.current);
+      }
+
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStaffUpdate);
+      window.removeEventListener('message', handlePostMessage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentUser]);
 
   // 店舗変更時に時間帯データと固定シフトを取得
   useEffect(() => {
@@ -640,7 +749,7 @@ function ShiftCreatePageInner() {
         shiftData
       });
 
-      const response = await fetch('/api/shifts', {
+      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -656,8 +765,17 @@ function ShiftCreatePageInner() {
 
       // シフトデータを再取得
       if (selectedStore && selectedWeek) {
+        console.log('🔄 [SHIFT CREATE] Fetching updated shifts after creation...');
+        console.log('🔄 [SHIFT CREATE] selectedStore:', selectedStore);
+        console.log('🔄 [SHIFT CREATE] selectedWeek:', selectedWeek);
+        console.log('🔄 [SHIFT CREATE] Current shifts before update:', shifts.length, 'shifts');
+
         const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
+        console.log('✅ [SHIFT CREATE] Fetched updated shifts:', updatedShifts.length, 'shifts');
+        console.log('✅ [SHIFT CREATE] Updated shifts data:', updatedShifts);
+
         setShifts(updatedShifts);
+        console.log('✅ [SHIFT CREATE] setShifts called with updated data');
       }
 
       // モーダルを閉じる
@@ -679,7 +797,7 @@ function ShiftCreatePageInner() {
         return;
       }
 
-      const response = await fetch(`/api/shifts?id=${shiftId}`, {
+      const response = await fetch(`/api/shifts?id=${shiftId}&current_user_id=${currentUser?.id}`, {
         method: 'DELETE',
       });
 
@@ -718,7 +836,7 @@ function ShiftCreatePageInner() {
         periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
       }
 
-      const response = await fetch('/api/shifts', {
+      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -788,7 +906,7 @@ function ShiftCreatePageInner() {
         periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
       }
 
-      const response = await fetch('/api/shifts', {
+      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -1201,7 +1319,7 @@ function ShiftCreatePageInner() {
   // 特定のスタッフの同日シフト状況をチェック（同店舗・他店舗両方）
   const checkStaffShiftStatus = async (userId: string, date: string) => {
     try {
-      const response = await fetch(`/api/shifts?user_id=${userId}&date_from=${date}&date_to=${date}`);
+      const response = await fetch(`/api/shifts?user_id=${userId}&date_from=${date}&date_to=${date}&current_user_id=${currentUser?.id}`);
       if (!response.ok) return { hasConflict: false, conflicts: [] };
 
       const result = await response.json();
@@ -1268,7 +1386,7 @@ function ShiftCreatePageInner() {
   // モーダル開時に全スタッフの確定シフト状況をチェック
   const checkAllStaffConfirmedShifts = async (date: string) => {
     try {
-      const response = await fetch(`/api/shifts?date_from=${date}&date_to=${date}&status=confirmed`);
+      const response = await fetch(`/api/shifts?date_from=${date}&date_to=${date}&status=confirmed&current_user_id=${currentUser?.id}`);
       if (!response.ok) return;
 
       const result = await response.json();
@@ -1293,10 +1411,10 @@ function ShiftCreatePageInner() {
       console.log('🔍 [FRONTEND] Emergency reason:', emergencyReason.trim());
 
       const requestBody = {
-        original_user_id: shift.userId,
-        store_id: shift.storeId,
+        original_user_id: shift.user_id,
+        store_id: shift.store_id,
         date: shift.date,
-        time_slot_id: shift.timeSlotId, // camelCaseのプロパティ名を使用
+        time_slot_id: shift.time_slot_id, // snake_caseのプロパティ名を使用
         reason: emergencyReason.trim(),
         request_type: 'substitute' // 代打募集として設定
       };
@@ -1895,6 +2013,9 @@ function ShiftCreatePageInner() {
                   setContextMenu={setContextMenu}
                   setEmergencyManagement={setEmergencyManagement}
                   currentUser={currentUser}
+                  shifts={shifts}
+                  users={users}
+                  timeSlots={timeSlots}
                 />
 
                 <MobileShiftTable
@@ -1909,6 +2030,9 @@ function ShiftCreatePageInner() {
                   setContextMenu={setContextMenu}
                   setEmergencyManagement={setEmergencyManagement}
                   currentUser={currentUser}
+                  shifts={shifts}
+                  users={users}
+                  timeSlots={timeSlots}
                 />
               </>
             )}
@@ -2006,9 +2130,43 @@ function ShiftCreatePageInner() {
 
                 {/* スタッフ選択 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    スタッフ選択 *
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      スタッフ選択 *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setRefreshingStaff(true);
+                          console.log('🔄 [SHIFT CREATE] Manual staff refresh...');
+                          const updatedUsers = await fetchUsers();
+                          setUsers(updatedUsers);
+                          console.log('✅ [SHIFT CREATE] Staff data manually refreshed:', updatedUsers.length, 'users');
+                        } catch (error) {
+                          console.error('Failed to manually refresh staff data:', error);
+                        } finally {
+                          setRefreshingStaff(false);
+                        }
+                      }}
+                      disabled={refreshingStaff}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${refreshingStaff
+                        ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                        : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                        }`}
+                      title="スタッフリストを最新の状態に更新"
+                    >
+                      <svg
+                        className={`w-4 h-4 inline mr-1 ${refreshingStaff ? 'animate-spin' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {refreshingStaff ? '更新中...' : '更新'}
+                    </button>
+                  </div>
                   {staffWithConfirmedShifts.length > 0 && (
                     <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-700">
@@ -2016,32 +2174,47 @@ function ShiftCreatePageInner() {
                       </p>
                     </div>
                   )}
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => handleStaffSelection(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">スタッフを選択してください</option>
-                    {availableStaff
-                      .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
-                      .map(user => {
-                        const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
-                        const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
+                  {availableStaff.length === 0 ? (
+                    <div className="p-3 border border-gray-300 rounded-xl bg-gray-50">
+                      <div className="text-center text-gray-500">
+                        <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <p className="text-sm font-medium">この店舗にスタッフが登録されていません</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          スタッフ管理ページでスタッフを追加してから<br />
+                          右上の「更新」ボタンをクリックしてください
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedUser}
+                      onChange={(e) => handleStaffSelection(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">スタッフを選択してください</option>
+                      {availableStaff
+                        .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
+                        .map(user => {
+                          const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
+                          const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
 
-                        return (
-                          <option
-                            key={user.id}
-                            value={user.id}
-                            disabled={isOnTimeOff}
-                            style={isOnTimeOff ? { color: '#9CA3AF', backgroundColor: '#F3F4F6' } : {}}
-                          >
-                            {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
-                            {isOnTimeOff && ' [希望休承認済み]'}
-                            {fixedShift && ' [固定シフト]'}
-                          </option>
-                        );
-                      })}
-                  </select>
+                          return (
+                            <option
+                              key={user.id}
+                              value={user.id}
+                              disabled={isOnTimeOff}
+                              style={isOnTimeOff ? { color: '#9CA3AF', backgroundColor: '#F3F4F6' } : {}}
+                            >
+                              {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
+                              {isOnTimeOff && ' [希望休承認済み]'}
+                              {fixedShift && ' [固定シフト]'}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  )}
 
                   {/* 希望休承認済みスタッフの警告表示 */}
                   {availableStaff.some(user => isStaffOnTimeOff(user.id, modalData.date)) && (
@@ -2271,17 +2444,17 @@ function ShiftCreatePageInner() {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">対象シフト</p>
                   <p className="font-medium text-gray-900">
-                    {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.userId)?.name} - {' '}
+                    {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.user_id)?.name} - {' '}
                     {(() => {
                       if (!emergencyModal.shift) return '';
                       console.log('🔍 [MODAL DEBUG] emergencyModal.shift:', emergencyModal.shift);
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.timeSlotId:', emergencyModal.shift.timeSlotId);
+                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slot_id:', emergencyModal.shift.time_slot_id);
                       console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slots:', emergencyModal.shift.time_slots);
                       console.log('🔍 [MODAL DEBUG] timeSlots array:', timeSlots);
                       console.log('🔍 [MODAL DEBUG] timeSlots array detail:', timeSlots.map(ts => ({ id: ts.id, name: ts.name })));
 
-                      // emergencyModal.shiftはfetchShiftsで変換されたShift型なので、timeSlotIdプロパティを使用
-                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift.timeSlotId);
+                      // emergencyModal.shiftはDatabaseShift型なので、time_slot_idプロパティを使用
+                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id);
                       console.log('🔍 [MODAL DEBUG] found timeSlot:', timeSlot);
                       return timeSlot?.name || '不明な時間帯';
                     })()}
@@ -2290,7 +2463,7 @@ function ShiftCreatePageInner() {
                     {emergencyModal.shift?.date}
                     {(() => {
                       if (!emergencyModal.shift) return '';
-                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift.timeSlotId);
+                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id);
                       return timeSlot ? ` (${timeSlot.start_time}-${timeSlot.end_time})` : '';
                     })()}
                   </p>

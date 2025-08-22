@@ -110,7 +110,7 @@ export default function StaffDashboardPage() {
         const today = new Date().toISOString().split('T')[0];
 
         // 今日のシフトを取得
-        const todayShiftResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${today}`);
+        const todayShiftResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${today}&current_user_id=${currentUser.id}`);
         if (todayShiftResponse.ok) {
           const todayResult = await todayShiftResponse.json();
           setTodayShift(todayResult.data?.[0] || null);
@@ -123,7 +123,7 @@ export default function StaffDashboardPage() {
         endOfWeek.setDate(startOfWeek.getDate() + 6);
 
         const weeklyShiftResponse = await fetch(
-          `/api/shifts?user_id=${currentUser.id}&date_from=${startOfWeek.toISOString().split('T')[0]}&date_to=${endOfWeek.toISOString().split('T')[0]}`
+          `/api/shifts?user_id=${currentUser.id}&date_from=${startOfWeek.toISOString().split('T')[0]}&date_to=${endOfWeek.toISOString().split('T')[0]}&current_user_id=${currentUser.id}`
         );
         if (weeklyShiftResponse.ok) {
           const weeklyResult = await weeklyShiftResponse.json();

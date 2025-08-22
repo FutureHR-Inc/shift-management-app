@@ -51,7 +51,7 @@ export default function MyShiftPage() {
     monday.setDate(today.getDate() - today.getDay() + 1);
     return monday.toISOString().split('T')[0];
   });
-  
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myShifts, setMyShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +92,7 @@ export default function MyShiftPage() {
 
         // 通常シフトと固定シフトを並行取得
         const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
-          fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${selectedWeek}&date_to=${dateToString}`),
+          fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${selectedWeek}&date_to=${dateToString}&current_user_id=${currentUser.id}`),
           fetch(`/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`)
         ]);
 
@@ -122,7 +122,7 @@ export default function MyShiftPage() {
             if (!hasNormalShift) {
               // その曜日の固定シフトがあるかチェック
               const dayFixedShift = fixedShifts.find((fs: any) => fs.day_of_week === dayOfWeek);
-              
+
               if (dayFixedShift) {
                 // 固定シフトから仮想シフトオブジェクトを作成
                 generatedShifts.push({
@@ -203,9 +203,9 @@ export default function MyShiftPage() {
         if (startTime && endTime) {
           const start = new Date(`2000-01-01T${startTime}`);
           const end = new Date(`2000-01-01T${endTime}`);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
           const breakHours = breakMinutes / 60; // 分を時間に変換
-        totalHours += Math.max(0, hours - breakHours);
+          totalHours += Math.max(0, hours - breakHours);
         }
       }
     });
@@ -325,13 +325,12 @@ export default function MyShiftPage() {
                 return (
                   <div
                     key={index}
-                    className={`p-4 rounded-xl border-2 transition-all ${
-                      isToday 
-                        ? 'border-blue-500 bg-blue-50' 
+                    className={`p-4 rounded-xl border-2 transition-all ${isToday
+                        ? 'border-blue-500 bg-blue-50'
                         : shift
-                        ? 'border-gray-200 bg-white hover:shadow-md'
-                        : 'border-gray-100 bg-gray-50'
-                    }`}
+                          ? 'border-gray-200 bg-white hover:shadow-md'
+                          : 'border-gray-100 bg-gray-50'
+                      }`}
                   >
                     {/* 日付 */}
                     <div className="text-center mb-3">
@@ -347,11 +346,9 @@ export default function MyShiftPage() {
                     {shift && (pattern || timeSlot) && store ? (
                       <div className="space-y-2">
                         <div
-                          className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${
-                            shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
-                          } ${
-                            shift.id.startsWith('fixed-') ? 'border-2 border-dashed border-white/50' : ''
-                          }`}
+                          className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
+                            } ${shift.id.startsWith('fixed-') ? 'border-2 border-dashed border-white/50' : ''
+                            }`}
                           style={{ backgroundColor: getDisplayColor() }}
                         >
                           {getDisplayName()}
@@ -404,9 +401,9 @@ export default function MyShiftPage() {
         {(() => {
           const today = new Date().toISOString().split('T')[0];
           const todayShift = getShiftForDate(today);
-          
+
           if (!todayShift) return null;
-          
+
           return (
             <Card>
               <CardHeader>

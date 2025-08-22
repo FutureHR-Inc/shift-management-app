@@ -146,7 +146,7 @@ export default function EmergencyPage() {
         if (currentUser.role === 'staff') {
           const today = new Date().toISOString().split('T')[0];
           const shiftsResponse = await fetch(
-            `/api/shifts?user_id=${currentUser.id}&date_from=${today}&status=confirmed`
+            `/api/shifts?user_id=${currentUser.id}&date_from=${today}&status=confirmed&current_user_id=${currentUser.id}`
           );
           if (shiftsResponse.ok) {
             const shiftsData = await shiftsResponse.json();
