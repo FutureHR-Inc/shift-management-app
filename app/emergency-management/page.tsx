@@ -7,15 +7,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
-import type { User, Store, TimeSlot, DatabaseEmergencyRequest, EmergencyVolunteer } from '@/lib/types';
+import type { User, Store, TimeSlot, DatabaseEmergencyRequest, EmergencyVolunteer, ApiUser } from '@/lib/types';
 
-interface ApiUser {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: 'manager' | 'staff';
-}
+
 
 interface ShiftTableDay {
   date: string;

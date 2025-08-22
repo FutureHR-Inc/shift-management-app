@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import TimeSlotManager from '@/components/TimeSlotManager';
-import type { TimeSlot } from '@/lib/types';
+import type { TimeSlot, ApiUser } from '@/lib/types';
 
 // APIから取得するデータ用の型
 interface ApiStore {
@@ -34,16 +34,7 @@ interface ApiStore {
   }>;
 }
 
-interface ApiUser {
-  id: string;
-  name: string;
-  role: string;
-  skill_level: string;
-  user_stores?: Array<{
-    store_id: string;
-    stores: { id: string; name: string };
-  }>;
-}
+
 
 // フロントエンド用の型変換後
 interface DisplayStore {

@@ -8,24 +8,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FixedShiftManager } from '@/components/ui/FixedShiftManager';
 import CompanyRegistrationForm from '@/components/CompanyRegistrationForm';
-// import type { User, Store } from '@/lib/types'; // 未使用のため削除
+import type { ApiUser } from '@/lib/types';
 
-// APIから取得するデータ用の型
-interface ApiUser {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  role: 'manager' | 'staff';
-  skill_level: 'training' | 'regular' | 'veteran';
-  memo?: string;
-  login_id?: string;
-  hourly_wage?: number; // 時給（円）
-  user_stores?: Array<{
-    store_id: string;
-    stores: { id: string; name: string };
-  }>;
-}
+
 
 interface ApiStore {
   id: string;

@@ -272,9 +272,20 @@ export interface ApiUser {
   email: string;
   phone: string;
   role: 'manager' | 'staff';
-  skill_level: 'training' | 'regular' | 'veteran';
-  hourlyWage?: number; // camelCase for frontend
+  skill_level: 'training' | 'regular' | 'veteran'; // snake_case - DB互換性のため
+  skillLevel?: 'training' | 'regular' | 'veteran'; // camelCase - フロントエンド互換性のため（オプショナル）
+  hourly_wage?: number; // snake_case - DB互換性のため
+  hourlyWage?: number; // camelCase - フロントエンド互換性のため（オプショナル）
   memo?: string;
+  login_id?: string; // 一部のケースで必要
+  stores?: string[]; // 一部のケースで必要
+  user_stores?: Array<{
+    store_id: string;
+    store?: {
+      id: string;
+      name: string;
+    };
+  }>; // 一部のケースで必要
 }
 
 // API エラー型

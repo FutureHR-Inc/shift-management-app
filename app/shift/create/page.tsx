@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { AnimatedToggle } from '@/components/ui/AnimatedToggle';
 import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
-import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot, DatabaseFixedShift } from '@/lib/types';
+import type { Shift, DatabaseShift, DatabaseUser, DatabaseEmergencyRequest, UserStore, ContextMenu, EmergencyModal, TimeSlot, DatabaseFixedShift, ApiUser } from '@/lib/types';
 import { DesktopShiftTable } from '@/components/shift/DesktopShiftTable';
 import { MobileShiftTable } from '@/components/shift/MobileShiftTable';
 
@@ -17,18 +17,7 @@ interface ShiftModalData {
   dayIndex: number;
 }
 
-// APIから取得するデータ用の型（User型を上書き）
-interface ApiUser {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  role: 'manager' | 'staff';
-  skillLevel: 'training' | 'regular' | 'veteran';
-  hourlyWage?: number; // 時給（円）
-  memo?: string;
-  stores: string[];
-}
+
 
 // APIから取得するデータ用の型（Store型を上書き）
 interface ApiStore {
@@ -1033,7 +1022,7 @@ function ShiftCreatePageInner() {
   };
 
   // 店舗所属スタッフのみフィルタ（基本的なシフト作成は所属スタッフ内で完結）
-  const availableStaff = selectedStore ? users.filter(user => user.stores.includes(selectedStore)) : [];
+  const availableStaff = selectedStore ? users.filter(user => user.stores?.includes(selectedStore)) : [];
 
   // 時給計算（個別給与ベース）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
