@@ -67,10 +67,10 @@ interface DashboardStore {
 }
 
 interface DashboardShiftPattern {
-  id: string;
-  name: string;
-  start_time: string;
-  end_time: string;
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
   color: string;
   break_time: number;
 }
@@ -97,7 +97,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<DatabaseUser | null>(null);
   const router = useRouter();
-
+  
   useEffect(() => {
     // ローカルストレージからcurrentUserを取得
     const user = localStorage.getItem('currentUser');
@@ -141,16 +141,16 @@ export default function DashboardPage() {
     }
   };
 
-  const loadDashboardData = async () => {
-    try {
-      setIsLoading(true);
+    const loadDashboardData = async () => {
+      try {
+        setIsLoading(true);
 
-      // currentUserが設定されていない場合は待機
-      if (!currentUser?.id) {
-        console.log('currentUser not set, waiting...');
-        setIsLoading(false);
-        return;
-      }
+        // currentUserが設定されていない場合は待機
+        if (!currentUser?.id) {
+          console.log('currentUser not set, waiting...');
+          setIsLoading(false);
+          return;
+        }
 
       // 並列でデータを取得（企業フィルタリング対応）
       const [
@@ -163,7 +163,7 @@ export default function DashboardPage() {
       ] = await Promise.all([
         supabase.from('shifts').select('*'),
         fetch('/api/shift-requests?status=submitted'), // シフト希望APIルート経由
-        fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`), // 企業フィルタリング対応
+        fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`), // 企業フィルタリング付き
         fetch(`/api/users?current_user_id=${currentUser.id}`), // 企業フィルタリング
         fetch(`/api/stores?current_user_id=${currentUser.id}`), // 企業フィルタリング
         fetch(`/api/time-slots?current_user_id=${currentUser.id}`) // shift_patternsの代替としてtime_slotsを使用
@@ -189,11 +189,21 @@ export default function DashboardPage() {
 
       // 今日の日付
       const today = new Date().toISOString().split('T')[0];
-      const todayShifts = (shiftsData as DashboardShift[])?.filter(shift =>
-        shift.date === today && shift.status === 'confirmed'
-      ) || [];
+      const allTodayShifts = (shiftsData as DashboardShift[])?.filter(shift => shift.date === today) || [];
+      const todayShifts = allTodayShifts.filter(shift => shift.status === 'confirmed');
+      
+      console.log(`📅 今日の日付: ${today}`);
+      console.log(`📊 今日のシフト統計:`, {
+        allShifts: allTodayShifts.length,
+        confirmedShifts: todayShifts.length,
+        draftShifts: allTodayShifts.filter(s => s.status === 'draft').length,
+        statusBreakdown: allTodayShifts.reduce((acc, shift) => {
+          acc[shift.status] = (acc[shift.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      });
       const pendingRequests = (requestsData as DashboardShiftRequest[])?.filter(req => req.status === 'submitted') || [];
-      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req =>
+      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => 
         req.status === 'open' && req.original_user_id !== currentUser?.id
       ) || [];
 
@@ -210,8 +220,23 @@ export default function DashboardPage() {
       if (storesResponse.ok) {
         const storesResult = await storesResponse.json();
         storesData = storesResult.data || [];
+        console.log('🏪 Stores データ取得成功:', storesData.map(store => ({
+          name: store.name,
+          hasRequiredStaff: !!store.required_staff,
+          requiredStaffKeys: store.required_staff ? Object.keys(store.required_staff) : []
+        })));
       } else {
         console.error('Stores API error:', await storesResponse.text());
+      }
+
+      // time_slotsレスポンス処理（staffingData計算前に必要）
+      let timeSlotsData = [];
+      if (timeSlotsResponse.ok) {
+        const timeSlotsResult = await timeSlotsResponse.json();
+        timeSlotsData = timeSlotsResult.data || [];
+        console.log('⏰ Time Slots データ取得成功:', timeSlotsData);
+      } else {
+        console.error('Time slots API error:', await timeSlotsResponse.text());
       }
 
       // state変数を設定
@@ -245,73 +270,112 @@ export default function DashboardPage() {
           const [slotEndHour, slotEndMin] = slot.end_time.split(':').map(Number);
           const slotStartMinutes = slotStartHour * 60 + slotStartMin;
           const slotEndMinutes = slotEndHour * 60 + slotEndMin;
-
+          
           if (startMinutes >= slotStartMinutes && startMinutes < slotEndMinutes) {
             return slot.id;
-          }
+      }
         }
-
+        
         return null;
       };
 
       // 店舗別スタッフィング状況
       const staffingData = (storesData as DashboardStore[] || []).map(store => {
         const storeShifts = todayShifts.filter(shift => shift.store_id === store.id);
-
+        
         // 今日の曜日を取得
         const today = new Date();
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayDayName = dayNames[today.getDay()];
-
-        // 各時間帯の必要人数を取得
-        const storeTimeSlots = timeSlots[store.id] || [];
+        
+        // 実際に勤務するユニークなスタッフ数を計算
+        const uniqueStaffIds = new Set(storeShifts.map(shift => shift.user_id));
+        const actualStaffCount = uniqueStaffIds.size;
+        
+        console.log(`👥 [${store.name}] 今日のシフト:`, {
+          totalShifts: storeShifts.length,
+          uniqueStaff: actualStaffCount,
+          shifts: storeShifts.map(s => ({ user_id: s.user_id, status: s.status, pattern_id: s.pattern_id }))
+        });
+        
+        // required_staffから直接必要人数を計算（time_slotsに依存しない）
         let totalRequired = 0;
-        let allSlotsSufficient = true;
-
+        
+        console.log(`🏪 [${store.name}] 曜日: ${todayDayName}`, {
+          hasRequiredStaff: !!store.required_staff,
+          dayData: store.required_staff?.[todayDayName],
+          requiredStaffKeys: store.required_staff ? Object.keys(store.required_staff) : []
+        });
+        
         if (store.required_staff && store.required_staff[todayDayName]) {
           const dayRequiredStaff = store.required_staff[todayDayName];
-
-          storeTimeSlots.forEach(slot => {
-            const required = dayRequiredStaff[slot.id] && typeof dayRequiredStaff[slot.id] === 'number'
-              ? dayRequiredStaff[slot.id] : 0;
-            totalRequired += required;
-
-            // この時間帯に配置されているシフト数を計算
-            const slotShifts = storeShifts.filter(shift => getTimeSlotForPattern(shift.pattern_id, store.id) === slot.id);
-
-            // この時間帯が不足している場合
-            if (slotShifts.length < required) {
-              allSlotsSufficient = false;
+          
+          // required_staffの時間帯別人数を直接合計
+          Object.entries(dayRequiredStaff).forEach(([timeSlotId, required]) => {
+            if (typeof required === 'number' && required > 0) {
+              console.log(`   時間帯 ${timeSlotId}: ${required}人`);
+              totalRequired += required;
             }
           });
         }
-
-        // 必要人数が設定されていない場合のデフォルト値
+        
+        console.log(`📊 [${store.name}] 必要人数合計: ${totalRequired}人`);
+        console.log(`🔍 [${store.name}] デバッグ情報:`, {
+          totalRequired,
+          hasRequiredStaff: !!store.required_staff,
+          hasRequiredStaffForToday: !!(store.required_staff && store.required_staff[todayDayName]),
+          todayDayName,
+          dayRequiredStaff: store.required_staff?.[todayDayName]
+        });
+        
+        // デフォルト値は一切適用しない（設定値をそのまま使用）
         if (totalRequired === 0) {
-          totalRequired = 8; // デフォルト値
+          console.log(`ℹ️ [${store.name}] 必要人数設定なし → 0人として表示`);
         }
+
+        // 充足判定: 実際のスタッフ数 >= 必要人数
+        const status = actualStaffCount >= totalRequired ? 'sufficient' : 'insufficient';
 
         return {
           store: store.name,
-          scheduled: storeShifts.length,
+          scheduled: actualStaffCount,
           required: totalRequired,
-          status: allSlotsSufficient ? 'sufficient' : 'insufficient'
+          status,
+          details: {
+            timeSlots: store.required_staff?.[todayDayName] 
+              ? Object.entries(store.required_staff[todayDayName]).map(([timeSlotId, required]) => {
+                  const slotShifts = storeShifts.filter(shift => getTimeSlotForPattern(shift.pattern_id, store.id) === timeSlotId);
+                  return {
+                    name: timeSlotId,
+                    scheduled: slotShifts.length,
+                    required: typeof required === 'number' ? required : 0,
+                    status: slotShifts.length >= (typeof required === 'number' ? required : 0) ? 'sufficient' : 'insufficient'
+                  };
+                })
+              : []
+          }
         } as StoreStaffing;
       });
 
-      // time_slotsレスポンス処理
-      let timeSlotsData = [];
-      if (timeSlotsResponse.ok) {
-        const timeSlotsResult = await timeSlotsResponse.json();
-        timeSlotsData = timeSlotsResult.data || [];
-      } else {
-        console.error('Time slots API error:', await timeSlotsResponse.text());
-      }
+
+
+      // 店舗ごとのtimeSlots配列を構築  
+      const timeSlotsByStore: { [storeId: string]: TimeSlot[] } = {};
+      storesData.forEach(store => {
+        timeSlotsByStore[store.id] = timeSlotsData.filter((slot: TimeSlot) => slot.store_id === store.id);
+        console.log(`🕐 [${store.name}] 時間帯データ:`, timeSlotsByStore[store.id].map(slot => ({
+          id: slot.id,
+          name: slot.name,
+          start_time: slot.start_time,
+          end_time: slot.end_time
+        })));
+      });
 
       setStoreStaffing(staffingData);
       setRecentRequests((requestsData as DashboardShiftRequest[])?.slice(0, 3) || []);
       setUsers((usersData as DatabaseUser[]) || []);
       setStores((storesData as DashboardStore[]) || []);
+      setTimeSlots(timeSlotsByStore); // ⭐ 重要: timeSlots stateを設定
       setShiftPatterns((timeSlotsData as DashboardShiftPattern[]) || []); // time_slotsをshift_patternsとして使用
 
     } catch (error) {
@@ -343,9 +407,9 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">ダッシュボード</h1>
           <p className="text-gray-600 mt-2">
-            {new Date().toLocaleDateString('ja-JP', {
-              year: 'numeric',
-              month: 'long',
+            {new Date().toLocaleDateString('ja-JP', { 
+              year: 'numeric', 
+              month: 'long', 
               day: 'numeric',
               weekday: 'long'
             })}
@@ -353,7 +417,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 統計カード */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6">
           <Card>
             <CardHeader className="pb-2 sm:pb-3">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">今日のシフト</CardTitle>
@@ -392,30 +456,31 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
           {/* 今日の店舗別出勤状況 */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base sm:text-lg">今日の店舗別出勤状況</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 sm:space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                 {storeStaffing.map((staffing, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm sm:text-base">{staffing.store}</p>
-                      <p className="text-xs sm:text-sm text-gray-500">
-                        {staffing.scheduled} / {staffing.required} 人
-                      </p>
-                    </div>
-                    <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${staffing.status === 'sufficient'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm sm:text-base">{staffing.store}</p>
+                        <p className="text-xs sm:text-sm text-gray-500">
+                          {staffing.scheduled} / {staffing.required} 人
+                        </p>
+                      </div>
+                      <div className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
+                      staffing.status === 'sufficient'
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
                       }`}>
                       {staffing.status === 'sufficient' ? '充足' : '不足'}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </CardContent>
           </Card>
@@ -424,12 +489,12 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <span className="text-base sm:text-lg">代打募集</span>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <span>代打募集</span>
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => router.push('/emergency-management')}
                     size="sm"
-                    className="w-full sm:w-auto text-xs sm:text-sm"
+                    className="flex-1 sm:flex-none text-xs sm:text-sm"
                   >
                     募集作成
                   </Button>
@@ -437,8 +502,8 @@ export default function DashboardPage() {
                     <Button
                       onClick={() => router.push('/emergency-management?tab=manage')}
                       variant="secondary"
-                      size="sm"
-                      className="w-full sm:w-auto text-xs sm:text-sm"
+                      size="sm" 
+                      className="flex-1 sm:flex-none text-xs sm:text-sm"
                     >
                       応募管理
                     </Button>
@@ -459,10 +524,10 @@ export default function DashboardPage() {
                             {users.find(u => u.id === emergency.original_user_id)?.name || '不明なユーザー'}さん
                           </p>
                           <p className="text-xs text-gray-500 truncate">
-                            {new Date(emergency.date || '').toLocaleDateString('ja-JP', {
-                              month: 'numeric',
-                              day: 'numeric',
-                              weekday: 'short'
+                            {new Date(emergency.date || '').toLocaleDateString('ja-JP', { 
+                              month: 'numeric', 
+                              day: 'numeric', 
+                              weekday: 'short' 
                             })} | {stores.find(s => s.id === emergency.store_id)?.name || '不明な店舗'}
                           </p>
                           <p className="text-xs text-gray-400 mt-1">
@@ -515,43 +580,44 @@ export default function DashboardPage() {
         </div>
 
         {/* 最近のシフト希望 */}
-        <Card>
+          <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>最近のシフト希望</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
+                <Button
+                  variant="ghost"
+                  size="sm"
               onClick={() => router.push('/shift-requests')}
-            >
+                >
               すべて表示
-            </Button>
-          </CardHeader>
-          <CardContent>
+                </Button>
+            </CardHeader>
+            <CardContent>
             <div className="space-y-3">
               {recentRequests.length > 0 ? (
                 recentRequests.map((request) => {
                   const user = users.find(u => u.id === request.user_id);
                   const submissionPeriods = getSubmissionPeriods();
                   const period = submissionPeriods.find(p => p.id === request.submission_period);
-
+                  
                   return (
                     <div key={request.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                       <div>
                         <p className="font-medium text-gray-900">{user?.name || '不明なユーザー'}</p>
                         <p className="text-sm text-gray-500">
-                          {request.date} - {period?.label || request.submission_period}
+                          {request.date} - {period?.label || request.submission_period} 
                           (優先度: {request.priority === 1 ? '最優先' : request.priority === 2 ? '希望' : '可能'})
                         </p>
                       </div>
-                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${request.status === 'submitted'
-                        ? 'bg-blue-100 text-blue-800'
-                        : request.status === 'converted_to_shift'
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        request.status === 'submitted' 
+                          ? 'bg-blue-100 text-blue-800'
+                          : request.status === 'converted_to_shift'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                         }`}>
-                        {request.status === 'submitted' ? '提出済み' :
-                          request.status === 'converted_to_shift' ? 'シフト化済み' : request.status}
-                      </div>
+                        {request.status === 'submitted' ? '提出済み' : 
+                         request.status === 'converted_to_shift' ? 'シフト化済み' : request.status}
+                        </div>
                     </div>
                   );
                 })
@@ -559,8 +625,8 @@ export default function DashboardPage() {
                 <p className="text-gray-500 text-center py-4">シフト希望はありません</p>
               )}
             </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
         {/* クイックアクション */}
         <Card>
@@ -569,7 +635,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button
+              <Button 
                 className="h-16 flex flex-col items-center justify-center space-y-1"
                 onClick={() => router.push('/shift/create')}
               >
@@ -578,9 +644,9 @@ export default function DashboardPage() {
                 </svg>
                 <span>新しいシフト作成</span>
               </Button>
-
-              <Button
-                variant="secondary"
+              
+              <Button 
+                variant="secondary" 
                 className="h-16 flex flex-col items-center justify-center space-y-1"
                 onClick={() => router.push('/staff')}
               >
@@ -589,9 +655,9 @@ export default function DashboardPage() {
                 </svg>
                 <span>スタッフ管理</span>
               </Button>
-
-              <Button
-                variant="secondary"
+              
+              <Button 
+                variant="secondary" 
                 className="h-16 flex flex-col items-center justify-center space-y-1"
                 onClick={() => router.push('/settings/store')}
               >
