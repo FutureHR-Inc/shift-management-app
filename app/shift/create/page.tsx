@@ -166,13 +166,38 @@ function ShiftCreatePageInner() {
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
       
-      // API responseをApiStore型に変換し、必要な構造を確保
-      const storesData = result.data?.map((store: { id: string; name: string; required_staff?: Record<string, Record<string, number>>; user_stores?: { is_flexible: boolean; user_id: string }[] }) => ({
+      // API responseをApiStore型に変換し、必要な構造を確保（workRulesを含む）
+      const storesData = result.data?.map((store: { 
+        id: string; 
+        name: string; 
+        required_staff?: Record<string, Record<string, number>>; 
+        work_rules?: {
+          max_weekly_hours?: number;
+          max_consecutive_days?: number;
+          min_rest_hours?: number;
+        };
+        user_stores?: { is_flexible: boolean; user_id: string }[] 
+      }) => ({
         id: store.id,
         name: store.name,
         requiredStaff: store.required_staff || {},
+        workRules: store.work_rules ? {
+          maxWeeklyHours: store.work_rules.max_weekly_hours || 28,
+          maxConsecutiveDays: store.work_rules.max_consecutive_days || 7,
+          minRestHours: store.work_rules.min_rest_hours || 11
+        } : null, // workRulesフィールドを適切にマッピング
         flexibleStaff: store.user_stores?.filter((us: { is_flexible: boolean }) => us.is_flexible).map((us: { user_id: string }) => us.user_id) || []
       })) || [];
+      
+      // デバッグ: workRulesデータの確認
+      console.log('🔍 [fetchStores] 取得した店舗データ:', storesData);
+      storesData.forEach(store => {
+        if (store.workRules) {
+          console.log(`🔍 [fetchStores] 店舗 ${store.name} の勤怠ルール:`, store.workRules);
+        } else {
+          console.log(`🔍 [fetchStores] 店舗 ${store.name}: 勤怠ルール未設定`);
+        }
+      });
       
       return storesData;
     } catch (error) {
@@ -453,25 +478,31 @@ function ShiftCreatePageInner() {
     loadInitialData();
   }, [currentUser, searchParams]);
 
+  // 店舗データ（時間帯・固定シフト）を読み込む
+  const loadStoreData = async (storeId: string) => {
+    try {
+      const [timeSlotsData, fixedShiftsData] = await Promise.all([
+        fetchTimeSlots(storeId),
+        fetchFixedShifts(storeId)
+      ]);
+      setTimeSlots(timeSlotsData);
+      setFixedShifts(fixedShiftsData);
+      console.log('🔍 [loadStoreData] 店舗データ読み込み完了:', {
+        storeId,
+        timeSlotsCount: timeSlotsData.length,
+        fixedShiftsCount: fixedShiftsData.length
+      });
+    } catch (error) {
+      console.error('Error loading store data:', error);
+      setError('店舗データの読み込みに失敗しました');
+    }
+  };
+
   // 店舗変更時に時間帯データと固定シフトを取得
   useEffect(() => {
-    const loadStoreData = async () => {
-      if (selectedStore) {
-        try {
-          const [timeSlotsData, fixedShiftsData] = await Promise.all([
-            fetchTimeSlots(selectedStore),
-            fetchFixedShifts(selectedStore)
-          ]);
-          setTimeSlots(timeSlotsData);
-          setFixedShifts(fixedShiftsData);
-        } catch (error) {
-          console.error('Error loading store data:', error);
-          setError('店舗データの読み込みに失敗しました');
-        }
-      }
-    };
-
-    loadStoreData();
+    if (selectedStore) {
+      loadStoreData(selectedStore);
+    }
   }, [selectedStore]);
 
   // 選択された店舗または週が変更された時にシフトデータを取得
@@ -950,7 +981,22 @@ function ShiftCreatePageInner() {
   const checkWorkRuleViolations = (userId: string, date: string, timeSlotId: string): string[] => {
     const warnings: string[] = [];
     
-    if (!selectedStoreData?.workRules || !users || !timeSlots) return warnings;
+    // デバッグ: 勤怠ルールチェックの前提条件を確認
+    console.log('🔍 [checkWorkRuleViolations] チェック開始:', {
+      userId,
+      date,
+      timeSlotId,
+      selectedStore,
+      selectedStoreData: selectedStoreData?.name,
+      workRules: selectedStoreData?.workRules,
+      hasUsers: !!users,
+      hasTimeSlots: !!timeSlots
+    });
+    
+    if (!selectedStoreData?.workRules || !users || !timeSlots) {
+      console.log('🔍 [checkWorkRuleViolations] 前提条件不足のため警告チェックスキップ');
+      return warnings;
+    }
 
     // 新しいシフトパターンの時間数を計算
     const newPattern = timeSlots.find(ts => ts.id === timeSlotId);
@@ -962,41 +1008,120 @@ function ShiftCreatePageInner() {
       // TimeSlotには休憩時間がないため、休憩時間は0として計算
     }
 
-    // その週のユーザーのシフトを取得
+    // その週のユーザーのシフトを包括的に取得（通常シフト + 固定シフト）
     const weekStart = new Date(selectedWeek);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
 
-    const weeklyShifts = shifts.filter(shift => {
-      const shiftDate = new Date(shift.date);
-      return shift.userId === userId && 
-             shiftDate >= weekStart && 
-             shiftDate <= weekEnd;
-    });
+     console.log('🔍 [checkWorkRuleViolations] 週範囲:', {
+       weekStart: weekStart.toISOString().split('T')[0],
+       weekEnd: weekEnd.toISOString().split('T')[0],
+       hasFixedShifts: !!fixedShifts,
+       fixedShiftsCount: fixedShifts?.length
+     });
+
+     // 通常のシフト（下書き + 確定済み。警告は早めに出す）
+     const regularWeeklyShifts = shifts.filter(shift => {
+       const shiftDate = new Date(shift.date);
+       return shift.userId === userId && 
+              shiftDate >= weekStart && 
+              shiftDate <= weekEnd;
+     });
+
+     console.log('🔍 [checkWorkRuleViolations] 通常シフト:', regularWeeklyShifts.length);
+
+     // 固定シフトを週の各日について動的に生成
+     const fixedWeeklyShifts: any[] = [];
+     if (fixedShifts && fixedShifts.length > 0) {
+       for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+         const dayOfWeek = d.getDay();
+         const dateStr = d.toISOString().split('T')[0];
+         
+         const userFixedShiftsForDay = fixedShifts.filter(fs => 
+           fs.userId === userId && 
+           fs.storeId === selectedStore && 
+           fs.dayOfWeek === dayOfWeek &&
+           fs.isActive
+         );
+
+         userFixedShiftsForDay.forEach(fixedShift => {
+           fixedWeeklyShifts.push({
+             id: `fixed-${fixedShift.id}-${dateStr}`,
+             userId: fixedShift.userId,
+             date: dateStr,
+             timeSlotId: fixedShift.timeSlotId,
+             status: 'confirmed', // 固定シフトは確定扱い
+             isFixedShift: true
+           });
+         });
+       }
+     }
+
+     console.log('🔍 [checkWorkRuleViolations] 固定シフト:', fixedWeeklyShifts.length);
+
+     // 全シフトを結合（通常シフト + 固定シフト）
+     const weeklyShifts = [...regularWeeklyShifts, ...fixedWeeklyShifts];
 
     // 週間労働時間のチェック
     let weeklyHours = newShiftHours;
-    weeklyShifts.forEach(shift => {
+    console.log(`🔍 [checkWorkRuleViolations] 週間労働時間チェック開始:`, {
+      userId,
+      date,
+      weekStart: weekStart.toISOString().split('T')[0],
+      weekEnd: weekEnd.toISOString().split('T')[0],
+      newShiftHours,
+      weeklyShiftsCount: weeklyShifts.length
+    });
+
+    // 日別労働時間を集計（同一日複数シフト対応）
+    const dailyHours: { [date: string]: number } = {};
+    
+    weeklyShifts.forEach((shift, index) => {
       const pattern = timeSlots.find(ts => ts.id === shift.timeSlotId);
       if (pattern && pattern.start_time && pattern.end_time) {
         const startTime = pattern.start_time.split(':').map(Number);
         const endTime = pattern.end_time.split(':').map(Number);
         const hours = (endTime[0] * 60 + endTime[1] - startTime[0] * 60 - startTime[1]) / 60;
+        
+        if (!dailyHours[shift.date]) {
+          dailyHours[shift.date] = 0;
+        }
+        dailyHours[shift.date] += hours;
         weeklyHours += hours;
+        
+        console.log(`🔍 [checkWorkRuleViolations] シフト${index}: ${shift.date} ${pattern.name} ${hours}時間 (日計: ${dailyHours[shift.date]}h, 週計: ${weeklyHours.toFixed(1)}h)`);
+      }
+    });
+    
+    // 同一日12時間超過チェック（労働基準法）
+    Object.entries(dailyHours).forEach(([date, hours]) => {
+      if (hours > 12) {
+        warnings.push(`1日の労働時間が過度です（${date}: ${hours}時間 > 12時間）`);
       }
     });
 
     const maxWeeklyHours = selectedStoreData.workRules.maxWeeklyHours || 28;
+    console.log(`🔍 [checkWorkRuleViolations] 週間労働時間結果: ${weeklyHours.toFixed(1)}時間 vs 上限${maxWeeklyHours}時間`);
+    
     if (weeklyHours > maxWeeklyHours) {
-      warnings.push(`週間労働時間が上限を超えます（${weeklyHours.toFixed(1)}時間 > ${maxWeeklyHours}時間）`);
+      const warning = `週間労働時間が上限を超えます（${weeklyHours.toFixed(1)}時間 > ${maxWeeklyHours}時間） - 労働基準法に注意`;
+      console.log(`🔍 [checkWorkRuleViolations] 週間労働時間違反: ${warning}`);
+      warnings.push(warning);
     }
 
     // 連続勤務日数のチェック
     const userShifts = shifts.filter(shift => shift.userId === userId);
+    console.log(`🔍 [checkWorkRuleViolations] 連続勤務チェック開始:`, {
+      userId,
+      date,
+      userShiftsCount: userShifts.length,
+      userShifts: userShifts.map(s => s.date).sort()
+    });
     
     // 新しいシフトを含めて連続勤務日数を計算
     const allShifts = [...userShifts, { date, userId, timeSlotId: timeSlotId }]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    console.log(`🔍 [checkWorkRuleViolations] 全シフト（新規含む）:`, allShifts.map(s => s.date));
 
     let consecutiveDays = 1;
     let maxConsecutive = 1;
@@ -1019,8 +1144,143 @@ function ShiftCreatePageInner() {
       warnings.push(`連続勤務日数が上限を超えます（${maxConsecutive}日 > ${maxConsecutiveDays}日）`);
     }
 
+    // 最低休息時間のチェック
+    const minRestHours = selectedStoreData.workRules.minRestHours || 11;
+    for (let i = 0; i < allShifts.length - 1; i++) {
+      const currentShift = allShifts[i];
+      const nextShift = allShifts[i + 1];
+      
+      const currentPattern = timeSlots.find(ts => ts.id === currentShift.timeSlotId);
+      const nextPattern = timeSlots.find(ts => ts.id === nextShift.timeSlotId);
+      
+      if (currentPattern && nextPattern && currentPattern.end_time && nextPattern.start_time) {
+        const currentEnd = new Date(`${currentShift.date}T${currentPattern.end_time}`);
+        const nextStart = new Date(`${nextShift.date}T${nextPattern.start_time}`);
+        
+        const restHours = (nextStart.getTime() - currentEnd.getTime()) / (1000 * 60 * 60);
+        
+        if (restHours < minRestHours && restHours >= 0) {
+          const restHoursFormatted = restHours.toFixed(1);
+          warnings.push(`勤務間隔が不足しています（${restHoursFormatted}時間 < ${minRestHours}時間）`);
+        }
+      }
+    }
+
     return warnings;
   };
+
+  // シフト表全体の勤怠ルール違反をチェック
+  const checkAllShiftViolations = () => {
+         console.log('🔍 [checkAllShiftViolations] チェック開始:', {
+      hasSelectedStoreData: !!selectedStoreData,
+      hasWorkRules: !!selectedStoreData?.workRules,
+      workRules: selectedStoreData?.workRules,
+      hasUsers: !!users,
+      usersCount: users?.length,
+      hasTimeSlots: !!timeSlots,
+      timeSlotsCount: timeSlots?.length,
+      hasShifts: !!shifts,
+      shiftsCount: shifts?.length,
+      hasFixedShifts: !!fixedShifts,
+      fixedShiftsCount: fixedShifts?.length,
+      displayDatesCount: displayDates?.length
+    });
+
+    if (!selectedStoreData?.workRules || !users || !timeSlots || !shifts || !fixedShifts || !displayDates) {
+      console.log('🔍 [checkAllShiftViolations] 前提条件不足のためスキップ:', {
+        hasWorkRules: !!selectedStoreData?.workRules,
+        hasUsers: !!users,
+        hasTimeSlots: !!timeSlots,
+        hasShifts: !!shifts,
+        hasFixedShifts: !!fixedShifts,
+        hasDisplayDates: !!displayDates
+      });
+      return [];
+    }
+
+    const allWarnings: { userId: string; userName: string; date: string; warnings: string[] }[] = [];
+
+        // 表示期間内のすべてのシフト（通常 + 固定）を取得
+    const allShiftsInPeriod: any[] = [];
+
+    // 通常のシフトを追加（下書き + 確定済み。警告は早めに出す）
+    if (shifts) {
+      allShiftsInPeriod.push(...shifts);
+    }
+
+    // 固定シフトを動的に生成して追加
+    if (fixedShifts && fixedShifts.length > 0 && displayDates) {
+      displayDates.forEach(date => {
+        const d = new Date(date);
+        const dayOfWeek = d.getDay();
+        
+        const fixedShiftsForDay = fixedShifts.filter(fs => 
+          fs.storeId === selectedStore && 
+          fs.dayOfWeek === dayOfWeek &&
+          fs.isActive
+        );
+
+        fixedShiftsForDay.forEach(fixedShift => {
+          allShiftsInPeriod.push({
+            id: `fixed-${fixedShift.id}-${date}`,
+            userId: fixedShift.userId,
+            date: date,
+            timeSlotId: fixedShift.timeSlotId,
+            status: 'confirmed',
+            isFixedShift: true
+          });
+        });
+      });
+    }
+
+    console.log('🔍 [checkAllShiftViolations] 全シフト:', {
+      regularShifts: shifts?.length || 0,
+      fixedShifts: allShiftsInPeriod.filter(s => s.isFixedShift).length,
+      total: allShiftsInPeriod.length
+    });
+
+    // 各ユーザーの各シフトに対してチェック
+    console.log('🔍 [checkAllShiftViolations] シフトループ開始:', allShiftsInPeriod.length + '件');
+    allShiftsInPeriod.forEach((shift, index) => {
+      const user = users.find(u => u.id === shift.userId);
+      if (!user) {
+        console.log(`🔍 [checkAllShiftViolations] シフト${index}: ユーザーが見つからない ${shift.userId}`);
+        return;
+      }
+
+      console.log(`🔍 [checkAllShiftViolations] シフト${index}: ${user.name} (${shift.date}) ${shift.isFixedShift ? '[固定]' : '[通常]'}`);
+      const violations = checkWorkRuleViolations(shift.userId, shift.date, shift.timeSlotId);
+      console.log(`🔍 [checkAllShiftViolations] シフト${index}: 違反${violations.length}件`, violations);
+      
+      if (violations.length > 0) {
+        allWarnings.push({
+          userId: shift.userId,
+          userName: user.name,
+          date: shift.date,
+          warnings: violations
+        });
+      }
+    });
+
+    console.log('🔍 [checkAllShiftViolations] 最終結果:', allWarnings.length + '件の違反');
+    return allWarnings;
+  };
+
+  // 現在表示されている期間の勤怠ルール違反サマリー
+  const currentViolations = checkAllShiftViolations();
+  const hasViolations = currentViolations.length > 0;
+
+  // デバッグ: 違反チェック結果の確認
+  console.log('🔍 [ShiftCreate] 勤怠ルール違反チェック結果:', {
+    selectedStore,
+    selectedStoreData: selectedStoreData?.name,
+    workRules: selectedStoreData?.workRules,
+    shiftsCount: shifts.length,
+    usersCount: users.length,
+    timeSlotsCount: timeSlots.length,
+    violationsCount: currentViolations.length,
+    violations: currentViolations
+  });
 
   // 店舗所属スタッフのみフィルタ（基本的なシフト作成は所属スタッフ内で完結）
   const availableStaff = selectedStore ? users.filter(user => user.stores?.includes(selectedStore)) : [];
@@ -1981,6 +2241,38 @@ function ShiftCreatePageInner() {
                 <span className="lg:hidden">💡 固定シフトは確定済みで表示されます。</span>
               </p>
             </div>
+
+            {/* 勤怠ルール違反警告サマリー */}
+            {hasViolations && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-red-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ 勤怠ルール違反が検出されました</h4>
+                    <div className="text-sm text-red-700 space-y-1">
+                      {currentViolations.slice(0, 3).map((violation, index) => (
+                        <div key={index}>
+                          <strong>{violation.userName}</strong> ({new Date(violation.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}日):
+                          {violation.warnings.map((warning, wIndex) => (
+                            <div key={wIndex} className="ml-2">• {warning}</div>
+                          ))}
+                        </div>
+                      ))}
+                      {currentViolations.length > 3 && (
+                        <div className="text-red-600 text-xs">
+                          ...他 {currentViolations.length - 3} 件の違反があります
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-red-600 mt-2">
+                      ※ 労働基準法の遵守を推奨します。シフトの見直しをご検討ください。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* PC・スマホ別シフト表 */}
             <DesktopShiftTable
