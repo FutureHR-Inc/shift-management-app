@@ -2254,7 +2254,7 @@ function ShiftCreatePageInner() {
                     <div className="text-sm text-red-700 space-y-1">
                       {currentViolations.slice(0, 3).map((violation, index) => (
                         <div key={index}>
-                          <strong>{violation.userName}</strong> ({new Date(violation.date).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}日):
+                          <strong>{violation.userName}</strong> ({new Date(violation.date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}日):
                           {violation.warnings.map((warning, wIndex) => (
                             <div key={wIndex} className="ml-2">• {warning}</div>
                           ))}
