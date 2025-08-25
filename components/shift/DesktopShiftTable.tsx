@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { Shift, ApiUser as User, TimeSlot } from '../../lib/types';
+import type { Shift, ApiUser as User, TimeSlot, DatabaseShift } from '../../lib/types';
 
 interface DesktopShiftTableProps {
   selectedStore: string;
@@ -15,6 +15,7 @@ interface DesktopShiftTableProps {
   handleDeleteShift: (shiftId: string) => void;
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
+  setEmergencyModal: (modal: { show: boolean; shift: any | null }) => void;
   currentUser?: { id: string };
   shifts: Shift[];
   users: User[];
@@ -33,6 +34,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   handleDeleteShift,
   setContextMenu,
   setEmergencyManagement,
+  setEmergencyModal,
   currentUser,
   shifts,
   users,
@@ -128,14 +130,35 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                         >
                           {/* 必要人数表示 */}
                           <div className="flex items-center justify-between mb-1 sm:mb-2 lg:mb-1">
-                            <span className="text-xs sm:text-sm lg:text-xs font-medium text-gray-600">
-                              {current}/{required}人
-                            </span>
-                            {current !== required && (
-                              <span className="text-xs sm:text-sm lg:text-xs">
-                                {current < required ? '🔴' : '🔵'}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm lg:text-xs font-medium text-gray-600">
+                                {current}/{required}人
                               </span>
-                            )}
+                              {current < required ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // 既存の代打募集と同じフォーマットでデータを作成
+                                    const convertedShift: DatabaseShift = {
+                                      id: `shortage-${dateString}-${timeSlot.id}`,
+                                      user_id: '',  // 不足分の募集なのでユーザーIDは空
+                                      store_id: selectedStore,
+                                      time_slot_id: timeSlot.id,
+                                      date: dateString,
+                                      status: 'confirmed',  // 既存の代打募集と同じステータスを使用
+                                      created_at: new Date().toISOString(),
+                                      updated_at: new Date().toISOString()
+                                    };
+                                    setEmergencyModal({ show: true, shift: convertedShift });
+                                  }}
+                                  className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 active:bg-red-300 transition-colors"
+                                >
+                                  募集 {required - current}人
+                                </button>
+                              ) : current > required ? (
+                                <span className="text-xs sm:text-sm lg:text-xs">🔵</span>
+                              ) : null}
+                            </div>
                           </div>
 
                           {/* スタッフ表示 */}
@@ -155,8 +178,27 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                   const isConfirmed = shift.status === 'confirmed';
                                   const isFixedShift = (shift as any).isFixedShift || shift.id?.startsWith('fixed-');
                                   
+                                  // デバッグ: シフトの詳細情報を出力
+                                  console.log('🔍 シフト詳細:', {
+                                    id: shift.id,
+                                    status: shift.status,
+                                    isConfirmed,
+                                    isFixedShift,
+                                    rawShift: shift,
+                                    rawStatus: typeof shift.status,
+                                    statusCheck: shift.status === 'confirmed'
+                                  });
+                                  
                                   // デバッグ: ステータス確認
-                                  console.log(`🔍 [DesktopTable] シフト ${shift.id}: ステータス=${shift.status}, 固定=${isFixedShift}, 確定=${isConfirmed}`);
+                                  console.log(`🔍 [DesktopTable] シフト ${shift.id}: ステータス=${shift.status}, 固定=${isFixedShift}, 確定=${isConfirmed}`, {
+                                    shift,
+                                    status: shift.status,
+                                    isConfirmed,
+                                    isFixedShift,
+                                    rawStatus: shift.status,
+                                    typeofStatus: typeof shift.status,
+                                    statusComparison: shift.status === 'confirmed'
+                                  });
                                   
                                   // デバッグ: 詳細なシフトデータ確認
                                   console.log(`🔍 [DesktopTable] 🔥 シフトデータ詳細 ${shift.id}:`, {
@@ -208,15 +250,59 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                       className={`text-xs sm:text-sm lg:text-xs p-1.5 sm:p-2 lg:p-1.5 rounded-md border transition-all group relative ${isFixedShift
                                         ? 'bg-green-100 border-green-300 text-green-800'
                                         : isConfirmed
-                                          ? 'bg-blue-100 border-blue-300 text-blue-800'
+                                          ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
                                           : 'bg-white border-gray-200 text-gray-700'
-                                        } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
+                                        } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''} ${
+                                          isConfirmed ? 'cursor-pointer' : ''
+                                        }`}
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        console.log('🔍 シフトクリック:', {
+                                          shiftId: shift.id,
+                                          status: shift.status,
+                                          isFixedShift,
+                                          isConfirmed,
+                                          isEmergencyRequested,
+                                          event: {
+                                            pageX: e.pageX,
+                                            pageY: e.pageY,
+                                            target: e.target,
+                                            currentTarget: e.currentTarget
+                                          }
+                                        });
+
+                                        // デバッグ: クリックされた要素の位置情報
+                                        const target = e.target as HTMLElement;
+                                        const currentTarget = e.currentTarget as HTMLElement;
+                                        const targetRect = target.getBoundingClientRect();
+                                        const currentTargetRect = currentTarget.getBoundingClientRect();
+                                        
+                                        console.log('🔍 クリック位置情報:', {
+                                          target: {
+                                            rect: targetRect,
+                                            className: target.className
+                                          },
+                                          currentTarget: {
+                                            rect: currentTargetRect,
+                                            className: currentTarget.className
+                                          },
+                                          scroll: {
+                                            x: window.scrollX,
+                                            y: window.scrollY
+                                          },
+                                          viewport: {
+                                            width: window.innerWidth,
+                                            height: window.innerHeight
+                                          }
+                                        });
+
                                         if (isFixedShift) {
+                                          console.log('❌ 固定シフトなのでスキップ');
                                           return;
                                         }
+
                                         if (isEmergencyRequested) {
+                                          console.log('🔄 既に代打募集中');
                                           const volunteerCount = emergencyRequest.emergency_volunteers?.length || 0;
                                           if (volunteerCount > 0) {
                                             setEmergencyManagement({
@@ -226,6 +312,147 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                           } else {
                                             alert('まだ応募者がいません。');
                                           }
+                                        } else if (isConfirmed) {
+                                          console.log('✅ 確定済みシフト - 代打募集ボタンを表示');
+                                          // 代打募集ボタンを表示
+                                          console.log('🎯 ボタン要素を作成開始');
+                                          // ボタンのコンテナを作成
+                                          const container = document.createElement('div');
+                                          container.style.position = 'fixed';
+                                          container.style.top = '0';
+                                          container.style.left = '0';
+                                          container.style.width = '100%';
+                                          container.style.height = '100%';
+                                          container.style.pointerEvents = 'none';
+                                          container.style.zIndex = '9999';
+
+                                          // ボタン要素を作成
+                                          const buttonElement = document.createElement('div');
+                                          buttonElement.className = 'bg-white rounded-xl shadow-lg border border-gray-200 p-4';
+                                          buttonElement.style.position = 'absolute';
+                                          buttonElement.style.pointerEvents = 'auto';
+                                          buttonElement.style.display = 'block';
+                                          buttonElement.style.visibility = 'visible';
+                                          console.log('🎯 ボタン要素を作成完了:', {
+                                            element: buttonElement,
+                                            className: buttonElement.className,
+                                            style: buttonElement.style,
+                                            position: buttonElement.style.position,
+                                            zIndex: buttonElement.style.zIndex
+                                          });
+                                          buttonElement.innerHTML = `
+                                            <div class="flex flex-col gap-3">
+                                              <div class="flex items-center gap-2 text-gray-900">
+                                                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                </svg>
+                                                <span class="font-medium">代打募集</span>
+                                              </div>
+                                              <div class="text-sm text-gray-600">
+                                                ${user.name}さんのシフト
+                                                <div class="mt-1">${displayTime}</div>
+                                              </div>
+                                              <button class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 active:bg-red-300 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                </svg>
+                                                募集を開始
+                                              </button>
+                                            </div>
+                                          `;
+
+                                          console.log('✅ ボタンの位置を計算');
+                                          // クリックされた要素の位置情報を取得
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          
+                                          // ビューポート内での位置を計算（クリックされた要素の中央に配置）
+                                          const buttonLeft = rect.left + (rect.width / 2);
+                                          const buttonTop = rect.top + (rect.height / 2);
+                                          
+                                          // ボタンを配置
+                                          buttonElement.style.left = `${buttonLeft}px`;
+                                          buttonElement.style.top = `${buttonTop}px`;
+                                          buttonElement.style.transform = 'translate(-50%, -50%)';  // 中央揃え
+                                          
+                                          console.log('✅ ボタンの位置を設定:', {
+                                            rect,
+                                            buttonLeft,
+                                            buttonTop,
+                                            finalLeft: `${buttonLeft + rect.width + 10}px`,
+                                            finalTop: `${buttonTop}px`,
+                                            viewportWidth: window.innerWidth,
+                                            viewportHeight: window.innerHeight,
+                                            documentWidth: document.documentElement.clientWidth,
+                                            documentHeight: document.documentElement.clientHeight,
+                                            scrollWidth: document.documentElement.scrollWidth,
+                                            scrollHeight: document.documentElement.scrollHeight
+                                          });
+
+                                          // 画面端に近い場合の調整
+                                          setTimeout(() => {
+                                            const buttonRect = buttonElement.getBoundingClientRect();
+                                            const viewportWidth = window.innerWidth;
+                                            const viewportHeight = window.innerHeight;
+
+                                            // 右端からはみ出す場合
+                                            if (buttonRect.right > viewportWidth) {
+                                              const newLeft = viewportWidth - buttonRect.width - 10;
+                                              buttonElement.style.left = `${newLeft + scrollX}px`;
+                                            }
+
+                                            // 下端からはみ出す場合
+                                            if (buttonRect.bottom > viewportHeight) {
+                                              const newTop = viewportHeight - buttonRect.height - 10;
+                                              buttonElement.style.top = `${newTop + scrollY}px`;
+                                            }
+                                          }, 0);
+                                          // 募集開始ボタンのクリックイベントを設定
+                                          const startButton = buttonElement.querySelector('button');
+                                          if (startButton) {
+                                            startButton.onclick = (e) => {
+                                              e.stopPropagation();
+                                              // containerごと削除
+                                              if (container.parentNode) {
+                                                container.parentNode.removeChild(container);
+                                              }
+                                              // DatabaseShiftに変換
+                                              const convertedShift: DatabaseShift = {
+                                                id: shift.id,
+                                                user_id: 'userId' in shift ? shift.userId : shift.user_id,
+                                                store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
+                                                time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
+                                                date: shift.date,
+                                                status: shift.status,
+                                                created_at: new Date().toISOString(),
+                                                updated_at: new Date().toISOString()
+                                              };
+                                              setEmergencyModal({ show: true, shift: convertedShift });
+                                            };
+                                          }
+                                          console.log('🎯 DOMにボタンを追加');
+                                          // ボタンをコンテナに追加
+                                          container.appendChild(buttonElement);
+                                          // コンテナをbodyに追加
+                                          document.body.appendChild(container);
+                                          console.log('🎯 ボタンがDOMに追加されました:', {
+                                            buttonInDOM: document.body.contains(buttonElement),
+                                            buttonRect: buttonElement.getBoundingClientRect(),
+                                            buttonVisible: buttonElement.offsetParent !== null,
+                                            buttonStyles: window.getComputedStyle(buttonElement)
+                                          });
+
+                                          // クリックイベントのリスナーを追加して、ボタン以外をクリックしたら削除
+                                          const handleClickOutside = (event: MouseEvent) => {
+                                            if (!buttonElement.contains(event.target as Node)) {
+                                              if (container.parentNode) {
+                                                container.parentNode.removeChild(container);
+                                              }
+                                              document.removeEventListener('click', handleClickOutside);
+                                            }
+                                          };
+                                          setTimeout(() => {
+                                            document.addEventListener('click', handleClickOutside);
+                                          }, 0);
                                         } else {
                                           setContextMenu({
                                             show: true,
@@ -240,12 +467,34 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                       {/* PC版：コンパクト表示 */}
                                       <div className="flex items-center justify-between">
                                         <div className="flex-1 min-w-0">
-                                          <div className="font-medium truncate">
-                                            {isFixedShift && <span className="mr-1">📌</span>}
-                                            {!isFixedShift && isConfirmed && <span className="mr-1">✅</span>}
-                                            {!isFixedShift && shift.status === 'draft' && <span className="mr-1">📝</span>}
-                                            {!isFixedShift && hasCustomTime && <span className="mr-1">⏰</span>}
-                                            {user.name}
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-1 mb-1 sm:mb-0">
+                                                <div className="flex items-center gap-1">
+                                                  {isFixedShift && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
+                                                      📌 固定
+                                                    </span>
+                                                  )}
+                                                  {!isFixedShift && isConfirmed && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
+                                                      ✅ 確定
+                                                    </span>
+                                                  )}
+                                                  {!isFixedShift && shift.status === 'draft' && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs">
+                                                      📝 下書き
+                                                    </span>
+                                                  )}
+                                                  {!isFixedShift && hasCustomTime && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs">
+                                                      ⏰ カスタム
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <span className="font-medium">{user.name}</span>
+                                              </div>
+                                            </div>
                                           </div>
                                           <div className="text-xs text-gray-600 truncate mt-0.5">
                                             {displayTime}

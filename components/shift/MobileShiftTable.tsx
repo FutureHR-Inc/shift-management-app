@@ -15,6 +15,7 @@ interface MobileShiftTableProps {
   handleDeleteShift: (shiftId: string) => void;
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
+  setEmergencyModal: (modal: { show: boolean; shift: any | null }) => void;
   currentUser?: { id: string };
   shifts: Shift[];
   users: User[];
@@ -33,6 +34,7 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
   handleDeleteShift,
   setContextMenu,
   setEmergencyManagement,
+  setEmergencyModal,
   currentUser,
   shifts,
   users,
@@ -114,11 +116,30 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                             <span className="text-xs sm:text-sm font-medium text-gray-600">
                               {current}/{required}人
                             </span>
-                            {current !== required && (
-                              <span className="text-xs sm:text-sm">
-                                {current < required ? '🔴' : '🔵'}
-                              </span>
-                            )}
+                            {current < required ? (
+                              <button
+                                                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // 既存の代打募集と同じフォーマットでデータを作成
+                                    const convertedShift: DatabaseShift = {
+                                      id: `shortage-${dateString}-${timeSlot.id}`,
+                                      user_id: '',  // 不足分の募集なのでユーザーIDは空
+                                      store_id: selectedStore,
+                                      time_slot_id: timeSlot.id,
+                                      date: dateString,
+                                      status: 'confirmed',  // 既存の代打募集と同じステータスを使用
+                                      created_at: new Date().toISOString(),
+                                      updated_at: new Date().toISOString()
+                                    };
+                                    setEmergencyModal({ show: true, shift: convertedShift });
+                                  }}
+                                className="text-xs sm:text-sm px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 active:bg-red-300"
+                              >
+                                募集 {required - current}人
+                              </button>
+                            ) : current > required ? (
+                              <span className="text-xs sm:text-sm">🔵</span>
+                            ) : null}
                           </div>
 
                           {/* スタッフ表示 */}
@@ -179,6 +200,19 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           } else {
                                             alert('まだ応募者がいません。');
                                           }
+                                        } else if (isConfirmed) {
+                                          // 確定済みシフトの場合は代打募集モーダルを直接表示
+                                          const convertedShift = {
+                                            id: shift.id,
+                                            user_id: 'userId' in shift ? shift.userId : shift.user_id,
+                                            store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
+                                            time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
+                                            date: shift.date,
+                                            status: shift.status,
+                                            created_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString()
+                                          };
+                                          setEmergencyModal({ show: true, shift: convertedShift });
                                         } else {
                                           setContextMenu({
                                             show: true,

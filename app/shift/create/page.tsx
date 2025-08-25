@@ -687,15 +687,13 @@ function ShiftCreatePageInner() {
       setError('店舗を選択してください');
       return;
     }
-    
-    setModalData({ date, timeSlot, dayIndex });
-    setSelectedUser('');
-    setSelectedTimeSlot('');
-    // setStaffShiftStatus(null); // スタッフシフト状況をクリア（削除済み）
-    
-    // 該当日の確定済みシフトをチェック
-    await checkAllStaffConfirmedShifts(date);
-    
+
+    // シフト追加モーダルを表示
+    setModalData({
+      date,
+      timeSlot,
+      dayIndex
+    });
     setIsModalOpen(true);
   };
 
@@ -1664,11 +1662,12 @@ function ShiftCreatePageInner() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          original_user_id: shift.user_id,
+          original_user_id: shift.user_id || currentUser?.id, // 不足分の場合は現在のユーザー（店長）のIDを使用
           store_id: shift.store_id,
           date: shift.date,
-          time_slot_id: shift.time_slot_id, // shift_pattern_id から time_slot_id に変更
-          reason: emergencyReason.trim()
+          time_slot_id: shift.time_slot_id,
+          reason: emergencyReason.trim(),
+          request_type: shift.user_id ? 'substitute' : 'shortage' // user_idがある場合は代打、ない場合は不足分
         }),
       });
 
@@ -2297,6 +2296,7 @@ function ShiftCreatePageInner() {
               handleCellClick={handleCellClick}
               handleDeleteShift={handleDeleteShift}
               setContextMenu={setContextMenu}
+              setEmergencyModal={setEmergencyModal}
               setEmergencyManagement={setEmergencyManagement}
               currentUser={currentUser}
               shifts={shifts}
@@ -2664,7 +2664,12 @@ function ShiftCreatePageInner() {
             {/* 確定済みシフトの場合は代打募集ボタンを表示 */}
             {contextMenu.shift && contextMenu.shift.status === 'confirmed' && (
               <button
-                onClick={() => contextMenu.shift && handleOpenEmergencyModal(contextMenu.shift)}
+                onClick={() => {
+                  if (contextMenu.shift) {
+                    handleOpenEmergencyModal(contextMenu.shift);
+                    handleCloseContextMenu();
+                  }
+                }}
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
               >
                 <svg className="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
