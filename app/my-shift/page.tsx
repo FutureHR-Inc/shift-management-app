@@ -51,7 +51,7 @@ export default function MyShiftPage() {
     monday.setDate(today.getDate() - today.getDay() + 1);
     return monday.toISOString().split('T')[0];
   });
-
+  
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myShifts, setMyShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,74 +75,147 @@ export default function MyShiftPage() {
     }
   }, [router]);
 
+  // 固定シフト更新イベントの監視
+  useEffect(() => {
+    const handleFixedShiftUpdate = (event: CustomEvent | StorageEvent) => {
+      console.log('固定シフト更新を検知:', event);
+      // 現在のユーザーのシフトデータを再取得
+      if (currentUser) {
+        fetchMyShifts();
+      }
+    };
+
+    // 同一タブ内のイベント監視
+    window.addEventListener('fixedShiftUpdated', handleFixedShiftUpdate as EventListener);
+    
+    // 別タブからのストレージイベント監視
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'fixedShiftUpdate') {
+        handleFixedShiftUpdate(event);
+      }
+    });
+
+    return () => {
+      window.removeEventListener('fixedShiftUpdated', handleFixedShiftUpdate as EventListener);
+      window.removeEventListener('storage', handleFixedShiftUpdate);
+    };
+  }, [currentUser]);
+
   // シフトデータ取得（通常シフト + 固定シフト統合）
   useEffect(() => {
     if (!currentUser) return;
+    fetchMyShifts();
+  }, [currentUser, selectedWeek]);
 
-    const fetchMyShifts = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchMyShifts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // 選択された週の日付範囲を計算
-        const weekStart = new Date(selectedWeek);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        const dateToString = weekEnd.toISOString().split('T')[0];
+      // 固定シフト用の無制限期間を設定（過去1年〜未来1年）
+      const selectedDate = new Date(selectedWeek);
+      const unlimitedStart = new Date(selectedDate);
+      unlimitedStart.setFullYear(selectedDate.getFullYear() - 1); // 1年前
+      const unlimitedEnd = new Date(selectedDate);
+      unlimitedEnd.setFullYear(selectedDate.getFullYear() + 1); // 1年後
+      
+      // 通常シフト取得は選択週のみ
+      const selectedWeekStart = new Date(selectedWeek);
+      const selectedWeekEnd = new Date(selectedWeekStart);
+      selectedWeekEnd.setDate(selectedWeekStart.getDate() + 6);
+      
+      const weekStartString = selectedWeekStart.toISOString().split('T')[0];
+      const weekEndString = selectedWeekEnd.toISOString().split('T')[0];
 
-        // 通常シフトと固定シフトを並行取得
-        const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
-          fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${selectedWeek}&date_to=${dateToString}&current_user_id=${currentUser.id}`),
-          fetch(`/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`)
-        ]);
+      // 通常シフトと固定シフトを並行取得（通常シフトは選択週のみ）
+      const fixedShiftsUrl = `/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`;
+      console.log('🔍 [MyShift] API呼び出し URL:', fixedShiftsUrl);
+      
+      const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
+        fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${weekStartString}&date_to=${weekEndString}`),
+        fetch(fixedShiftsUrl)
+      ]);
+      
+      console.log('🔍 [MyShift] API レスポンス:');
+      console.log('  - 固定シフトAPI成功:', fixedShiftsResponse.ok);
+      console.log('  - ステータス:', fixedShiftsResponse.status);
+      if (!fixedShiftsResponse.ok) {
+        const errorText = await fixedShiftsResponse.text();
+        console.log('  - エラー内容:', errorText);
+      }
 
-        if (!shiftsResponse.ok) {
-          throw new Error('シフトデータの取得に失敗しました');
-        }
+      if (!shiftsResponse.ok) {
+        throw new Error('シフトデータの取得に失敗しました');
+      }
 
-        const shiftsResult = await shiftsResponse.json();
-        const normalShifts = shiftsResult.data || [];
+      const shiftsResult = await shiftsResponse.json();
+      const normalShifts = shiftsResult.data || [];
 
-        // 固定シフトからこの週のシフトを生成
-        const generatedShifts = [];
-        if (fixedShiftsResponse.ok) {
-          const fixedShiftsResult = await fixedShiftsResponse.json();
-          const fixedShifts = fixedShiftsResult.data || [];
+      // 固定シフトから選択週のシフトを生成（制限なし・恒常表示）
+      const generatedShifts = [];
+      if (fixedShiftsResponse.ok) {
+        const fixedShiftsResult = await fixedShiftsResponse.json();
+        const fixedShifts = fixedShiftsResult.data || [];
 
-          // この週の各日を確認
-          for (let i = 0; i < 7; i++) {
-            const currentDate = new Date(weekStart);
-            currentDate.setDate(weekStart.getDate() + i);
-            const dateString = currentDate.toISOString().split('T')[0];
-            const dayOfWeek = currentDate.getDay();
+        console.log('🔍 [MyShift] 固定シフト調査:');
+        console.log('  - 取得した固定シフト数:', fixedShifts.length);
+        console.log('  - 固定シフトデータ:', fixedShifts);
+        console.log('  - 選択週:', selectedWeek);
 
-            // その日に通常シフトが既にあるかチェック
-            const hasNormalShift = normalShifts.some((shift: Shift) => shift.date === dateString);
+        // 選択週の各日を確認（7日間）
+        for (let i = 0; i < 7; i++) {
+          const currentDate = new Date(selectedWeekStart);
+          currentDate.setDate(selectedWeekStart.getDate() + i);
+          const dateString = currentDate.toISOString().split('T')[0];
+          const dayOfWeek = currentDate.getDay();
 
-            if (!hasNormalShift) {
-              // その曜日の固定シフトがあるかチェック
-              const dayFixedShift = fixedShifts.find((fs: any) => fs.day_of_week === dayOfWeek);
+          console.log(`  - 日付: ${dateString} (${dayOfWeek}曜日)`);
+          
+          // この曜日の固定シフトがあるかチェック
+          const dayFixedShifts = fixedShifts.filter((fs: any) => fs.day_of_week === dayOfWeek);
+          console.log(`    → この曜日の固定シフト: ${dayFixedShifts.length}件`);
+          
+          dayFixedShifts.forEach((fs: any) => {
+            console.log(`      - ユーザー: ${fs.users?.name}, 時間帯: ${fs.time_slots?.name}, アクティブ: ${fs.is_active}`);
+          });
 
-              if (dayFixedShift) {
-                // 固定シフトから仮想シフトオブジェクトを作成
-                generatedShifts.push({
-                  id: `fixed-${dayFixedShift.id}-${dateString}`, // 仮想ID
-                  date: dateString,
-                  user_id: currentUser.id,
-                  store_id: dayFixedShift.store_id,
-                  time_slot_id: dayFixedShift.time_slot_id,
-                  status: 'confirmed', // 固定シフトは確定扱い
-                  stores: dayFixedShift.stores,
-                  time_slots: dayFixedShift.time_slots,
-                  notes: '固定シフト（未生成）'
-                } as Shift);
-              }
+          // その日に通常シフトが既にあるかチェック
+          const hasNormalShift = normalShifts.some((shift: Shift) => shift.date === dateString);
+          console.log(`    → 通常シフトあり: ${hasNormalShift}`);
+
+          if (!hasNormalShift) {
+            // その曜日の固定シフトがあるかチェック（制限なし・恒常的に表示）
+            const dayFixedShift = fixedShifts.find((fs: any) => fs.day_of_week === dayOfWeek);
+            
+            if (dayFixedShift) {
+              console.log(`    ✅ 固定シフト生成: ${dayFixedShift.users?.name} - ${dayFixedShift.time_slots?.name}`);
+              // 固定シフトから仮想シフトオブジェクトを作成
+              generatedShifts.push({
+                id: `fixed-${dayFixedShift.id}-${dateString}`, // 仮想ID
+                date: dateString,
+                user_id: currentUser.id,
+                store_id: dayFixedShift.store_id,
+                time_slot_id: dayFixedShift.time_slot_id,
+                status: 'confirmed', // 固定シフトは確定扱い
+                stores: dayFixedShift.stores,
+                time_slots: dayFixedShift.time_slots,
+                notes: '固定シフト（恒常表示）'
+              } as Shift);
+            } else {
+              console.log(`    ❌ この曜日に固定シフトなし`);
             }
           }
         }
+      }
 
-        // 通常シフトと生成された固定シフトをマージ
-        setMyShifts([...normalShifts, ...generatedShifts]);
+      // 通常シフトと固定シフトをマージ（既に選択週でフィルタ済み）
+      console.log('🔍 [MyShift] 最終結果:');
+      console.log('  - 通常シフト数:', normalShifts.length);
+      console.log('  - 生成された固定シフト数:', generatedShifts.length);
+      console.log('  - 合計表示シフト数:', normalShifts.length + generatedShifts.length);
+      console.log('  - 生成された固定シフト:', generatedShifts);
+      
+      setMyShifts([...normalShifts, ...generatedShifts]);
 
       } catch (error) {
         console.error('シフトデータ取得エラー:', error);
@@ -151,9 +224,7 @@ export default function MyShiftPage() {
         setLoading(false);
       }
     };
-
-    fetchMyShifts();
-  }, [currentUser, selectedWeek]);
+  };
 
   // 週の日付を生成
   const getWeekDates = (startDate: string) => {
@@ -203,9 +274,9 @@ export default function MyShiftPage() {
         if (startTime && endTime) {
           const start = new Date(`2000-01-01T${startTime}`);
           const end = new Date(`2000-01-01T${endTime}`);
-          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
           const breakHours = breakMinutes / 60; // 分を時間に変換
-          totalHours += Math.max(0, hours - breakHours);
+        totalHours += Math.max(0, hours - breakHours);
         }
       }
     });
@@ -325,12 +396,13 @@ export default function MyShiftPage() {
                 return (
                   <div
                     key={index}
-                    className={`p-4 rounded-xl border-2 transition-all ${isToday
-                        ? 'border-blue-500 bg-blue-50'
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      isToday 
+                        ? 'border-blue-500 bg-blue-50' 
                         : shift
-                          ? 'border-gray-200 bg-white hover:shadow-md'
-                          : 'border-gray-100 bg-gray-50'
-                      }`}
+                        ? 'border-gray-200 bg-white hover:shadow-md'
+                        : 'border-gray-100 bg-gray-50'
+                    }`}
                   >
                     {/* 日付 */}
                     <div className="text-center mb-3">
@@ -346,9 +418,11 @@ export default function MyShiftPage() {
                     {shift && (pattern || timeSlot) && store ? (
                       <div className="space-y-2">
                         <div
-                          className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
-                            } ${shift.id.startsWith('fixed-') ? 'border-2 border-dashed border-white/50' : ''
-                            }`}
+                          className={`px-3 py-2 rounded-lg text-white text-center font-medium relative ${
+                            shift.status === 'confirmed' ? 'ring-2 ring-yellow-400' : ''
+                          } ${
+                            shift.id.startsWith('fixed-') ? 'border-2 border-dashed border-white/50' : ''
+                          }`}
                           style={{ backgroundColor: getDisplayColor() }}
                         >
                           {getDisplayName()}
@@ -401,9 +475,9 @@ export default function MyShiftPage() {
         {(() => {
           const today = new Date().toISOString().split('T')[0];
           const todayShift = getShiftForDate(today);
-
+          
           if (!todayShift) return null;
-
+          
           return (
             <Card>
               <CardHeader>

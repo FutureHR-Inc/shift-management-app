@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -16,8 +16,6 @@ interface ShiftModalData {
   timeSlot: string;
   dayIndex: number;
 }
-
-
 
 // APIから取得するデータ用の型（Store型を上書き）
 interface ApiStore {
@@ -53,18 +51,18 @@ function ShiftCreatePageInner() {
     const today = new Date();
     const dayOfWeek = today.getDay(); // 0=日曜日, 1=月曜日, ...
     const monday = new Date(today);
-
+    
     // 月曜日を0として計算（日曜日の場合は前週の月曜日）
     const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     monday.setDate(today.getDate() + daysToMonday);
-
+    
     return monday.toISOString().split('T')[0];
   };
 
   // 表示期間モードに応じた適切な開始日を取得
   const getAppropriateStartDate = (mode: 'week' | 'half-month' | 'month') => {
     const today = new Date();
-
+    
     switch (mode) {
       case 'week':
         return getCurrentWeekMonday();
@@ -73,8 +71,8 @@ function ShiftCreatePageInner() {
         const currentDate = today.getDate();
         const firstHalf = new Date(today.getFullYear(), today.getMonth(), 1);
         const secondHalf = new Date(today.getFullYear(), today.getMonth(), 15);
-
-        return currentDate < 15
+        
+        return currentDate < 15 
           ? firstHalf.toISOString().split('T')[0]
           : secondHalf.toISOString().split('T')[0];
       case 'month':
@@ -93,17 +91,17 @@ function ShiftCreatePageInner() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [approvedTimeOffRequests, setApprovedTimeOffRequests] = useState<TimeOffRequest[]>([]);
   const [fixedShifts, setFixedShifts] = useState<DatabaseFixedShift[]>([]);
-
+  
   // UI state
   const [currentUser, setCurrentUser] = useState<any>(null); // 現在のユーザー情報
   const [selectedStore, setSelectedStore] = useState('');
   const [selectedWeek, setSelectedWeek] = useState(() => getCurrentWeekMonday()); // 今週の月曜日
-  const [viewMode, setViewMode] = useState<'week' | 'half-month' | 'month'>('week'); // 表示期間モード
+  const [viewMode, setViewMode] = useState<'week' | 'half-month' | 'month'>('month'); // 表示期間モード（デフォルトを月表示に変更）
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalData, setModalData] = useState<ShiftModalData | null>(null);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(''); // selectedPattern から selectedTimeSlot に変更
-
+  
   // カスタム時間調整関連のstate
   const [isCustomTime, setIsCustomTime] = useState(false);
   const [customStartTime, setCustomStartTime] = useState('');
@@ -112,10 +110,6 @@ function ShiftCreatePageInner() {
   // Loading and error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshingStaff, setRefreshingStaff] = useState(false);
-
-  // デバウンス用のタイマー参照
-  const focusUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [saving, setSaving] = useState(false);
 
   // 代打募集関連のstate
@@ -132,7 +126,7 @@ function ShiftCreatePageInner() {
     request: any;
   }>({ show: false, request: null });
   const [processingVolunteer, setProcessingVolunteer] = useState('');
-
+  
   // カスタム時間設定用のstate
   const [customApprovalTime, setCustomApprovalTime] = useState({
     volunteerId: '',
@@ -166,12 +160,12 @@ function ShiftCreatePageInner() {
       console.log('currentUser not available, skipping store fetch');
       return [];
     }
-
+    
     try {
       const response = await fetch(`/api/stores?current_user_id=${currentUser.id}`);
       if (!response.ok) throw new Error('店舗データの取得に失敗しました');
       const result = await response.json();
-
+      
       // API responseをApiStore型に変換し、必要な構造を確保
       const storesData = result.data?.map((store: { id: string; name: string; required_staff?: Record<string, Record<string, number>>; user_stores?: { is_flexible: boolean; user_id: string }[] }) => ({
         id: store.id,
@@ -179,7 +173,7 @@ function ShiftCreatePageInner() {
         requiredStaff: store.required_staff || {},
         flexibleStaff: store.user_stores?.filter((us: { is_flexible: boolean }) => us.is_flexible).map((us: { user_id: string }) => us.user_id) || []
       })) || [];
-
+      
       return storesData;
     } catch (error) {
       console.error('Error fetching stores:', error);
@@ -187,20 +181,17 @@ function ShiftCreatePageInner() {
     }
   };
 
-  const fetchUsers = async (retryCount = 0) => {
+  const fetchUsers = async () => {
     if (!currentUser) {
       console.log('currentUser not available, skipping users fetch');
       return [];
     }
-
+    
     try {
-      console.log(`🔄 [SHIFT CREATE] Fetching users (attempt ${retryCount + 1}/3)...`);
       const response = await fetch(`/api/users?current_user_id=${currentUser.id}`);
-      if (!response.ok) {
-        throw new Error(`ユーザーデータの取得に失敗しました (Status: ${response.status})`);
-      }
+      if (!response.ok) throw new Error('ユーザーデータの取得に失敗しました');
       const result = await response.json();
-
+      
       // ユーザーに所属店舗情報を追加
       const usersWithStores = result.data?.map((user: DatabaseUser) => ({
         id: user.id,
@@ -213,20 +204,10 @@ function ShiftCreatePageInner() {
         memo: user.memo,
         stores: user.user_stores?.map((us: UserStore) => us.store_id) || []
       })) || [];
-
-      console.log(`✅ [SHIFT CREATE] Users fetched successfully: ${usersWithStores.length} users`);
+      
       return usersWithStores;
     } catch (error) {
-      console.error(`❌ [SHIFT CREATE] Error fetching users (attempt ${retryCount + 1}):`, error);
-
-      // 最大3回までリトライ
-      if (retryCount < 2) {
-        const delay = Math.pow(2, retryCount) * 1000; // 指数バックオフ: 1s, 2s
-        console.log(`⏳ [SHIFT CREATE] Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchUsers(retryCount + 1);
-      }
-
+      console.error('Error fetching users:', error);
       throw error;
     }
   };
@@ -236,7 +217,7 @@ function ShiftCreatePageInner() {
       const response = await fetch(`/api/time-slots?store_id=${storeId}`);
       if (!response.ok) throw new Error('時間帯データの取得に失敗しました');
       const result = await response.json();
-
+      
       return result.data || [];
     } catch (error) {
       console.error('Error fetching time slots:', error);
@@ -246,11 +227,18 @@ function ShiftCreatePageInner() {
 
   const fetchFixedShifts = async (storeId: string) => {
     try {
+      // 固定シフトは期間制限なしで恒常的に取得
       const response = await fetch(`/api/fixed-shifts?store_id=${storeId}&is_active=true`);
       if (!response.ok) throw new Error('固定シフトデータの取得に失敗しました');
       const result = await response.json();
-
-      return result.data || [];
+      
+      const fixedShifts = result.data || [];
+      console.log('🔍 [ShiftCreate] 固定シフト取得:');
+      console.log('  - 店舗ID:', storeId);
+      console.log('  - 取得件数:', fixedShifts.length);
+      console.log('  - 固定シフト一覧:', fixedShifts);
+      
+      return fixedShifts;
     } catch (error) {
       console.error('Error fetching fixed shifts:', error);
       // 固定シフトのエラーは致命的ではないので、空配列を返す
@@ -265,27 +253,25 @@ function ShiftCreatePageInner() {
         weekEnd.setDate(weekEnd.getDate() + 6);
         return weekEnd.toISOString().split('T')[0];
       })();
-
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      
       const response = await fetch(
-        `/api/shifts?storeId=${storeId}&startDate=${startDate}&endDate=${actualEndDate}&current_user_id=${currentUser.id}`
+        `/api/shifts?storeId=${storeId}&startDate=${startDate}&endDate=${actualEndDate}`
       );
       if (!response.ok) throw new Error('シフトデータの取得に失敗しました');
       const result = await response.json();
-
-      // API response を Shift 型に変換（カスタム時間とtime_slotsデータを含む）
-      const shifts = result.data?.map((shift: {
-        id: string;
-        user_id: string;
-        store_id: string;
-        date: string;
+      
+      // API response を Shift 型に変換（カスタム時間を含む）
+      const shifts = result.data?.map((shift: { 
+        id: string; 
+        user_id: string; 
+        store_id: string; 
+        date: string; 
         time_slot_id?: string;
         pattern_id?: string; // 旧フィールド（移行期間のため）
         custom_start_time?: string;
         custom_end_time?: string;
-        status: string;
-        notes?: string;
-        time_slots?: any; // time_slotsデータを追加
+        status: string; 
+        notes?: string 
       }) => ({
         id: shift.id,
         userId: shift.user_id,
@@ -295,10 +281,9 @@ function ShiftCreatePageInner() {
         customStartTime: shift.custom_start_time,
         customEndTime: shift.custom_end_time,
         status: shift.status,
-        notes: shift.notes,
-        time_slots: shift.time_slots // time_slotsデータを保持
+        notes: shift.notes
       })) || [];
-
+      
       return shifts;
     } catch (error) {
       console.error('Error fetching shifts:', error);
@@ -313,15 +298,15 @@ function ShiftCreatePageInner() {
         status: 'approved',
         date_from: startDate,
       });
-
+      
       if (endDate) {
         params.set('date_to', endDate);
       }
-
+      
       const response = await fetch(`/api/time-off-requests?${params.toString()}`);
       if (!response.ok) throw new Error('希望休申請データの取得に失敗しました');
       const result = await response.json();
-
+      
       // API responseをTimeOffRequest型に変換
       const timeOffData = result.data?.map((request: { id: string; user_id: string; date: string; reason: string; status: string; responded_at?: string; responded_by?: string; created_at: string }) => ({
         id: request.id,
@@ -333,7 +318,7 @@ function ShiftCreatePageInner() {
         respondedBy: request.responded_by,
         createdAt: request.created_at
       })) || [];
-
+      
       return timeOffData;
     } catch (error) {
       console.error('Error fetching time off requests:', error);
@@ -349,22 +334,21 @@ function ShiftCreatePageInner() {
         weekEnd.setDate(weekEnd.getDate() + 6);
         return weekEnd.toISOString().split('T')[0];
       })();
-
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      const url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}&current_user_id=${currentUser.id}`;
+      
+      const url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}`;
       console.log('Fetching emergency requests from:', url);
-
+      
       const response = await fetch(url);
-
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API response error:', response.status, errorText);
         throw new Error(`代打募集データの取得に失敗しました (${response.status})`);
       }
-
+      
       const result = await response.json();
       console.log('Emergency requests fetched:', result);
-
+      
       return result.data || [];
     } catch (error) {
       console.error('Error fetching emergency requests:', error);
@@ -377,23 +361,49 @@ function ShiftCreatePageInner() {
     loadCurrentUser();
   }, []);
 
+  // 固定シフト更新イベントの監視
+  useEffect(() => {
+    const handleFixedShiftUpdate = (event: CustomEvent | StorageEvent) => {
+      console.log('固定シフト更新を検知（シフト作成）:', event);
+      // 固定シフトデータを再取得
+      if (currentUser && selectedStore) {
+        loadStoreData(selectedStore);
+      }
+    };
+
+    // 同一タブ内のイベント監視
+    window.addEventListener('fixedShiftUpdated', handleFixedShiftUpdate as EventListener);
+    
+    // 別タブからのストレージイベント監視
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'fixedShiftUpdate') {
+        handleFixedShiftUpdate(event);
+      }
+    });
+
+    return () => {
+      window.removeEventListener('fixedShiftUpdated', handleFixedShiftUpdate as EventListener);
+      window.removeEventListener('storage', handleFixedShiftUpdate);
+    };
+  }, [currentUser, selectedStore]);
+
   // 初期データ読み込み（currentUserがセットされてから）
   useEffect(() => {
     if (!currentUser) return; // currentUserが読み込まれるまで待機
-
+    
     const loadInitialData = async () => {
       try {
         setLoading(true);
         setError(null);
-
+        
         const [storesData, usersData] = await Promise.all([
           fetchStores(),
           fetchUsers()
         ]);
-
+        
         setStores(storesData);
         setUsers(usersData);
-
+        
         // デフォルト店舗選択
         if (storesData.length > 0) {
           setSelectedStore(storesData[0].id);
@@ -404,7 +414,7 @@ function ShiftCreatePageInner() {
         if (emergencyParam) {
           await handleEmergencyManagement(emergencyParam);
         }
-
+        
       } catch (error) {
         setError(error instanceof Error ? error.message : '初期データの読み込みに失敗しました');
       } finally {
@@ -414,98 +424,6 @@ function ShiftCreatePageInner() {
 
     loadInitialData();
   }, [currentUser, searchParams]);
-
-  // ページがフォーカスされた時にスタッフデータを再取得する
-  useEffect(() => {
-    const handleFocus = () => {
-      if (!currentUser || refreshingStaff) return;
-
-      // 既存のタイマーをクリア
-      if (focusUpdateTimeoutRef.current) {
-        clearTimeout(focusUpdateTimeoutRef.current);
-      }
-
-      // デバウンス処理（500ms後に実行）
-      focusUpdateTimeoutRef.current = setTimeout(async () => {
-        try {
-          setRefreshingStaff(true);
-          console.log('🔄 [SHIFT CREATE] Page focused, refreshing staff data...');
-          const updatedUsers = await fetchUsers();
-          setUsers(updatedUsers);
-          console.log('✅ [SHIFT CREATE] Staff data refreshed:', updatedUsers.length, 'users');
-        } catch (error) {
-          console.error('Failed to refresh staff data on focus:', error);
-        } finally {
-          setRefreshingStaff(false);
-        }
-      }, 500);
-    };
-
-    // リアルタイムスタッフ更新のためのイベントリスナー
-    const handleStaffUpdate = async (event: StorageEvent) => {
-      if (event.key === 'staff_updated' && event.newValue && currentUser && !refreshingStaff) {
-        try {
-          setRefreshingStaff(true);
-          console.log('🔄 [SHIFT CREATE] Staff updated in other tab, refreshing...');
-          const updatedUsers = await fetchUsers();
-          setUsers(updatedUsers);
-          console.log('✅ [SHIFT CREATE] Staff data refreshed from cross-tab update:', updatedUsers.length, 'users');
-
-          // 一定時間後にストレージからフラグを削除
-          setTimeout(() => {
-            localStorage.removeItem('staff_updated');
-          }, 1000);
-        } catch (error) {
-          console.error('Failed to refresh staff data from cross-tab update:', error);
-        } finally {
-          setRefreshingStaff(false);
-        }
-      }
-    };
-
-    // PostMessage イベントリスナー（同一タブ内でのコミュニケーション用）
-    const handlePostMessage = async (event: MessageEvent) => {
-      if (event.data.type === 'STAFF_UPDATED' && currentUser && !refreshingStaff) {
-        try {
-          setRefreshingStaff(true);
-          console.log('🔄 [SHIFT CREATE] Staff updated, refreshing via postMessage...');
-          const updatedUsers = await fetchUsers();
-          setUsers(updatedUsers);
-          console.log('✅ [SHIFT CREATE] Staff data refreshed from postMessage:', updatedUsers.length, 'users');
-        } catch (error) {
-          console.error('Failed to refresh staff data from postMessage:', error);
-        } finally {
-          setRefreshingStaff(false);
-        }
-      }
-    };
-
-    // イベントリスナーを追加
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage', handleStaffUpdate);
-    window.addEventListener('message', handlePostMessage);
-
-    // visibilitychange イベントも追加（タブ切り替え時）
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        handleFocus();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      // タイマーをクリア
-      if (focusUpdateTimeoutRef.current) {
-        clearTimeout(focusUpdateTimeoutRef.current);
-      }
-
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleStaffUpdate);
-      window.removeEventListener('message', handlePostMessage);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentUser]);
 
   // 店舗変更時に時間帯データと固定シフトを取得
   useEffect(() => {
@@ -534,11 +452,11 @@ function ShiftCreatePageInner() {
       const loadShifts = async () => {
         try {
           setError(null); // 前のエラーをクリア
-
+          
           // 表示期間に応じて取得範囲を決定
           const startDate = selectedWeek;
           let endDate = selectedWeek;
-
+          
           if (viewMode === 'week') {
             const end = new Date(selectedWeek);
             end.setDate(end.getDate() + 6);
@@ -553,7 +471,7 @@ function ShiftCreatePageInner() {
             const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
             endDate = end.toISOString().split('T')[0];
           }
-
+          
           const [shiftsData, timeOffData, emergencyData] = await Promise.all([
             fetchShifts(selectedStore, startDate, endDate),
             fetchApprovedTimeOffRequests(startDate, endDate),
@@ -608,6 +526,12 @@ function ShiftCreatePageInner() {
 
   const displayDates = getDisplayDates(selectedWeek, viewMode);
   const selectedStoreData = stores.find(store => store.id === selectedStore);
+  
+  console.log('🔍 [ShiftCreate] 表示日付範囲:');
+  console.log('  - 表示期間:', viewMode);
+  console.log('  - 日付数:', displayDates.length, '日間');
+  console.log('  - 開始日:', displayDates[0]?.toISOString().split('T')[0]);
+  console.log('  - 終了日:', displayDates[displayDates.length - 1]?.toISOString().split('T')[0]);
 
 
 
@@ -616,16 +540,16 @@ function ShiftCreatePageInner() {
     try {
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
       const dayName = dayNames[dayIndex];
-
+      
       if (!selectedStoreData || !selectedStoreData.requiredStaff) {
         return 0;
       }
-
+      
       const dayRequiredStaff = selectedStoreData.requiredStaff[dayName];
       if (!dayRequiredStaff || typeof dayRequiredStaff !== 'object') {
         return 0;
       }
-
+      
       const slotRequiredStaff = dayRequiredStaff[timeSlot];
       return typeof slotRequiredStaff === 'number' ? slotRequiredStaff : 0;
     } catch (error) {
@@ -644,7 +568,7 @@ function ShiftCreatePageInner() {
       // 通常のシフトを取得
       const regularShifts = shifts.filter(shift => {
         if (shift.date !== date || shift.storeId !== selectedStore) return false;
-
+        
         const pattern = timeSlots.find(ts => ts.id === timeSlot);
         if (!pattern || !pattern.start_time || !pattern.end_time) return false;
 
@@ -652,18 +576,25 @@ function ShiftCreatePageInner() {
         return shift.timeSlotId === timeSlot;
       });
 
-      // 固定シフトをチェックして追加
+      // 固定シフトをチェックして追加（期間制限なし・恒常表示）
       const dayOfWeek = new Date(date).getDay();
-      const fixedShiftsForSlot = fixedShifts.filter(fixedShift =>
+      console.log(`🔍 [getShiftForSlot] ${date} (${dayOfWeek}曜日) - ${timeSlot}`);
+      
+      const fixedShiftsForSlot = fixedShifts.filter(fixedShift => 
         fixedShift.day_of_week === dayOfWeek &&
         fixedShift.time_slot_id === timeSlot &&
         fixedShift.store_id === selectedStore &&
         fixedShift.is_active
       );
+      
+      console.log(`  → 固定シフト候補: ${fixedShiftsForSlot.length}件`);
+      fixedShiftsForSlot.forEach((fs, i) => {
+        console.log(`    [${i}] ユーザー: ${fs.users?.name}, 時間帯: ${fs.time_slots?.name}, アクティブ: ${fs.is_active}`);
+      });
 
       // 固定シフトユーザーが既に通常のシフトに入っているかチェック
       const existingUserIds = regularShifts.map(shift => shift.userId);
-
+      
       // 固定シフトをshiftオブジェクトとして変換
       const fixedShiftsAsShifts = fixedShiftsForSlot
         .filter(fixedShift => !existingUserIds.includes(fixedShift.user_id))
@@ -681,6 +612,9 @@ function ShiftCreatePageInner() {
           fixedShiftData: fixedShift // 元の固定シフトデータ
         }));
 
+      console.log(`  → 生成された固定シフト: ${fixedShiftsAsShifts.length}件`);
+      console.log(`  → 最終返却シフト数: ${regularShifts.length + fixedShiftsAsShifts.length}件 (通常: ${regularShifts.length}, 固定: ${fixedShiftsAsShifts.length})`);
+
       return [...regularShifts, ...fixedShiftsAsShifts];
     } catch (error) {
       console.error('Error in getShiftForSlot:', error);
@@ -694,15 +628,15 @@ function ShiftCreatePageInner() {
       setError('店舗を選択してください');
       return;
     }
-
+    
     setModalData({ date, timeSlot, dayIndex });
     setSelectedUser('');
     setSelectedTimeSlot('');
     // setStaffShiftStatus(null); // スタッフシフト状況をクリア（削除済み）
-
+    
     // 該当日の確定済みシフトをチェック
     await checkAllStaffConfirmedShifts(date);
-
+    
     setIsModalOpen(true);
   };
 
@@ -710,13 +644,13 @@ function ShiftCreatePageInner() {
   const handleAddShift = async () => {
     if (!selectedUser || !selectedTimeSlot || !modalData) return;
 
-    setSaving(true);
+      setSaving(true);
     try {
       // カスタム時間の値を検証
       const validateTime = (time: string) => {
         return time && time.trim() !== '' && /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time) ? time : null;
       };
-
+      
       const shiftData = {
         user_id: selectedUser,
         store_id: selectedStore,
@@ -738,7 +672,7 @@ function ShiftCreatePageInner() {
         shiftData
       });
 
-      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
+      const response = await fetch('/api/shifts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -750,21 +684,12 @@ function ShiftCreatePageInner() {
         const errorData = await response.json();
         console.error('シフト作成エラー:', errorData);
         throw new Error(errorData.error || 'シフトの追加に失敗しました');
-      }
+        }
 
       // シフトデータを再取得
       if (selectedStore && selectedWeek) {
-        console.log('🔄 [SHIFT CREATE] Fetching updated shifts after creation...');
-        console.log('🔄 [SHIFT CREATE] selectedStore:', selectedStore);
-        console.log('🔄 [SHIFT CREATE] selectedWeek:', selectedWeek);
-        console.log('🔄 [SHIFT CREATE] Current shifts before update:', shifts.length, 'shifts');
-
         const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
-        console.log('✅ [SHIFT CREATE] Fetched updated shifts:', updatedShifts.length, 'shifts');
-        console.log('✅ [SHIFT CREATE] Updated shifts data:', updatedShifts);
-
         setShifts(updatedShifts);
-        console.log('✅ [SHIFT CREATE] setShifts called with updated data');
       }
 
       // モーダルを閉じる
@@ -786,7 +711,7 @@ function ShiftCreatePageInner() {
         return;
       }
 
-      const response = await fetch(`/api/shifts?id=${shiftId}&current_user_id=${currentUser?.id}`, {
+      const response = await fetch(`/api/shifts?id=${shiftId}`, {
         method: 'DELETE',
       });
 
@@ -815,7 +740,7 @@ function ShiftCreatePageInner() {
       // 表示期間に応じて期間の開始・終了日を計算
       const periodStart = new Date(selectedWeek);
       let periodEnd = new Date(selectedWeek);
-
+      
       if (viewMode === 'week') {
         periodEnd.setDate(periodStart.getDate() + 6);
       } else if (viewMode === 'half-month') {
@@ -825,7 +750,7 @@ function ShiftCreatePageInner() {
         periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
       }
 
-      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
+      const response = await fetch('/api/shifts', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -844,26 +769,26 @@ function ShiftCreatePageInner() {
       }
 
       const result = await response.json();
-
+      
       // 成功メッセージを表示
       const periodName = viewMode === 'week' ? '週' : viewMode === 'half-month' ? '半月' : '月';
       alert(`${result.updated_count}件の${periodName}間シフトを確定しました`);
-
+      
       // ナビゲーションの通知件数を更新
       window.dispatchEvent(new CustomEvent('updateShiftConfirmations'));
-
+      
       // データを完全に再取得
       const startDate = periodStart.toISOString().split('T')[0];
       const endDate = periodEnd.toISOString().split('T')[0];
-
+      
       const [refreshedShifts, refreshedTimeOff] = await Promise.all([
         fetchShifts(selectedStore, startDate, endDate),
         fetchApprovedTimeOffRequests(startDate, endDate)
       ]);
-
+      
       setShifts(refreshedShifts);
       setApprovedTimeOffRequests(refreshedTimeOff);
-
+      
     } catch (error) {
       setError(error instanceof Error ? error.message : 'シフトの確定に失敗しました');
     } finally {
@@ -885,7 +810,7 @@ function ShiftCreatePageInner() {
       // 表示期間に応じて期間の開始・終了日を計算
       const periodStart = new Date(selectedWeek);
       let periodEnd = new Date(selectedWeek);
-
+      
       if (viewMode === 'week') {
         periodEnd.setDate(periodStart.getDate() + 6);
       } else if (viewMode === 'half-month') {
@@ -895,7 +820,7 @@ function ShiftCreatePageInner() {
         periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
       }
 
-      const response = await fetch(`/api/shifts?current_user_id=${currentUser?.id}`, {
+      const response = await fetch('/api/shifts', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -914,23 +839,23 @@ function ShiftCreatePageInner() {
       }
 
       const result = await response.json();
-
+      
       // 成功メッセージを表示
       const periodName = viewMode === 'week' ? '週' : viewMode === 'half-month' ? '半月' : '月';
       alert(`${result.updated_count}件の${periodName}間シフトを下書きとして保存しました`);
-
+      
       // データを完全に再取得
       const startDate = periodStart.toISOString().split('T')[0];
       const endDate = periodEnd.toISOString().split('T')[0];
-
+      
       const [refreshedShifts, refreshedTimeOff] = await Promise.all([
         fetchShifts(selectedStore, startDate, endDate),
         fetchApprovedTimeOffRequests(startDate, endDate)
       ]);
-
+      
       setShifts(refreshedShifts);
       setApprovedTimeOffRequests(refreshedTimeOff);
-
+      
     } catch (error) {
       setError(error instanceof Error ? error.message : '下書き保存に失敗しました');
     } finally {
@@ -940,7 +865,7 @@ function ShiftCreatePageInner() {
 
   // 特定の日付でスタッフが希望休を取得しているかチェック
   const isStaffOnTimeOff = (userId: string, date: string) => {
-    return approvedTimeOffRequests.some(request =>
+    return approvedTimeOffRequests.some(request => 
       request.userId === userId && request.date === date
     );
   };
@@ -948,7 +873,7 @@ function ShiftCreatePageInner() {
   // 勤怠ルール違反をチェック
   const checkWorkRuleViolations = (userId: string, date: string, timeSlotId: string): string[] => {
     const warnings: string[] = [];
-
+    
     if (!selectedStoreData?.workRules || !users || !timeSlots) return warnings;
 
     // 新しいシフトパターンの時間数を計算
@@ -968,9 +893,9 @@ function ShiftCreatePageInner() {
 
     const weeklyShifts = shifts.filter(shift => {
       const shiftDate = new Date(shift.date);
-      return shift.userId === userId &&
-        shiftDate >= weekStart &&
-        shiftDate <= weekEnd;
+      return shift.userId === userId && 
+             shiftDate >= weekStart && 
+             shiftDate <= weekEnd;
     });
 
     // 週間労働時間のチェック
@@ -992,7 +917,7 @@ function ShiftCreatePageInner() {
 
     // 連続勤務日数のチェック
     const userShifts = shifts.filter(shift => shift.userId === userId);
-
+    
     // 新しいシフトを含めて連続勤務日数を計算
     const allShifts = [...userShifts, { date, userId, timeSlotId: timeSlotId }]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -1001,10 +926,10 @@ function ShiftCreatePageInner() {
     let maxConsecutive = 1;
 
     for (let i = 1; i < allShifts.length; i++) {
-      const prevDate = new Date(allShifts[i - 1].date);
+      const prevDate = new Date(allShifts[i-1].date);
       const currentDate = new Date(allShifts[i].date);
       const diffDays = (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-
+      
       if (diffDays === 1) {
         consecutiveDays++;
         maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
@@ -1028,19 +953,19 @@ function ShiftCreatePageInner() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getHourlyWage = (user: any) => {
     if (!user) return 0;
-
+    
     // 個別時給が設定されている場合はそれを使用
     if (user.hourly_wage && user.hourly_wage > 0) {
       return user.hourly_wage;
     }
-
+    
     // フォールバック：スキルレベルベースのデフォルト値
     const defaultWages: Record<string, number> = {
       'training': 900,
       'regular': 1000,
       'veteran': 1200
     };
-
+    
     const skillLevel = user.skill_level || user.skillLevel || 'regular';
     return defaultWages[skillLevel] || 1000;
   };
@@ -1050,27 +975,27 @@ function ShiftCreatePageInner() {
     // カスタム時間が設定されている場合はそれを使用
     const startTime = shift.customStartTime || timeSlot.start_time;
     const endTime = shift.customEndTime || timeSlot.end_time;
-
+    
     const start = startTime.split(':').map(Number);
     const end = endTime.split(':').map(Number);
-
-    if (start.length >= 2 && end.length >= 2 &&
-      !isNaN(start[0]) && !isNaN(start[1]) &&
-      !isNaN(end[0]) && !isNaN(end[1])) {
-
+    
+    if (start.length >= 2 && end.length >= 2 && 
+        !isNaN(start[0]) && !isNaN(start[1]) && 
+        !isNaN(end[0]) && !isNaN(end[1])) {
+      
       const startMinutes = start[0] * 60 + start[1];
       let endMinutes = end[0] * 60 + end[1];
-
+      
       // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
       if (endMinutes <= startMinutes) {
         endMinutes += 24 * 60; // 24時間（1440分）を加算
       }
-
+      
       const workHours = Math.max(0, (endMinutes - startMinutes) / 60);
-
+      
       return { startTime, endTime, workHours };
     }
-
+    
     return { startTime, endTime, workHours: 0 };
   };
 
@@ -1079,9 +1004,9 @@ function ShiftCreatePageInner() {
     try {
       // 基本的な初期値
       const defaultResult = {
-        totalHours: 0,
-        totalWage: 0,
-        uniqueStaff: 0,
+          totalHours: 0,
+          totalWage: 0,
+          uniqueStaff: 0,
         averageHours: 0,
         fixedShiftHours: 0,
         fixedShiftWage: 0,
@@ -1097,19 +1022,19 @@ function ShiftCreatePageInner() {
       // 期間計算の安全性確保
       let periodStart: Date;
       let periodEnd: Date;
-
+      
       try {
         periodStart = new Date(selectedWeek);
         periodEnd = new Date(selectedWeek);
-
-        if (viewMode === 'week') {
-          periodEnd.setDate(periodStart.getDate() + 6);
-        } else if (viewMode === 'half-month') {
-          periodEnd.setDate(periodStart.getDate() + 13);
-        } else if (viewMode === 'month') {
-          periodStart.setDate(1);
-          periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
-        }
+      
+      if (viewMode === 'week') {
+        periodEnd.setDate(periodStart.getDate() + 6);
+      } else if (viewMode === 'half-month') {
+        periodEnd.setDate(periodStart.getDate() + 13);
+      } else if (viewMode === 'month') {
+        periodStart.setDate(1);
+        periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
+      }
 
         // 日付が有効かチェック
         if (isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
@@ -1125,15 +1050,15 @@ function ShiftCreatePageInner() {
       let periodShifts: Shift[] = [];
       try {
         periodShifts = shifts.filter(shift => {
-          try {
+        try {
             if (!shift || !shift.date || shift.storeId !== selectedStore) return false;
-            const shiftDate = new Date(shift.date);
+          const shiftDate = new Date(shift.date);
             return shiftDate >= periodStart && shiftDate <= periodEnd;
           } catch (filterError) {
             console.error('Error filtering shift:', filterError, { shift });
-            return false;
-          }
-        });
+          return false;
+        }
+      });
       } catch (filterError) {
         console.error('Error filtering period shifts:', filterError);
         periodShifts = [];
@@ -1145,14 +1070,14 @@ function ShiftCreatePageInner() {
 
       // 通常シフトの統計計算
       try {
-        periodShifts.forEach(shift => {
-          try {
+      periodShifts.forEach(shift => {
+        try {
             const timeSlot = timeSlots.find(ts => ts.id === shift.timeSlotId);
-            const user = users.find(u => u.id === shift.userId);
-
+          const user = users.find(u => u.id === shift.userId);
+          
             if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
               const { workHours } = getActualWorkTime(shift, timeSlot);
-
+                
               if (workHours > 0 && !isNaN(workHours)) {
                 totalHours += workHours;
                 totalWage += workHours * getHourlyWage(user);
@@ -1176,36 +1101,36 @@ function ShiftCreatePageInner() {
           const diffTime = Math.abs(periodEnd.getTime() - periodStart.getTime());
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           const maxDays = Math.min(31, diffDays + 1);
-
+          
           for (let dayOffset = 0; dayOffset < maxDays; dayOffset++) {
             try {
               const currentDate = new Date(periodStart);
               currentDate.setDate(periodStart.getDate() + dayOffset);
-
+              
               if (currentDate > periodEnd || isNaN(currentDate.getTime())) break;
-
+              
               const dayOfWeek = currentDate.getDay();
               const dateString = currentDate.toISOString().split('T')[0];
-
-              const dayFixedShifts = fixedShifts.filter(fixedShift =>
-                fixedShift &&
-                fixedShift.day_of_week === dayOfWeek &&
+              
+              const dayFixedShifts = fixedShifts.filter(fixedShift => 
+                fixedShift && 
+                fixedShift.day_of_week === dayOfWeek && 
                 fixedShift.is_active &&
                 fixedShift.store_id === selectedStore
               );
-
+              
               for (const fixedShift of dayFixedShifts) {
                 try {
                   if (!fixedShift.user_id || !fixedShift.time_slot_id) continue;
 
-                  const hasExistingShift = periodShifts.some(shift =>
+                  const hasExistingShift = periodShifts.some(shift => 
                     shift && shift.userId === fixedShift.user_id && shift.date === dateString
                   );
-
+                  
                   if (!hasExistingShift) {
                     const timeSlot = timeSlots.find(ts => ts.id === fixedShift.time_slot_id);
                     const user = users.find(u => u.id === fixedShift.user_id);
-
+                    
                     if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
                       const pseudoShift = {
                         id: `fixed-${fixedShift.id}-${dateString}`,
@@ -1218,14 +1143,14 @@ function ShiftCreatePageInner() {
                         status: 'confirmed' as const,
                         notes: '固定シフト'
                       };
-
+                      
                       const { workHours } = getActualWorkTime(pseudoShift, timeSlot);
-
+                      
                       if (workHours > 0 && !isNaN(workHours)) {
                         fixedShiftHours += workHours;
                         fixedShiftWage += workHours * getHourlyWage(user);
                         staffCount.add(fixedShift.user_id);
-                      }
+        }
                     }
                   }
                 } catch (fixedShiftError) {
@@ -1276,7 +1201,7 @@ function ShiftCreatePageInner() {
   const weekShiftStatus = () => {
     const periodStart = new Date(selectedWeek);
     let periodEnd = new Date(selectedWeek);
-
+    
     if (viewMode === 'week') {
       periodEnd.setDate(periodStart.getDate() + 6);
     } else if (viewMode === 'half-month') {
@@ -1285,14 +1210,14 @@ function ShiftCreatePageInner() {
       periodStart.setDate(1);
       periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0);
     }
-
+    
     const periodShifts = shifts.filter(shift => {
       const shiftDate = new Date(shift.date);
       return shiftDate >= periodStart && shiftDate <= periodEnd && shift.storeId === selectedStore;
     });
-
+    
     if (periodShifts.length === 0) return { hasShifts: false, allConfirmed: false, hasConfirmed: false };
-
+    
     const confirmedShifts = periodShifts.filter(shift => shift.status === 'confirmed');
     return {
       hasShifts: true,
@@ -1308,30 +1233,30 @@ function ShiftCreatePageInner() {
   // 特定のスタッフの同日シフト状況をチェック（同店舗・他店舗両方）
   const checkStaffShiftStatus = async (userId: string, date: string) => {
     try {
-      const response = await fetch(`/api/shifts?user_id=${userId}&date_from=${date}&date_to=${date}&current_user_id=${currentUser?.id}`);
+      const response = await fetch(`/api/shifts?user_id=${userId}&date_from=${date}&date_to=${date}`);
       if (!response.ok) return { hasConflict: false, conflicts: [] };
-
+      
       const result = await response.json();
       const existingShifts = result.data || [];
-
-      const conflicts = existingShifts.map((shift: DatabaseShift) => ({
-        storeName: shift.stores?.name || '不明な店舗',
-        storeId: shift.store_id,
-        status: shift.status,
-        isConfirmed: shift.status === 'confirmed',
-        isSameStore: shift.store_id === selectedStore,
-        shiftPattern: shift.time_slots?.name || '不明なパターン',
-        startTime: shift.time_slots?.start_time || '',
-        endTime: shift.time_slots?.end_time || ''
-      }));
-
-      return {
-        hasConflict: conflicts.length > 0,
-        conflicts: conflicts,
-        hasOtherStoreConflict: conflicts.some((c: { isSameStore: boolean }) => !c.isSameStore),
-        hasSameStoreConflict: conflicts.some((c: { isSameStore: boolean }) => c.isSameStore),
-        hasConfirmedConflict: conflicts.some((c: { isConfirmed: boolean }) => c.isConfirmed)
-      };
+      
+             const conflicts = existingShifts.map((shift: DatabaseShift) => ({
+         storeName: shift.stores?.name || '不明な店舗',
+         storeId: shift.store_id,
+         status: shift.status,
+         isConfirmed: shift.status === 'confirmed',
+         isSameStore: shift.store_id === selectedStore,
+                   shiftPattern: shift.time_slots?.name || '不明なパターン',
+          startTime: shift.time_slots?.start_time || '',
+          endTime: shift.time_slots?.end_time || ''
+       }));
+       
+        return {
+         hasConflict: conflicts.length > 0,
+         conflicts: conflicts,
+         hasOtherStoreConflict: conflicts.some((c: { isSameStore: boolean }) => !c.isSameStore),
+         hasSameStoreConflict: conflicts.some((c: { isSameStore: boolean }) => c.isSameStore),
+         hasConfirmedConflict: conflicts.some((c: { isConfirmed: boolean }) => c.isConfirmed)
+       };
     } catch (error) {
       console.error('Error checking staff shift status:', error);
       return { hasConflict: false, conflicts: [] };
@@ -1340,8 +1265,8 @@ function ShiftCreatePageInner() {
 
   // 固定シフトを取得する関数
   const getFixedShiftForSlot = (dayOfWeek: number, timeSlotId: string = '') => {
-    return fixedShifts.filter(fixedShift =>
-      fixedShift.day_of_week === dayOfWeek &&
+    return fixedShifts.filter(fixedShift => 
+      fixedShift.day_of_week === dayOfWeek && 
       (timeSlotId === '' || fixedShift.time_slot_id === timeSlotId) &&
       fixedShift.is_active
     );
@@ -1349,9 +1274,9 @@ function ShiftCreatePageInner() {
 
   // 特定の日・ユーザーの固定シフトをチェック
   const checkUserFixedShift = (userId: string, dayOfWeek: number, timeSlotId: string) => {
-    return fixedShifts.find(fixedShift =>
+    return fixedShifts.find(fixedShift => 
       fixedShift.user_id === userId &&
-      fixedShift.day_of_week === dayOfWeek &&
+      fixedShift.day_of_week === dayOfWeek && 
       fixedShift.time_slot_id === timeSlotId &&
       fixedShift.is_active
     );
@@ -1360,12 +1285,12 @@ function ShiftCreatePageInner() {
   // スタッフ選択時の競合チェック（下書き・確定関係なく制限）
   // const [staffShiftStatus, setStaffShiftStatus] = useState<DatabaseShift | null>(null); // 未使用のため削除
   const [staffWithConfirmedShifts, setStaffWithConfirmedShifts] = useState<string[]>([]);
-
+  
   // スタッフ選択が変更された時の処理
   const handleStaffSelection = async (userId: string) => {
     setSelectedUser(userId);
     // setStaffShiftStatus(null); // 未使用のため削除
-
+    
     if (userId && modalData) {
       await checkStaffShiftStatus(userId, modalData.date);
       // setStaffShiftStatus(shiftStatus); // 未使用のため削除
@@ -1375,12 +1300,12 @@ function ShiftCreatePageInner() {
   // モーダル開時に全スタッフの確定シフト状況をチェック
   const checkAllStaffConfirmedShifts = async (date: string) => {
     try {
-      const response = await fetch(`/api/shifts?date_from=${date}&date_to=${date}&status=confirmed&current_user_id=${currentUser?.id}`);
+      const response = await fetch(`/api/shifts?date_from=${date}&date_to=${date}&status=confirmed`);
       if (!response.ok) return;
-
+      
       const result = await response.json();
       const confirmedShifts = result.data || [];
-
+      
       const staffWithConfirmed = confirmedShifts
         .map((shift: { user_id: string }) => shift.user_id as string)
         .filter((userId: string) => userId);
@@ -1391,29 +1316,10 @@ function ShiftCreatePageInner() {
   };
 
   // 代打募集を作成
-  const handleCreateEmergencyRequest = async (shift: DatabaseShift | Shift) => {
+  const handleCreateEmergencyRequest = async (shift: DatabaseShift) => {
     try {
       setSubmittingEmergency(true);
       setError(null);
-
-      console.log('🔍 [FRONTEND] Creating emergency request with shift:', shift);
-      console.log('🔍 [FRONTEND] Emergency reason:', emergencyReason.trim());
-
-      // shiftオブジェクトがDatabaseShift（snake_case）かShift（camelCase）かを判定して適切にアクセス
-      const getUserId = (s: any) => s.user_id || s.userId;
-      const getStoreId = (s: any) => s.store_id || s.storeId;
-      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
-
-      const requestBody = {
-        original_user_id: getUserId(shift),
-        store_id: getStoreId(shift),
-        date: shift.date,
-        time_slot_id: getTimeSlotId(shift),
-        reason: emergencyReason.trim(),
-        request_type: 'substitute' // 代打募集として設定
-      };
-
-      console.log('🔍 [FRONTEND] Request body:', requestBody);
 
       // 緊急募集リクエストを作成
       const response = await fetch('/api/emergency-requests', {
@@ -1421,14 +1327,17 @@ function ShiftCreatePageInner() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          original_user_id: shift.user_id,
+          store_id: shift.store_id,
+          date: shift.date,
+          time_slot_id: shift.time_slot_id, // shift_pattern_id から time_slot_id に変更
+          reason: emergencyReason.trim()
+        }),
       });
 
       if (!response.ok) {
-        console.log('🔍 [FRONTEND] Response status:', response.status);
-        console.log('🔍 [FRONTEND] Response headers:', response.headers);
         const errorData = await response.json();
-        console.log('🔍 [FRONTEND] Error response:', errorData);
         throw new Error(errorData.error || '緊急募集の作成に失敗しました');
       }
 
@@ -1456,10 +1365,10 @@ function ShiftCreatePageInner() {
 
   // 特定のシフトが代打募集中かチェック
   const getEmergencyRequestForShift = (shiftId: string) => {
-    return emergencyRequests.find(req =>
+    return emergencyRequests.find(req => 
       req.original_user_id === shifts.find(s => s.id === shiftId)?.userId &&
       req.date === shifts.find(s => s.id === shiftId)?.date &&
-      req.time_slot_id === shifts.find(s => s.id === shiftId)?.timeSlotId &&
+              req.time_slot_id === shifts.find(s => s.id === shiftId)?.timeSlotId &&
       req.status === 'open'
     );
   };
@@ -1468,7 +1377,7 @@ function ShiftCreatePageInner() {
   const handleShiftRightClick = (e: React.MouseEvent, shift: DatabaseShift) => {
     // 確定済みシフトのみ代打募集可能
     if (shift.status !== 'confirmed') return;
-
+    
     e.preventDefault();
     setContextMenu({
       show: true,
@@ -1485,7 +1394,7 @@ function ShiftCreatePageInner() {
   };
 
   // 代打募集モーダルを開く
-  const handleOpenEmergencyModal = (shift: DatabaseShift | Shift) => {
+  const handleOpenEmergencyModal = (shift: DatabaseShift) => {
     setEmergencyModal({ show: true, shift });
     handleCloseContextMenu();
   };
@@ -1495,18 +1404,18 @@ function ShiftCreatePageInner() {
     try {
       const url = `/api/emergency-requests?id=${emergencyRequestId}`;
       console.log('Fetching emergency request details from:', url);
-
+      
       const response = await fetch(url);
-
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API response error:', response.status, errorText);
         throw new Error(`代打募集データの取得に失敗しました (${response.status})`);
       }
-
+      
       const result = await response.json();
       console.log('Emergency request details fetched:', result);
-
+      
       if (result.data) {
         setEmergencyManagement({ show: true, request: result.data });
       } else {
@@ -1521,7 +1430,7 @@ function ShiftCreatePageInner() {
   // 応募者承認・却下処理
   const handleVolunteerAction = async (requestId: string, volunteerId: string, action: 'accept' | 'reject', customStartTime?: string, customEndTime?: string) => {
     setProcessingVolunteer(volunteerId);
-
+    
     try {
       const response = await fetch('/api/emergency-requests', {
         method: 'PATCH',
@@ -1548,9 +1457,9 @@ function ShiftCreatePageInner() {
         // 代打確定時の処理
         const volunteerName = result.data.volunteer?.users?.name || '代打スタッフ';
         const originalUserName = result.data.emergency_request?.original_user?.name || '元の担当者';
-
+        
         alert(`代打を確定しました。\n${originalUserName} → ${volunteerName}\nシフト表が自動更新されました。`);
-
+        
         // 管理画面を閉じてシフト画面に戻る
         setEmergencyManagement({ show: false, request: null });
         router.push('/shift/create');
@@ -1561,10 +1470,10 @@ function ShiftCreatePageInner() {
           request: prev.request ? {
             ...prev.request,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            emergency_volunteers: prev.request.emergency_volunteers?.filter((v: any) => v.id !== volunteerId)
+        emergency_volunteers: prev.request.emergency_volunteers?.filter((v: any) => v.id !== volunteerId)
           } : null
         }));
-
+        
         alert('応募者を削除しました。');
       }
 
@@ -1642,7 +1551,7 @@ function ShiftCreatePageInner() {
   // パターン変更時の処理
   const handlePatternChange = (patternId: string) => {
     setSelectedTimeSlot(patternId);
-
+    
     if (patternId && isCustomTime) {
       // カスタムモードの場合のみ、パターンの時間を初期値として設定
       const pattern = timeSlots.find(p => p.id === patternId);
@@ -1660,7 +1569,7 @@ function ShiftCreatePageInner() {
   // カスタム時間モード切り替え
   const handleCustomTimeToggle = (enabled: boolean) => {
     setIsCustomTime(enabled);
-
+    
     if (enabled && selectedTimeSlot) {
       // カスタムモード有効時は現在のパターン時間を初期値に設定
       const pattern = timeSlots.find(p => p.id === selectedTimeSlot);
@@ -1692,7 +1601,7 @@ function ShiftCreatePageInner() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p className="text-red-700">{error}</p>
-              <button
+              <button 
                 onClick={() => setError(null)}
                 className="ml-auto text-red-400 hover:text-red-600"
               >
@@ -1711,9 +1620,9 @@ function ShiftCreatePageInner() {
             <p className="text-gray-600 mt-2 text-sm sm:text-base">期間単位でシフトを作成・編集できます</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <Button
-              variant="secondary"
-              disabled={saving || !shiftStatus.hasShifts}
+            <Button 
+              variant="secondary" 
+              disabled={saving || !shiftStatus.hasShifts} 
               onClick={handleSaveDraft}
               className="w-full sm:w-auto text-sm"
             >
@@ -1722,8 +1631,8 @@ function ShiftCreatePageInner() {
               </svg>
               下書き保存
             </Button>
-            <Button
-              disabled={saving || !shiftStatus.hasShifts || shiftStatus.allConfirmed}
+            <Button 
+              disabled={saving || !shiftStatus.hasShifts || shiftStatus.allConfirmed} 
               onClick={handleConfirmShifts}
               className={`w-full sm:w-auto text-sm ${shiftStatus.allConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}`}
             >
@@ -1741,9 +1650,9 @@ function ShiftCreatePageInner() {
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
               <div className="text-lg sm:text-2xl font-bold text-blue-600">{weeklyStats.totalHours}h</div>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                {viewMode === 'week' ? '総勤務時間' :
-                  viewMode === 'half-month' ? '半月勤務時間' :
-                    '月間勤務時間'}
+                {viewMode === 'week' ? '総勤務時間' : 
+                 viewMode === 'half-month' ? '半月勤務時間' : 
+                 '月間勤務時間'}
               </p>
               {/* 固定シフト詳細を小さく表示 */}
               {(weeklyStats.fixedShiftHours || 0) > 0 && (
@@ -1757,9 +1666,9 @@ function ShiftCreatePageInner() {
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
               <div className="text-lg sm:text-2xl font-bold text-green-600">¥{weeklyStats.totalWage.toLocaleString()}</div>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                {viewMode === 'week' ? '総人件費' :
-                  viewMode === 'half-month' ? '半月人件費' :
-                    '月間人件費'}
+                {viewMode === 'week' ? '総人件費' : 
+                 viewMode === 'half-month' ? '半月人件費' : 
+                 '月間人件費'}
               </p>
               {/* 固定シフト詳細を小さく表示 */}
               {(weeklyStats.fixedShiftWage || 0) > 0 && (
@@ -1794,10 +1703,11 @@ function ShiftCreatePageInner() {
                     setViewMode('week');
                     setSelectedWeek(getAppropriateStartDate('week'));
                   }}
-                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${viewMode === 'week'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
+                    viewMode === 'week'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
                   週表示
                 </button>
@@ -1806,10 +1716,11 @@ function ShiftCreatePageInner() {
                     setViewMode('half-month');
                     setSelectedWeek(getAppropriateStartDate('half-month'));
                   }}
-                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${viewMode === 'half-month'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
+                    viewMode === 'half-month'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
                   半月表示
                 </button>
@@ -1818,10 +1729,11 @@ function ShiftCreatePageInner() {
                     setViewMode('month');
                     setSelectedWeek(getAppropriateStartDate('month'));
                   }}
-                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${viewMode === 'month'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                  className={`px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 ${
+                    viewMode === 'month'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                 >
                   月表示
                 </button>
@@ -1850,9 +1762,9 @@ function ShiftCreatePageInner() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {viewMode === 'week' ? '週選択（月曜日開始）' :
-                    viewMode === 'half-month' ? '半月選択（開始日）' :
-                      '月選択'}
+                  {viewMode === 'week' ? '週選択（月曜日開始）' : 
+                   viewMode === 'half-month' ? '半月選択（開始日）' : 
+                   '月選択'}
                 </label>
                 {viewMode === 'month' ? (
                   <div className="flex items-center space-x-2">
@@ -1861,7 +1773,7 @@ function ShiftCreatePageInner() {
                       onClick={() => {
                         const currentDate = new Date(selectedWeek);
                         currentDate.setMonth(currentDate.getMonth() - 1);
-                        const newMonth = currentDate.getFullYear() + '-' +
+                        const newMonth = currentDate.getFullYear() + '-' + 
                           String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
                         setSelectedWeek(newMonth);
                       }}
@@ -1873,19 +1785,19 @@ function ShiftCreatePageInner() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                       </svg>
                     </Button>
-                    <input
+                <input
                       type="month"
                       value={selectedWeek.substring(0, 7)}
                       onChange={(e) => setSelectedWeek(e.target.value + '-01')}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      disabled={loading}
-                    />
+                  disabled={loading}
+                />
                     <Button
                       variant="secondary"
                       onClick={() => {
                         const currentDate = new Date(selectedWeek);
                         currentDate.setMonth(currentDate.getMonth() + 1);
-                        const newMonth = currentDate.getFullYear() + '-' +
+                        const newMonth = currentDate.getFullYear() + '-' + 
                           String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
                         setSelectedWeek(newMonth);
                       }}
@@ -1897,14 +1809,14 @@ function ShiftCreatePageInner() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </Button>
-                  </div>
+              </div>
                 ) : (
                   <div className="flex items-center space-x-2">
                     <Button
                       variant="secondary"
                       onClick={() => {
                         const prevWeek = new Date(selectedWeek);
-                        prevWeek.setDate(prevWeek.getDate() -
+                        prevWeek.setDate(prevWeek.getDate() - 
                           (viewMode === 'half-month' ? 14 : 7));
                         setSelectedWeek(prevWeek.toISOString().split('T')[0]);
                       }}
@@ -1914,7 +1826,7 @@ function ShiftCreatePageInner() {
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
+                  </svg>
                     </Button>
                     <input
                       type="date"
@@ -1927,7 +1839,7 @@ function ShiftCreatePageInner() {
                       variant="secondary"
                       onClick={() => {
                         const nextWeek = new Date(selectedWeek);
-                        nextWeek.setDate(nextWeek.getDate() +
+                        nextWeek.setDate(nextWeek.getDate() + 
                           (viewMode === 'half-month' ? 14 : 7));
                         setSelectedWeek(nextWeek.toISOString().split('T')[0]);
                       }}
@@ -1938,7 +1850,7 @@ function ShiftCreatePageInner() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                    </Button>
+                </Button>
                   </div>
                 )}
               </div>
@@ -1948,8 +1860,8 @@ function ShiftCreatePageInner() {
                 </label>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <span className="text-sm text-gray-600">
-                    {shiftStatus.allConfirmed ? '✅ 確定済み' :
-                      shiftStatus.hasShifts ? '📝 下書き中' : '📝 未作成'}
+                    {shiftStatus.allConfirmed ? '✅ 確定済み' : 
+                     shiftStatus.hasShifts ? '📝 下書き中' : '📝 未作成'}
                   </span>
                   <span className="text-xs text-gray-500">
                     {shiftStatus.totalShifts}件のシフト
@@ -1966,69 +1878,71 @@ function ShiftCreatePageInner() {
             <CardTitle>{selectedStoreData?.name} - シフト表</CardTitle>
           </CardHeader>
           <CardContent>
-            {timeSlots.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-lg font-medium mb-2">時間帯が設定されていません</p>
-                <p className="text-sm mb-4">シフトを作成するには、まず店舗設定で時間帯を追加してください</p>
-                <Button onClick={() => window.location.href = '/settings/store'}>
-                  店舗設定へ
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="mb-3 sm:mb-4 p-3 bg-yellow-50 rounded-xl">
-                  <h4 className="font-medium text-yellow-900 mb-1 text-sm sm:text-base">操作方法</h4>
-                  <p className="text-xs sm:text-sm text-yellow-800">
-                    <span className="hidden lg:inline">各セルをクリックしてシフトを追加・編集できます。</span>
-                    <span className="lg:hidden">各セルをタップしてシフトを追加・編集できます。</span>
-                    色分け：🔴不足 / 🟢適正 / 🔵過剰
-                    {viewMode === 'month' && (
-                      <><br />月表示では横スクロールで全日程を確認できます。</>
-                    )}
-                    <br />
-                    <span className="hidden lg:inline">💡 固定シフトで登録されたスタッフのシフトは自動的に確定済みで表示されます。</span>
-                    <span className="lg:hidden">💡 固定シフトは確定済みで表示されます。</span>
-                  </p>
+              {timeSlots.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-lg font-medium mb-2">時間帯が設定されていません</p>
+                  <p className="text-sm mb-4">シフトを作成するには、まず店舗設定で時間帯を追加してください</p>
+                  <Button onClick={() => window.location.href = '/settings/store'}>
+                    店舗設定へ
+                  </Button>
                 </div>
-
-                {/* PC・スマホ別シフト表 */}
-                <DesktopShiftTable
-                  selectedStore={selectedStore}
-                  selectedWeek={selectedWeek}
-                  viewMode={viewMode}
-                  displayDates={displayDates}
-                  getRequiredStaff={getRequiredStaff}
-                  getEmergencyRequestForShift={getEmergencyRequestForShift}
-                  handleCellClick={handleCellClick}
-                  handleDeleteShift={handleDeleteShift}
-                  setContextMenu={setContextMenu}
-                  setEmergencyManagement={setEmergencyManagement}
-                  currentUser={currentUser}
-                  shifts={shifts}
-                  users={users}
-                  timeSlots={timeSlots}
-                />
-
-                <MobileShiftTable
-                  selectedStore={selectedStore}
-                  selectedWeek={selectedWeek}
-                  viewMode={viewMode}
-                  displayDates={displayDates}
-                  getRequiredStaff={getRequiredStaff}
-                  getEmergencyRequestForShift={getEmergencyRequestForShift}
-                  handleCellClick={handleCellClick}
-                  handleDeleteShift={handleDeleteShift}
-                  setContextMenu={setContextMenu}
-                  setEmergencyManagement={setEmergencyManagement}
-                  currentUser={currentUser}
-                  shifts={shifts}
-                  users={users}
-                  timeSlots={timeSlots}
-                />
-              </>
+              ) : (
+                <>
+            <div className="mb-3 sm:mb-4 p-3 bg-yellow-50 rounded-xl">
+              <h4 className="font-medium text-yellow-900 mb-1 text-sm sm:text-base">操作方法</h4>
+              <p className="text-xs sm:text-sm text-yellow-800">
+                <span className="hidden lg:inline">各セルをクリックしてシフトを追加・編集できます。</span>
+                <span className="lg:hidden">各セルをタップしてシフトを追加・編集できます。</span>
+                色分け：🔴不足 / 🟢適正 / 🔵過剰
+                {viewMode === 'month' && (
+                  <><br />月表示では横スクロールで全日程を確認できます。</>
+                )}
+                <br />
+                <span className="hidden lg:inline">💡 固定シフトで登録されたスタッフのシフトは自動的に確定済みで表示されます。</span>
+                <span className="lg:hidden">💡 固定シフトは確定済みで表示されます。</span>
+              </p>
+            </div>
+            
+            {/* PC・スマホ別シフト表 */}
+            <DesktopShiftTable
+              selectedStore={selectedStore}
+              selectedWeek={selectedWeek}
+              viewMode={viewMode}
+              displayDates={displayDates}
+              getRequiredStaff={getRequiredStaff}
+              getShiftForSlot={getShiftForSlot}
+              getEmergencyRequestForShift={getEmergencyRequestForShift}
+              handleCellClick={handleCellClick}
+              handleDeleteShift={handleDeleteShift}
+              setContextMenu={setContextMenu}
+              setEmergencyManagement={setEmergencyManagement}
+              currentUser={currentUser}
+              shifts={shifts}
+              users={users}
+              timeSlots={timeSlots}
+            />
+            
+            <MobileShiftTable
+              selectedStore={selectedStore}
+              selectedWeek={selectedWeek}
+              viewMode={viewMode}
+              displayDates={displayDates}
+              getRequiredStaff={getRequiredStaff}
+              getShiftForSlot={getShiftForSlot}
+              getEmergencyRequestForShift={getEmergencyRequestForShift}
+              handleCellClick={handleCellClick}
+              handleDeleteShift={handleDeleteShift}
+              setContextMenu={setContextMenu}
+              setEmergencyManagement={setEmergencyManagement}
+              currentUser={currentUser}
+              shifts={shifts}
+              users={users}
+              timeSlots={timeSlots}
+            />
+            </>
             )}
           </CardContent>
         </Card>
@@ -2084,11 +1998,11 @@ function ShiftCreatePageInner() {
 
         {/* シフト追加モーダル */}
         {isModalOpen && modalData && (
-          <div
+          <div 
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={handleCloseModal}
           >
-            <div
+            <div 
               className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -2124,43 +2038,9 @@ function ShiftCreatePageInner() {
 
                 {/* スタッフ選択 */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      スタッフ選択 *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          setRefreshingStaff(true);
-                          console.log('🔄 [SHIFT CREATE] Manual staff refresh...');
-                          const updatedUsers = await fetchUsers();
-                          setUsers(updatedUsers);
-                          console.log('✅ [SHIFT CREATE] Staff data manually refreshed:', updatedUsers.length, 'users');
-                        } catch (error) {
-                          console.error('Failed to manually refresh staff data:', error);
-                        } finally {
-                          setRefreshingStaff(false);
-                        }
-                      }}
-                      disabled={refreshingStaff}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${refreshingStaff
-                        ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                        : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
-                        }`}
-                      title="スタッフリストを最新の状態に更新"
-                    >
-                      <svg
-                        className={`w-4 h-4 inline mr-1 ${refreshingStaff ? 'animate-spin' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {refreshingStaff ? '更新中...' : '更新'}
-                    </button>
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    スタッフ選択 *
+                  </label>
                   {staffWithConfirmedShifts.length > 0 && (
                     <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-xs text-blue-700">
@@ -2168,48 +2048,33 @@ function ShiftCreatePageInner() {
                       </p>
                     </div>
                   )}
-                  {availableStaff.length === 0 ? (
-                    <div className="p-3 border border-gray-300 rounded-xl bg-gray-50">
-                      <div className="text-center text-gray-500">
-                        <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        <p className="text-sm font-medium">この店舗にスタッフが登録されていません</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          スタッフ管理ページでスタッフを追加してから<br />
-                          右上の「更新」ボタンをクリックしてください
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedUser}
-                      onChange={(e) => handleStaffSelection(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">スタッフを選択してください</option>
-                      {availableStaff
-                        .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
-                        .map(user => {
-                          const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
-                          const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
-
-                          return (
-                            <option
-                              key={user.id}
-                              value={user.id}
-                              disabled={isOnTimeOff}
-                              style={isOnTimeOff ? { color: '#9CA3AF', backgroundColor: '#F3F4F6' } : {}}
-                            >
-                              {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
-                              {isOnTimeOff && ' [希望休承認済み]'}
-                              {fixedShift && ' [固定シフト]'}
-                            </option>
-                          );
-                        })}
-                    </select>
-                  )}
-
+                  <select
+                    value={selectedUser}
+                    onChange={(e) => handleStaffSelection(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">スタッフを選択してください</option>
+                    {availableStaff
+                      .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
+                      .map(user => {
+                      const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
+                      const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
+                        
+                      return (
+                        <option 
+                          key={user.id} 
+                          value={user.id} 
+                          disabled={isOnTimeOff}
+                          style={isOnTimeOff ? { color: '#9CA3AF', backgroundColor: '#F3F4F6' } : {}}
+                        >
+                          {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
+                          {isOnTimeOff && ' [希望休承認済み]'}
+                          {fixedShift && ' [固定シフト]'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  
                   {/* 希望休承認済みスタッフの警告表示 */}
                   {availableStaff.some(user => isStaffOnTimeOff(user.id, modalData.date)) && (
                     <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -2223,7 +2088,7 @@ function ShiftCreatePageInner() {
                       </div>
                     </div>
                   )}
-
+                  
                   {/* 固定シフトスタッフの情報表示 */}
                   {selectedTimeSlot && availableStaff.some(user => checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot)) && (
                     <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
@@ -2325,31 +2190,31 @@ function ShiftCreatePageInner() {
                     </h4>
                     <div className="text-sm text-blue-800 space-y-1">
                       <div className="font-medium">
-                        {users.find(u => u.id === selectedUser)?.name} - {' '}
+                      {users.find(u => u.id === selectedUser)?.name} - {' '}
                         {timeSlots.find(p => p.id === selectedTimeSlot)?.name}
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
                         <span>勤務時間: {(() => {
                           const pattern = timeSlots.find(p => p.id === selectedTimeSlot);
-                          if (!pattern) return '0時間';
-
+                        if (!pattern) return '0時間';
+                          
                           // カスタム時間が設定されている場合はそれを使用
                           const startTime = isCustomTime && customStartTime ? customStartTime : pattern.start_time;
                           const endTime = isCustomTime && customEndTime ? customEndTime : pattern.end_time;
-
+                          
                           const start = startTime.split(':').map(Number);
                           const end = endTime.split(':').map(Number);
-
+                          
                           const startMinutes = start[0] * 60 + start[1];
                           let endMinutes = end[0] * 60 + end[1];
-
+                          
                           // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
                           if (endMinutes <= startMinutes) {
                             endMinutes += 24 * 60; // 24時間（1440分）を加算
                           }
-
+                          
                           const hours = Math.max(0, (endMinutes - startMinutes) / 60);
-
+                          
                           return `${startTime}-${endTime} (${hours}時間)`;
                         })()}</span>
                         {isCustomTime && (
@@ -2396,7 +2261,7 @@ function ShiftCreatePageInner() {
 
         {/* 右クリックメニュー */}
         {contextMenu.show && (
-          <div
+          <div 
             className="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
@@ -2414,11 +2279,11 @@ function ShiftCreatePageInner() {
 
         {/* 代打募集モーダル */}
         {emergencyModal.show && emergencyModal.shift && (
-          <div
+          <div 
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => setEmergencyModal({ show: false, shift: null })}
           >
-            <div
+            <div 
               className="bg-white rounded-xl p-6 max-w-md w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -2438,34 +2303,14 @@ function ShiftCreatePageInner() {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">対象シフト</p>
                   <p className="font-medium text-gray-900">
-                    {emergencyModal.shift && users.find(u => u.id === (emergencyModal.shift as any)?.user_id || (emergencyModal.shift as any)?.userId)?.name} - {' '}
-                    {(() => {
-                      if (!emergencyModal.shift) return '';
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift:', emergencyModal.shift);
-
-                      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
-                      const getTimeSlots = (s: any) => s.time_slots;
-
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slot_id:', getTimeSlotId(emergencyModal.shift));
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slots:', getTimeSlots(emergencyModal.shift));
-                      console.log('🔍 [MODAL DEBUG] timeSlots array:', timeSlots);
-                      console.log('🔍 [MODAL DEBUG] timeSlots array detail:', timeSlots.map(ts => ({ id: ts.id, name: ts.name })));
-
-                      // emergencyModal.shiftはDatabaseShift型またはShift型なので、適切にアクセス
-                      const timeSlot = getTimeSlots(emergencyModal.shift) || timeSlots.find(ts => ts.id === getTimeSlotId(emergencyModal.shift));
-                      console.log('🔍 [MODAL DEBUG] found timeSlot:', timeSlot);
-                      return timeSlot?.name || '不明な時間帯';
-                    })()}
+                    {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.user_id)?.name} - {' '}
+                    {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)?.name}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {emergencyModal.shift?.date}
-                    {(() => {
-                      if (!emergencyModal.shift) return '';
-                      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
-                      const getTimeSlots = (s: any) => s.time_slots;
-                      const timeSlot = getTimeSlots(emergencyModal.shift) || timeSlots.find(ts => ts.id === getTimeSlotId(emergencyModal.shift));
-                      return timeSlot ? ` (${timeSlot.start_time}-${timeSlot.end_time})` : '';
-                    })()}
+                    {emergencyModal.shift?.date} 
+                    {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id) && 
+                      ` (${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.start_time}-${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.end_time})`
+                    }
                   </p>
                 </div>
 
@@ -2511,11 +2356,11 @@ function ShiftCreatePageInner() {
 
         {/* 応募者管理モーダル */}
         {emergencyManagement.show && emergencyManagement.request && (
-          <div
+          <div 
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={() => setEmergencyManagement({ show: false, request: null })}
           >
-            <div
+            <div 
               className="bg-white/90 backdrop-blur-md border border-white/20 shadow-2xl rounded-xl p-4 sm:p-6 w-full max-w-sm sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -2553,7 +2398,7 @@ function ShiftCreatePageInner() {
                   <div className="sm:col-span-2">
                     <p className="text-gray-600 text-xs sm:text-sm">シフト</p>
                     <p className="font-medium text-sm sm:text-base">
-                      {emergencyManagement.request.time_slots?.name || '不明なシフト'}
+                      {emergencyManagement.request.time_slots?.name || '不明なシフト'} 
                       ({emergencyManagement.request.time_slots?.start_time || '00:00'}-{emergencyManagement.request.time_slots?.end_time || '00:00'})
                     </p>
                   </div>
@@ -2573,11 +2418,11 @@ function ShiftCreatePageInner() {
                 <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">
                   応募者一覧 ({emergencyManagement.request.emergency_volunteers?.length || 0}名)
                 </h4>
-
+                
                 {emergencyManagement.request.emergency_volunteers && emergencyManagement.request.emergency_volunteers.length > 0 ? (
                   <div className="space-y-3">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    {emergencyManagement.request.emergency_volunteers.map((volunteer: any) => (
+        {emergencyManagement.request.emergency_volunteers.map((volunteer: any) => (
                       <div key={volunteer.id} className="border border-white/20 bg-white/40 backdrop-blur-sm rounded-lg p-3 sm:p-4">
                         <div className="flex flex-col space-y-3">
                           <div className="flex items-start space-x-3">
@@ -2590,7 +2435,7 @@ function ShiftCreatePageInner() {
                               <p className="font-medium text-gray-900 text-sm sm:text-base">{volunteer.users?.name || '不明なユーザー'}</p>
                               <p className="text-xs sm:text-sm text-gray-600">
                                 {volunteer.users?.skill_level === 'veteran' ? 'ベテラン' :
-                                  volunteer.users?.skill_level === 'regular' ? '一般' : '研修中'}
+                                 volunteer.users?.skill_level === 'regular' ? '一般' : '研修中'}
                               </p>
                               <p className="text-xs text-gray-500">
                                 応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
@@ -2601,7 +2446,7 @@ function ShiftCreatePageInner() {
                                   <p className="text-gray-700">{volunteer.notes}</p>
                                 </div>
                               )}
-
+                              
                               {/* 時間編集セクション */}
                               {customApprovalTime.volunteerId === volunteer.id && customApprovalTime.showCustomTime && (
                                 <div className="mt-3 p-3 bg-white/60 backdrop-blur-sm border border-white/40 rounded-lg">
@@ -2612,7 +2457,7 @@ function ShiftCreatePageInner() {
                                         元: {emergencyManagement.request.time_slots?.start_time || '00:00'} - {emergencyManagement.request.time_slots?.end_time || '00:00'}
                                       </div>
                                     </div>
-
+                                    
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                       <CompactTimeSlider
                                         value={customApprovalTime.startTime}
@@ -2631,14 +2476,14 @@ function ShiftCreatePageInner() {
                                         label="終了時間"
                                       />
                                     </div>
-
+                                    
                                     <div className="flex flex-col sm:flex-row gap-2">
                                       <Button
                                         size="sm"
                                         onClick={() => {
                                           handleVolunteerAction(
-                                            emergencyManagement.request.id,
-                                            volunteer.id,
+                                            emergencyManagement.request.id, 
+                                            volunteer.id, 
                                             'accept',
                                             customApprovalTime.startTime,
                                             customApprovalTime.endTime
@@ -2681,7 +2526,7 @@ function ShiftCreatePageInner() {
                               )}
                             </div>
                           </div>
-
+                          
                           <div className="flex flex-wrap gap-2">
                             {customApprovalTime.volunteerId !== volunteer.id && (
                               <>
@@ -2744,7 +2589,7 @@ function ShiftCreatePageInner() {
       </div>
     </AuthenticatedLayout>
   );
-}
+} 
 
 export default function ShiftCreatePage() {
   return (

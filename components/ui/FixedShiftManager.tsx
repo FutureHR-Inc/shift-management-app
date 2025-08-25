@@ -159,34 +159,38 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
         throw new Error(data.error || '固定シフトの追加に失敗しました');
       }
 
-      // 固定シフト追加成功後、現在の週と来週のシフトを自動生成
-      try {
-        const today = new Date();
-        const currentMonday = new Date(today);
-        currentMonday.setDate(today.getDate() - today.getDay() + 1); // 今週の月曜日
-        
-        const nextWeekEnd = new Date(currentMonday);
-        nextWeekEnd.setDate(currentMonday.getDate() + 13); // 来週末まで（2週間分）
-        
-        const generateResponse = await fetch('/api/fixed-shifts/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            store_id: newShiftForm.store_id,
-            start_date: currentMonday.toISOString().split('T')[0],
-            end_date: nextWeekEnd.toISOString().split('T')[0]
-          })
-        });
-
-        const generateData = await generateResponse.json();
-        
-        if (generateResponse.ok && generateData.generated_count > 0) {
-          console.log(`${generateData.generated_count}件の固定シフトをシフト表に自動反映しました`);
-        }
-      } catch (generateError) {
-        console.error('シフト自動生成エラー:', generateError);
-        // 自動生成エラーは固定シフト作成の成功を妨げない
+      // 固定シフトは動的表示のため、自動生成は行わない
+      console.log('固定シフトが追加されました。シフト表に動的に表示されます。');
+      
+      // 成功フィードバック表示
+      const successMessage = `固定シフトが追加されました！シフト表に即座に反映されます。`;
+      // 簡易的な成功通知（必要に応じてtoast等に変更可能）
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          console.log('✅ ' + successMessage);
+        }, 300);
       }
+
+      // 他のページ/タブに固定シフト更新を通知
+      window.dispatchEvent(new CustomEvent('fixedShiftUpdated', {
+        detail: { 
+          action: 'added',
+          userId: userId,
+          storeId: newShiftForm.store_id,
+          dayOfWeek: newShiftForm.day_of_week,
+          timeSlotId: newShiftForm.time_slot_id
+        }
+      }));
+
+      // ブラウザストレージ経由での通知（別タブ対応）
+      const timestamp = Date.now();
+      localStorage.setItem('fixedShiftUpdate', JSON.stringify({
+        action: 'added',
+        userId: userId,
+        timestamp: timestamp
+      }));
+      // 即座に削除（イベント発火のみが目的）
+      setTimeout(() => localStorage.removeItem('fixedShiftUpdate'), 100);
 
       // 成功時にリロードしてフォームをリセット
       await loadData();
@@ -228,6 +232,24 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
         throw new Error(data.error || '固定シフトの削除に失敗しました');
       }
 
+      // 他のページ/タブに固定シフト削除を通知
+      window.dispatchEvent(new CustomEvent('fixedShiftUpdated', {
+        detail: { 
+          action: 'deleted',
+          userId: userId,
+          fixedShiftId: fixedShiftId
+        }
+      }));
+
+      // ブラウザストレージ経由での通知（別タブ対応）
+      const timestamp = Date.now();
+      localStorage.setItem('fixedShiftUpdate', JSON.stringify({
+        action: 'deleted',
+        userId: userId,
+        timestamp: timestamp
+      }));
+      setTimeout(() => localStorage.removeItem('fixedShiftUpdate'), 100);
+
       // 成功時にリロード
       await loadData();
       onUpdate?.();
@@ -261,39 +283,8 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
         throw new Error(data.error || '固定シフトの更新に失敗しました');
       }
 
-      // 固定シフト更新成功後、シフトを自動生成/削除
-      try {
-        const today = new Date();
-        const currentMonday = new Date(today);
-        currentMonday.setDate(today.getDate() - today.getDay() + 1); // 今週の月曜日
-        
-        const nextWeekEnd = new Date(currentMonday);
-        nextWeekEnd.setDate(currentMonday.getDate() + 13); // 来週末まで（2週間分）
-        
-        if (!fixedShift.is_active) {
-          // 有効化する場合は自動生成
-          const generateResponse = await fetch('/api/fixed-shifts/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              store_id: fixedShift.store_id,
-              start_date: currentMonday.toISOString().split('T')[0],
-              end_date: nextWeekEnd.toISOString().split('T')[0]
-            })
-          });
-
-          const generateData = await generateResponse.json();
-          
-          if (generateResponse.ok && generateData.generated_count > 0) {
-            console.log(`${generateData.generated_count}件の固定シフトをシフト表に自動反映しました`);
-          }
-        }
-        // 無効化する場合は既存の固定シフト由来のシフトは手動削除が必要
-        // （既に確定済みシフトを自動削除するのはリスクが高いため）
-      } catch (generateError) {
-        console.error('シフト自動生成エラー:', generateError);
-        // 自動生成エラーは固定シフト更新の成功を妨げない
-      }
+      // 固定シフトは動的表示のため、シフト生成は行わない
+      console.log('固定シフトの状態が更新されました。シフト表に動的に反映されます。');
 
       // 成功時にリロード
       await loadData();

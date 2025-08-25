@@ -7,9 +7,15 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CompactTimeSlider } from '@/components/ui/CompactTimeSlider';
-import type { User, Store, TimeSlot, DatabaseEmergencyRequest, EmergencyVolunteer, ApiUser } from '@/lib/types';
+import type { User, Store, TimeSlot, DatabaseEmergencyRequest, EmergencyVolunteer } from '@/lib/types';
 
-
+interface ApiUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'manager' | 'staff';
+}
 
 interface ShiftTableDay {
   date: string;
@@ -80,7 +86,7 @@ export default function EmergencyManagementPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
     const manageParam = urlParams.get('manage');
-
+    
     // タブパラメータがある場合は該当タブを開く
     if (tabParam === 'manage') {
       setActiveTab('manage');
@@ -89,7 +95,7 @@ export default function EmergencyManagementPage() {
     } else if (tabParam === 'browse') {
       setActiveTab('browse');
     }
-
+    
     // 特定の募集を管理する場合
     if (manageParam && emergencyRequests.length > 0) {
       const targetRequest = emergencyRequests.find(req => req.id === manageParam);
@@ -107,26 +113,26 @@ export default function EmergencyManagementPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-
+      
       // 現在のユーザー情報をlocalStorageから取得
       const userInfo = localStorage.getItem('currentUser');
       if (!userInfo) {
         router.push('/login');
         return;
       }
-
+      
       const user = JSON.parse(userInfo);
       setCurrentUser(user);
 
       console.log('📡 データ取得開始...');
 
-      // 🔧 企業分離対応: 並行してデータ取得
+      // 並行してデータ取得（企業フィルタリング付き）
       const [emergencyResult, shiftsResult, storesResult, timeSlotsResult, usersResult] = await Promise.all([
-        fetch(`/api/emergency-requests?current_user_id=${user.id}`).then(res => res.json()),
-        fetch(`/api/shifts?user_id=current&include_future=true&current_user_id=${user.id}`).then(res => res.json()),
-        fetch(`/api/stores?current_user_id=${user.id}`).then(res => res.json()),
-        fetch(`/api/time-slots?current_user_id=${user.id}`).then(res => res.json()),
-        fetch(`/api/users?current_user_id=${user.id}`).then(res => res.json()) // ユーザーデータも取得
+        fetch(`/api/emergency-requests?current_user_id=${currentUser?.id}`).then(res => res.json()),
+        fetch('/api/shifts?user_id=current&include_future=true').then(res => res.json()),
+        fetch(`/api/stores?current_user_id=${currentUser?.id}`).then(res => res.json()),
+        fetch(`/api/time-slots?current_user_id=${currentUser?.id}`).then(res => res.json()),
+        fetch(`/api/users?current_user_id=${currentUser?.id}`).then(res => res.json()) // 企業フィルタリング付き
       ]);
 
       console.log('📦 取得したデータ:', {
@@ -199,26 +205,26 @@ export default function EmergencyManagementPage() {
       // 1週間分の日付を生成
       const startDate = new Date(viewWeek);
       startDate.setDate(startDate.getDate() - startDate.getDay()); // 週の始まり（日曜日）
-
+      
       const endDate = new Date(startDate);
       endDate.setDate(startDate.getDate() + 6); // 週の終わり（土曜日）
-
+      
       console.log('📅 期間:', {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0]
       });
 
-      // 🔧 企業分離対応: 並行してデータを取得 - 店舗の詳細情報も含める
+      // 並行してデータを取得 - 店舗の詳細情報も含める（企業フィルタリング付き）
       const [shiftsResponse, usersResponse, storeDetailResponse] = await Promise.all([
-        fetch(`/api/shifts?store_id=${selectedStore}&date_from=${startDate.toISOString().split('T')[0]}&date_to=${endDate.toISOString().split('T')[0]}&current_user_id=${currentUser.id}`),
-        fetch(`/api/users?current_user_id=${currentUser.id}`),
-        fetch(`/api/stores?current_user_id=${currentUser.id}`) // 全店舗データから該当店舗を探す
+        fetch(`/api/shifts?store_id=${selectedStore}&date_from=${startDate.toISOString().split('T')[0]}&date_to=${endDate.toISOString().split('T')[0]}`),
+        fetch(`/api/users?current_user_id=${currentUser?.id}`),
+        fetch(`/api/stores?current_user_id=${currentUser?.id}`) // 企業フィルタリング付き
       ]);
 
       const shiftsData = shiftsResponse.ok ? await shiftsResponse.json() : { data: [] };
       const usersData = usersResponse.ok ? await usersResponse.json() : { data: [] };
       const storesData = storeDetailResponse.ok ? await storeDetailResponse.json() : { data: [] };
-
+      
       console.log('📋 取得データ:', {
         shifts: shiftsData.data?.length || 0,
         users: usersData.data?.length || 0,
@@ -228,36 +234,36 @@ export default function EmergencyManagementPage() {
       // 選択店舗の詳細データを取得
       const selectedStoreData = storesData.data?.find((s: any) => s.id === selectedStore);
       const storeTimeSlots = timeSlots.filter(ts => ts.store_id === selectedStore);
-
+      
       console.log('🏪 店舗詳細:', {
         storeName: selectedStoreData?.name,
         requiredStaff: selectedStoreData?.required_staff,
         timeSlots: storeTimeSlots.length
       });
-
+      
       const days: ShiftTableDay[] = [];
-
+      
       for (let i = 0; i < 7; i++) {
         const currentDate = new Date(startDate);
         currentDate.setDate(startDate.getDate() + i);
         const dateStr = currentDate.toISOString().split('T')[0];
-
+        
         // その日のシフトデータを取得
-        const dayShifts = (shiftsData.data || []).filter((shift: any) =>
+        const dayShifts = (shiftsData.data || []).filter((shift: any) => 
           shift.date === dateStr
         );
-
+        
         console.log(`📋 ${dateStr}のシフト:`, dayShifts.length, '件');
-
+        
         // 必要人数の設定を取得
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayName = dayNames[currentDate.getDay()];
-
+        
         const timeSlotData = storeTimeSlots.map(slot => {
-          const slotShifts = dayShifts.filter((shift: any) =>
+          const slotShifts = dayShifts.filter((shift: any) => 
             shift.time_slot_id === slot.id
           );
-
+          
           // 店舗の必要人数設定から正確に取得
           let requiredStaff = 0;
           if (selectedStoreData?.required_staff) {
@@ -266,17 +272,17 @@ export default function EmergencyManagementPage() {
               requiredStaff = dayRequiredStaff[slot.id] || 0;
             }
           }
-
+          
           const currentStaff = slotShifts.length;
           const shortage = Math.max(0, requiredStaff - currentStaff);
-
+          
           console.log(`🔢 ${slot.name} (${dayName}):`, {
             required: requiredStaff,
             current: currentStaff,
             shortage,
             shifts: slotShifts.map((s: any) => ({ name: s.users?.name, status: s.status }))
           });
-
+          
           return {
             id: slot.id,
             name: slot.name,
@@ -306,7 +312,7 @@ export default function EmergencyManagementPage() {
           timeSlots: timeSlotData
         });
       }
-
+      
       console.log('✅ シフト表データ取得完了:', days);
       setShiftTableData(days);
     } catch (error) {
@@ -342,25 +348,25 @@ export default function EmergencyManagementPage() {
       alert('過去の日付には代打募集を作成できません');
       return;
     }
-
+    
     // シフトが配置されていない場合でも人手不足なら作成可能
     const hasShifts = timeSlot.shifts.length > 0;
     const isShortage = timeSlot.shortage > 0;
-
+    
     if (!hasShifts && !isShortage) {
       alert('この時間帯には募集が必要な状況ではありません');
       return;
     }
-
-    console.log('🎯 代打募集作成開始:', {
-      date,
+    
+    console.log('🎯 代打募集作成開始:', { 
+      date, 
       timeSlot,
       hasShifts,
       isShortage,
       requiredStaff: timeSlot.requiredStaff,
       currentStaff: timeSlot.currentStaff
     });
-
+    
     setSelectedSlot({ date, timeSlot });
   };
 
@@ -372,7 +378,7 @@ export default function EmergencyManagementPage() {
     }
 
     setCreating(true);
-
+    
     try {
       // 募集タイプを判定
       const hasShifts = selectedSlot.timeSlot.shifts.length > 0;
@@ -419,19 +425,19 @@ export default function EmergencyManagementPage() {
 
       if (response.ok) {
         console.log('✅ 代打募集作成成功:', result);
-
+        
         // 募集タイプに応じた成功メッセージ
         const shiftStaff = selectedSlot.timeSlot.shifts.map((s: any) => s.user_name).join('、');
         const messageType = requestType === 'shortage' ? '人手不足募集' : '代打募集';
-        const situationDesc = requestType === 'shortage'
+        const situationDesc = requestType === 'shortage' 
           ? `👥 現在の配置: ${shiftStaff || 'なし'}\n⚠️ 不足人数: ${selectedSlot.timeSlot.shortage}名`
           : `👥 現在の配置: ${shiftStaff}`;
-
+        
         alert(`✅ ${messageType}を作成しました！\n\n📅 日時: ${formatDate(selectedSlot.date)}\n⏰ 時間: ${selectedSlot.timeSlot.name}\n${situationDesc}\n📝 理由: ${reason.trim()}\n\n📧 該当スタッフにメール通知を送信しています...`);
-
+        
         setReason('');
         setSelectedSlot(null);
-
+        
         // データを再取得
         await fetchData();
         await fetchShiftTableData();
@@ -468,7 +474,7 @@ export default function EmergencyManagementPage() {
 
   // 応募者の採用・拒否
   const handleVolunteerAction = async (
-    volunteerId: string,
+    volunteerId: string, 
     action: 'accept' | 'reject',
     customStartTime?: string,
     customEndTime?: string
@@ -498,8 +504,8 @@ export default function EmergencyManagementPage() {
       }
 
       const result = await response.json();
-      alert(action === 'accept' ?
-        `${volunteers.find(v => v.id === volunteerId)?.user?.name}さんを採用しました` :
+      alert(action === 'accept' ? 
+        `${volunteers.find(v => v.id === volunteerId)?.user?.name}さんを採用しました` : 
         '応募を拒否しました'
       );
 
@@ -566,8 +572,8 @@ export default function EmergencyManagementPage() {
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <p className="text-red-600 text-lg">❌ {error}</p>
-            <Button
-              onClick={fetchData}
+            <Button 
+              onClick={fetchData} 
               className="mt-4"
             >
               🔄 再読み込み
@@ -580,9 +586,9 @@ export default function EmergencyManagementPage() {
 
   // 現在の募集（自分が作成したもの）
   const myEmergencyRequests = emergencyRequests.filter(req => req.original_user_id === currentUser?.id);
-
+  
   // 他のスタッフの募集（自分以外）
-  const otherEmergencyRequests = emergencyRequests.filter(req =>
+  const otherEmergencyRequests = emergencyRequests.filter(req => 
     req.status === 'open' && req.original_user_id !== currentUser?.id
   );
 
@@ -600,39 +606,42 @@ export default function EmergencyManagementPage() {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('browse')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'browse'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'browse'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
               募集一覧
             </button>
             <button
               onClick={() => setActiveTab('create')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'create'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'create'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
               募集作成
             </button>
             <button
               onClick={() => setActiveTab('manage')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'manage'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'manage'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
               募集管理
-              {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) =>
+              {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) => 
                 total + (req.emergency_volunteers?.length || 0), 0
               ) > 0 && (
-                  <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
-                    {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) =>
-                      total + (req.emergency_volunteers?.length || 0), 0
-                    )}
-                  </span>
-                )}
+                <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">
+                  {emergencyRequests.filter(req => req.status === 'open').reduce((total, req) => 
+                    total + (req.emergency_volunteers?.length || 0), 0
+                  )}
+                </span>
+              )}
             </button>
           </nav>
         </div>
@@ -654,9 +663,8 @@ export default function EmergencyManagementPage() {
                     {otherEmergencyRequests.map((request) => {
                       const user = users.find(u => u.id === request.original_user_id);
                       const store = stores.find(s => s.id === request.store_id);
-                      // APIで取得されたtime_slotsデータを直接使用
-                      const timeSlot = request.time_slots || timeSlots.find(ts => ts.id === request.time_slot_id);
-
+                      const timeSlot = timeSlots.find(ts => ts.id === request.time_slot_id);
+                      
                       return (
                         <div key={request.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex justify-between items-start">
@@ -691,49 +699,438 @@ export default function EmergencyManagementPage() {
             {/* シフト選択（シフト表を表示） */}
             <Card>
               <CardHeader>
-                <CardTitle>代打募集の作成</CardTitle>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
-                    💡 代打募集を作成するには、<strong>シフト作成画面</strong>から代打を募集したいスタッフ枠を選択して、代打募集をしてください
-                  </p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-start space-x-2">
-                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="text-sm">
-                        <p className="font-medium text-blue-800 mb-1">代打募集の手順:</p>
-                        <ol className="text-blue-700 space-y-1">
-                          <li>1. シフト作成画面に移動</li>
-                          <li>2. 既存のスタッフ枠をクリック</li>
-                          <li>3. 「代打を募集」を選択</li>
-                          <li>4. 募集理由を入力して作成完了</li>
-                        </ol>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2">
-                    <Button
-                      onClick={() => router.push('/shift/create')}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      📅 シフト作成画面に移動
-                    </Button>
-                  </div>
-                </div>
+                <CardTitle>シフト選択</CardTitle>
+                <p className="text-sm text-gray-600">代打を募集したいシフトを選択してください</p>
               </CardHeader>
               <CardContent>
+                {/* 店舗・週選択 */}
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      店舗選択
+                    </label>
+                    <select
+                      value={selectedStore}
+                      onChange={(e) => {
+                        console.log('🏪 店舗変更:', e.target.value);
+                        setSelectedStore(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">店舗を選択してください</option>
+                      {stores.map(store => (
+                        <option key={store.id} value={store.id}>{store.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
+                  {selectedStore && (
+                    <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+                      <h3 className="text-base sm:text-lg font-medium text-gray-900">
+                        {viewWeek.getFullYear()}年 {viewWeek.getMonth() + 1}月 第{Math.ceil(viewWeek.getDate() / 7)}週
+                      </h3>
+                      <div className="flex space-x-2 justify-center sm:justify-end">
+                        <Button variant="secondary" size="sm" onClick={() => changeWeek('prev')} className="text-xs sm:text-sm">
+                          ← 前週
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => changeWeek('next')} className="text-xs sm:text-sm">
+                          次週 →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
+                {!selectedStore && (
+                  <div className="text-center py-8 text-gray-500">
+                    👆 まず店舗を選択してください
+                  </div>
+                )}
 
+                {selectedStore && timeSlots.filter(ts => ts.store_id === selectedStore).length === 0 && (
+                  <div className="text-center py-8 text-yellow-600 bg-yellow-50 rounded-lg">
+                    ⚠️ 選択した店舗に時間帯設定がありません
+                  </div>
+                )}
 
+                {selectedStore && timeSlots.filter(ts => ts.store_id === selectedStore).length > 0 && (
+                  <>
+                    {/* 週統計サマリー */}
+                    {shiftTableData.length > 0 && (
+                      <div className="mb-6">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <div className="text-lg font-bold text-blue-600">
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
+                              )}名
+                            </div>
+                            <p className="text-xs text-blue-700 mt-1">配置済みスタッフ</p>
+                          </div>
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <div className="text-lg font-bold text-green-600">
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
+                              )}名
+                            </div>
+                            <p className="text-xs text-green-700 mt-1">必要スタッフ</p>
+                          </div>
+                          <div className="bg-red-50 p-4 rounded-lg">
+                            <div className="text-lg font-bold text-red-600">
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.shortage, 0), 0
+                              )}名
+                            </div>
+                            <p className="text-xs text-red-700 mt-1">不足スタッフ</p>
+                          </div>
+                          <div className="bg-purple-50 p-4 rounded-lg">
+                            <div className="text-lg font-bold text-purple-600">
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                                  dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
+                                ), 0
+                              )}名
+                            </div>
+                            <p className="text-xs text-purple-700 mt-1">確定済みシフト</p>
+                          </div>
+                        </div>
+                        
+                        {/* 詳細情報 */}
+                        <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                              <span className="font-medium">下書き:</span>{' '}
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                                  dayTotal + slot.shifts.filter(shift => shift.status === 'draft').length, 0
+                                ), 0
+                              )}名
+                            </div>
+                            <div>
+                              <span className="font-medium">確定済み:</span>{' '}
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                                  dayTotal + slot.shifts.filter(shift => shift.status === 'confirmed').length, 0
+                                ), 0
+                              )}名
+                            </div>
+                            <div>
+                              <span className="font-medium">完了:</span>{' '}
+                              {shiftTableData.reduce((total, day) => 
+                                total + day.timeSlots.reduce((dayTotal, slot) => 
+                                  dayTotal + slot.shifts.filter(shift => shift.status === 'completed').length, 0
+                                ), 0
+                              )}名
+                            </div>
+                            <div>
+                              <span className="font-medium">充足率:</span>{' '}
+                              {(() => {
+                                const totalRequired = shiftTableData.reduce((total, day) => 
+                                  total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.requiredStaff, 0), 0
+                                );
+                                const totalCurrent = shiftTableData.reduce((total, day) => 
+                                  total + day.timeSlots.reduce((dayTotal, slot) => dayTotal + slot.currentStaff, 0), 0
+                                );
+                                return totalRequired > 0 ? Math.round((totalCurrent / totalRequired) * 100) : 0;
+                              })()}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
+                    {/* シフト表 */}
+                    {shiftTableData.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        📊 シフト表を読み込み中...
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <div className="min-w-full">
+                            <table className="w-full border-collapse" style={{ minWidth: '800px' }}>
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="border border-gray-300 px-3 py-4 text-left text-sm font-semibold text-gray-900 sticky left-0 bg-gray-50 z-10">
+                                    時間帯
+                                  </th>
+                                  {shiftTableData.map((day) => (
+                                    <th key={day.date} className="border border-gray-300 px-2 py-4 text-center text-sm font-semibold text-gray-900 min-w-32">
+                                      <div className="space-y-1">
+                                        <div className="font-bold">{day.dayName}</div>
+                                        <div className="text-xs text-gray-600">
+                                          {new Date(day.date).getMonth() + 1}/{new Date(day.date).getDate()}
+                                        </div>
+                                      </div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {timeSlots.filter(ts => ts.store_id === selectedStore).map((timeSlot) => (
+                                  <tr key={timeSlot.id}>
+                                    <td className="border border-gray-300 px-3 py-4 text-sm font-medium bg-gray-50 sticky left-0 z-10">
+                                      <div className="space-y-1">
+                                        <div className="font-semibold">{timeSlot.name}</div>
+                                        <div className="text-xs text-gray-600">
+                                          {formatTime(timeSlot.start_time)}-{formatTime(timeSlot.end_time)}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    {shiftTableData.map((day) => {
+                                      const daySlot = day.timeSlots.find(ts => ts.id === timeSlot.id);
+                                      if (!daySlot) return <td key={day.date} className="border border-gray-300 px-2 py-4 min-w-32"></td>;
+                                      
+                                      const isPast = new Date(day.date) < new Date();
+                                      const hasShifts = daySlot.shifts.length > 0;
+                                      const isShortage = daySlot.shortage > 0;
+                                      const isOverStaffed = daySlot.currentStaff > daySlot.requiredStaff;
+                                      const canCreateRequest = !isPast && (hasShifts || isShortage);
+                                      
+                                      return (
+                                        <td 
+                                          key={day.date} 
+                                          className={`border border-gray-300 px-2 py-4 text-sm min-w-32 ${
+                                            isPast 
+                                              ? 'bg-gray-50' 
+                                              : (hasShifts || isShortage)
+                                                ? 'bg-blue-50 cursor-pointer hover:bg-blue-100' 
+                                                : 'bg-white'
+                                          }`}
+                                          onClick={() => {
+                                            if (!isPast && (hasShifts || isShortage)) {
+                                              console.log('🎯 代打募集作成クリック:', { date: day.date, timeSlot: daySlot });
+                                              handleCreateEmergencyFromSlot(day.date, daySlot);
+                                            }
+                                          }}
+                                        >
+                                          <div className="space-y-2 min-h-16">
+                                            {/* 人数表示 */}
+                                            <div className="flex items-center justify-between">
+                                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                                isShortage 
+                                                  ? 'bg-red-100 text-red-700' 
+                                                  : isOverStaffed 
+                                                    ? 'bg-orange-100 text-orange-700'
+                                                    : 'bg-green-100 text-green-700'
+                                              }`}>
+                                                {daySlot.currentStaff}/{daySlot.requiredStaff}人
+                                              </span>
+                                              {isShortage && (
+                                                <span className="text-xs text-red-600 font-bold">
+                                                  不足{daySlot.shortage}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {/* スタッフ表示 */}
+                                            {daySlot.shifts.length > 0 ? (
+                                              <div className="space-y-1">
+                                                {daySlot.shifts.map((shift) => {
+                                                  const isConfirmed = shift.status === 'confirmed';
+                                                  const isCompleted = shift.status === 'completed';
+                                                  const isDraft = shift.status === 'draft';
+                                                  const hasCustomTime = shift.custom_start_time && shift.custom_end_time;
+                                                  
+                                                  return (
+                                                    <div 
+                                                      key={shift.id}
+                                                      className={`text-xs p-2 rounded-md border transition-all ${
+                                                        isCompleted
+                                                          ? 'bg-green-100 border-green-300 text-green-800'
+                                                          : isConfirmed 
+                                                            ? 'bg-blue-100 border-blue-300 text-blue-800' 
+                                                            : isDraft
+                                                              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                                                              : 'bg-white border-gray-200 text-gray-700'
+                                                      } ${!isPast && (hasShifts || isShortage) ? 'hover:shadow-sm' : ''}`}
+                                                    >
+                                                      <div className="font-medium truncate">
+                                                        {shift.user_name}
+                                                      </div>
+                                                      {hasCustomTime && (
+                                                        <div className="text-xs text-purple-600 mt-1">
+                                                          ⏰ {shift.custom_start_time}-{shift.custom_end_time}
+                                                        </div>
+                                                      )}
+                                                      <div className="flex items-center justify-between mt-1">
+                                                        <div className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                                          isCompleted
+                                                            ? 'bg-green-200 text-green-700'
+                                                            : isConfirmed
+                                                              ? 'bg-blue-200 text-blue-700'
+                                                              : 'bg-yellow-200 text-yellow-700'
+                                                        }`}>
+                                                          {isCompleted ? '完了' : isConfirmed ? '確定' : '下書き'}
+                                                        </div>
+                                                        {(isConfirmed || isCompleted) && (
+                                                          <div className="text-xs">
+                                                            {isCompleted ? '✅' : '✓'}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-center h-12 text-gray-400">
+                                                <div className="text-center">
+                                                  <div className="text-lg mb-1">-</div>
+                                                  <div className="text-xs">未配置</div>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* 代打募集ボタン */}
+                                            {canCreateRequest && (
+                                              <div className="text-center pt-1">
+                                                <div className={`text-xs sm:text-sm font-medium px-2 py-1 rounded-full transition-colors cursor-pointer ${
+                                                  isShortage
+                                                    ? 'text-red-600 bg-red-100 hover:bg-red-200'
+                                                    : hasShifts 
+                                                      ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+                                                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                                                }`}>
+                                                  <span className="sm:hidden">
+                                                    {isShortage 
+                                                      ? '🆘 人手不足'
+                                                      : hasShifts 
+                                                        ? '📝 代打募集'
+                                                        : '➕ 新規募集'
+                                                    }
+                                                  </span>
+                                                  <span className="hidden sm:inline">
+                                                    {isShortage 
+                                                      ? '🆘 人手不足募集'
+                                                      : hasShifts 
+                                                        ? '📝 代打募集作成'
+                                                        : '➕ 新規シフト募集'
+                                                    }
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* 空の時間帯表示 */}
+                                            {!hasShifts && !isShortage && !isPast && (
+                                              <div className="text-center pt-1">
+                                                <div className="text-xs text-gray-400">
+                                                  配置なし
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* 過去の日付表示 */}
+                                            {isPast && (
+                                              <div className="text-center pt-1">
+                                                <div className="text-xs text-gray-400">
+                                                  過去の日付
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
 
+            {/* 理由入力（シフト選択後） */}
+            {selectedSlot && (
+              <Card data-reason-section>
+                <CardHeader>
+                  <CardTitle>代打募集の理由</CardTitle>
+                  <p className="text-sm text-gray-600">代打が必要な理由を入力してください</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium text-blue-900">選択されたシフト</h4>
+                    <p className="text-sm text-blue-800">
+                      📅 {formatDate(selectedSlot.date)} ({getDayName(selectedSlot.date)})
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      ⏰ {selectedSlot.timeSlot.name} ({formatTime(selectedSlot.timeSlot.start_time)}-{formatTime(selectedSlot.timeSlot.end_time)})
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      👥 必要人数: {selectedSlot.timeSlot.requiredStaff}名 / 現在: {selectedSlot.timeSlot.currentStaff}名
+                    </p>
+                    {selectedSlot.timeSlot.shifts.length > 0 ? (
+                      <p className="text-sm text-blue-800">
+                        🏷️ 現在の配置: {selectedSlot.timeSlot.shifts.map((s: any) => s.user_name).join('、')}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-red-800">
+                        ⚠️ まだ誰も配置されていません（人手不足 {selectedSlot.timeSlot.shortage}名）
+                      </p>
+                    )}
+                    {selectedSlot.timeSlot.shortage > 0 && (
+                      <p className="text-sm text-red-800 font-medium">
+                        🚨 不足人数: {selectedSlot.timeSlot.shortage}名
+                      </p>
+                    )}
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder={selectedSlot.timeSlot.shortage > 0 
+                      ? "例：人手が足りないため、急な欠員のため、業務量増加のため など" 
+                      : "例：急な用事のため、体調不良のため、家庭の事情のため など"
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                  />
+                </CardContent>
+              </Card>
+            )}
 
+            {/* アクションボタン */}
+            {selectedSlot && (
+              <div className="flex space-x-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSelectedSlot(null);
+                    setReason('');
+                  }}
+                  className="flex-1"
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  onClick={handleCreateEmergencyRequest}
+                  disabled={!reason.trim() || creating}
+                  className="flex-1"
+                >
+                  {creating ? '作成中...' : '代打募集を作成'}
+                </Button>
+              </div>
+            )}
 
-
+            {/* 注意事項 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">代打募集に関する注意事項</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li>• 代打募集の作成後は内容の変更ができません</li>
+                  <li>• 複数の応募者がいる場合、最終的な選考を行ってください</li>
+                  <li>• 応募があった場合はメールで通知されます</li>
+                  <li>• 代打が決定したら速やかに確定処理を行ってください</li>
+                </ul>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -772,7 +1169,7 @@ export default function EmergencyManagementPage() {
                         const timeSlot = timeSlots.find(ts => ts.id === request.time_slot_id);
                         const volunteerCount = request.emergency_volunteers?.length || 0;
                         const isMyRequest = request.original_user_id === currentUser?.id;
-
+                        
                         return (
                           <div key={request.id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
@@ -783,8 +1180,9 @@ export default function EmergencyManagementPage() {
                                     {user?.name || '不明なユーザー'}
                                     {isMyRequest && <span className="text-blue-600">（自分）</span>}
                                   </span>
-                                  <span className={`px-2 py-1 text-xs rounded-full ${volunteerCount > 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${
+                                    volunteerCount > 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
                                     {volunteerCount > 0 ? `応募者${volunteerCount}名` : '応募者募集中'}
                                   </span>
                                 </div>
@@ -840,7 +1238,7 @@ export default function EmergencyManagementPage() {
 
         {/* 代打募集応募管理モーダル（glassmorphism） */}
         {showManagementModal && selectedRequestForManagement && (
-          <div
+          <div 
             className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {

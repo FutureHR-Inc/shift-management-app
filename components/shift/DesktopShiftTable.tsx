@@ -9,6 +9,7 @@ interface DesktopShiftTableProps {
   viewMode: string;
   displayDates: Date[];
   getRequiredStaff: (dayOfWeek: number, timeSlotId: string) => number;
+  getShiftForSlot?: (date: string, timeSlot: string) => Shift[]; // 親のgetShiftForSlotを使用
   getEmergencyRequestForShift: (shiftId: string) => any;
   handleCellClick: (date: string, timeSlot: string, dayIndex: number) => void;
   handleDeleteShift: (shiftId: string) => void;
@@ -26,6 +27,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   viewMode,
   displayDates,
   getRequiredStaff,
+  getShiftForSlot: parentGetShiftForSlot,
   getEmergencyRequestForShift,
   handleCellClick,
   handleDeleteShift,
@@ -36,14 +38,28 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   users,
   timeSlots
 }) => {
-  // getShiftForSlot関数を再実装
+  // getShiftForSlot関数（親の関数を優先使用、固定シフト対応）
   const getShiftForSlot = (date: string, timeSlotId: string) => {
+    // 親コンポーネントからgetShiftForSlotが渡されている場合はそれを使用（固定シフト対応）
+    if (parentGetShiftForSlot) {
+      const allShifts = parentGetShiftForSlot(date, timeSlotId);
+      console.log(`🔍 [DesktopTable] ${date} ${timeSlotId}: ${allShifts.length}件のシフト（親関数使用）`);
+      allShifts.forEach((shift, i) => {
+        console.log(`  [${i}] ${shift.userId} - ${shift.isFixedShift ? '固定' : '通常'}シフト`);
+      });
+      return allShifts;
+    }
+    
+    // フォールバック: props.shiftsのみを使用（固定シフトなし）
     const dateString = date;
-    return shifts.filter(shift =>
+    const dayShifts = (shifts || []).filter(shift =>
       shift.date === dateString &&
       shift.timeSlotId === timeSlotId &&
       shift.storeId === selectedStore
     );
+    
+    console.log(`🔍 [DesktopTable] ${date} ${timeSlotId}: ${dayShifts.length}件のシフト（フォールバック）`);
+    return dayShifts;
   };
 
   return (
@@ -52,7 +68,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
         <table className="w-full border-collapse table-fixed" style={{ width: viewMode === 'month' ? '1800px' : viewMode === 'half-month' ? '1200px' : '100%' }}>
           <colgroup>
             <col style={{ width: viewMode === 'week' ? '120px' : '100px' }} />
-            {displayDates.map((_, index) => (
+            {(displayDates || []).map((_, index) => (
               <col key={index} style={{
                 width: viewMode === 'month' ? '120px' :
                   viewMode === 'half-month' ? '150px' :
@@ -63,7 +79,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
           <thead>
             <tr className="border-b border-gray-200">
               <th className="text-left p-2 sm:p-3 lg:p-2 font-medium text-gray-900 bg-gray-50 sticky left-0 z-10 text-xs sm:text-sm lg:text-sm">時間帯</th>
-              {displayDates.map((date, index) => (
+              {(displayDates || []).map((date, index) => (
                 <th key={index} className="text-center p-1 sm:p-2 lg:p-1 font-medium text-gray-900 bg-gray-50">
                   <div className="text-xs sm:text-sm lg:text-sm">
                     {date.toLocaleDateString('ja-JP', {
@@ -79,13 +95,13 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {timeSlots.map((timeSlot) => (
+            {(timeSlots || []).map((timeSlot) => (
               <tr key={timeSlot.id} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="p-2 sm:p-3 lg:p-2 bg-gray-50 sticky left-0 z-10">
                   <div className="font-medium text-gray-900 text-xs sm:text-sm lg:text-sm">{timeSlot.name}</div>
                   <div className="text-xs text-gray-500">{timeSlot.start_time}-{timeSlot.end_time}</div>
                 </td>
-                {displayDates.map((date, dayIndex) => {
+                {(displayDates || []).map((date, dayIndex) => {
                   try {
                     const dateString = date.toISOString().split('T')[0];
                     const dayShifts = getShiftForSlot(dateString, timeSlot.id);
@@ -128,8 +144,8 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                             {dayShifts && dayShifts.length > 0 && (
                               dayShifts.map((shift) => {
                                 try {
-                                  const user = users.find(u => u.id === shift.userId);
-                                  const timeSlotData = timeSlots.find(ts => ts.id === shift.timeSlotId);
+                                  const user = (users || []).find(u => u.id === shift.userId);
+                                  const timeSlotData = (timeSlots || []).find(ts => ts.id === shift.timeSlotId);
 
                                   if (!user || !timeSlotData) {
                                     return null;

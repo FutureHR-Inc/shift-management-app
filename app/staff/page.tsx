@@ -8,9 +8,24 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FixedShiftManager } from '@/components/ui/FixedShiftManager';
 import CompanyRegistrationForm from '@/components/CompanyRegistrationForm';
-import type { ApiUser } from '@/lib/types';
+// import type { User, Store } from '@/lib/types'; // 未使用のため削除
 
-
+// APIから取得するデータ用の型
+interface ApiUser {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  role: 'manager' | 'staff';
+  skill_level: 'training' | 'regular' | 'veteran';
+  memo?: string;
+  login_id?: string;
+  hourly_wage?: number; // 時給（円）
+  user_stores?: Array<{
+    store_id: string;
+    stores: { id: string; name: string };
+  }>;
+}
 
 interface ApiStore {
   id: string;
@@ -328,14 +343,6 @@ function StaffPageContent() {
       const updatedUsers = await fetchUsers();
       setUsers(updatedUsers);
 
-      // 他のタブ・ウィンドウにスタッフ更新を通知
-      localStorage.setItem('staff_updated', Date.now().toString());
-
-      // 同一タブ内の他のコンポーネントにも通知（postMessage）
-      window.postMessage({ type: 'STAFF_UPDATED' }, window.location.origin);
-
-      console.log('🔔 [STAFF] Staff update notification sent to other tabs/components');
-
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
@@ -367,15 +374,6 @@ function StaffPageContent() {
 
       // ローカル状態から削除
       setUsers(users.filter(user => user.id !== userId));
-
-      // 他のタブ・ウィンドウにスタッフ更新を通知
-      localStorage.setItem('staff_updated', Date.now().toString());
-
-      // 同一タブ内の他のコンポーネントにも通知（postMessage）
-      window.postMessage({ type: 'STAFF_UPDATED' }, window.location.origin);
-
-      console.log('🔔 [STAFF] Staff deletion notification sent to other tabs/components');
-
       alert(`${userName}を削除しました`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'ユーザーの削除に失敗しました';
