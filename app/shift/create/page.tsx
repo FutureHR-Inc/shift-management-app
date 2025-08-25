@@ -191,7 +191,7 @@ function ShiftCreatePageInner() {
       
       // デバッグ: workRulesデータの確認
       console.log('🔍 [fetchStores] 取得した店舗データ:', storesData);
-      storesData.forEach(store => {
+      storesData.forEach((store: { name: string; workRules?: { maxWeeklyHours: number; maxConsecutiveDays: number; minRestHours: number } }) => {
         if (store.workRules) {
           console.log(`🔍 [fetchStores] 店舗 ${store.name} の勤怠ルール:`, store.workRules);
         } else {
@@ -334,7 +334,7 @@ function ShiftCreatePageInner() {
       // デバッグ: 最終的にセットされるshifts配列の確認
       console.log('🔍 [fetchShifts] 🎯 最終shifts配列:', shifts);
       console.log('🔍 [fetchShifts] 🎯 カスタム時間を持つシフト:', 
-        shifts.filter(s => s.customStartTime || s.customEndTime)
+        shifts.filter((s: { customStartTime?: string; customEndTime?: string }) => s.customStartTime || s.customEndTime)
       );
       
       return shifts;
@@ -1038,18 +1038,18 @@ function ShiftCreatePageInner() {
          const dateStr = d.toISOString().split('T')[0];
          
          const userFixedShiftsForDay = fixedShifts.filter(fs => 
-           fs.userId === userId && 
-           fs.storeId === selectedStore && 
-           fs.dayOfWeek === dayOfWeek &&
-           fs.isActive
+                       fs.user_id === userId && 
+            fs.store_id === selectedStore && 
+            fs.day_of_week === dayOfWeek &&
+            fs.is_active
          );
 
          userFixedShiftsForDay.forEach(fixedShift => {
            fixedWeeklyShifts.push({
              id: `fixed-${fixedShift.id}-${dateStr}`,
-             userId: fixedShift.userId,
-             date: dateStr,
-             timeSlotId: fixedShift.timeSlotId,
+                           userId: fixedShift.user_id,
+              date: dateStr,
+              timeSlotId: fixedShift.time_slot_id,
              status: 'confirmed', // 固定シフトは確定扱い
              isFixedShift: true
            });
@@ -1215,17 +1215,17 @@ function ShiftCreatePageInner() {
         const dayOfWeek = d.getDay();
         
         const fixedShiftsForDay = fixedShifts.filter(fs => 
-          fs.storeId === selectedStore && 
-          fs.dayOfWeek === dayOfWeek &&
-          fs.isActive
+          fs.store_id === selectedStore && 
+          fs.day_of_week === dayOfWeek &&
+          fs.is_active
         );
 
         fixedShiftsForDay.forEach(fixedShift => {
           allShiftsInPeriod.push({
             id: `fixed-${fixedShift.id}-${date}`,
-            userId: fixedShift.userId,
+            userId: fixedShift.user_id,
             date: date,
-            timeSlotId: fixedShift.timeSlotId,
+            timeSlotId: fixedShift.time_slot_id,
             status: 'confirmed',
             isFixedShift: true
           });
@@ -1730,8 +1730,19 @@ function ShiftCreatePageInner() {
   };
 
   // 代打募集モーダルを開く
-  const handleOpenEmergencyModal = (shift: DatabaseShift) => {
-    setEmergencyModal({ show: true, shift });
+  const handleOpenEmergencyModal = (shift: DatabaseShift | Shift) => {
+    // DatabaseShiftに変換
+    const convertedShift: DatabaseShift = {
+      id: shift.id,
+      user_id: 'userId' in shift ? shift.userId : shift.user_id,
+      store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
+      time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
+      date: shift.date,
+      status: shift.status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    setEmergencyModal({ show: true, shift: convertedShift });
     handleCloseContextMenu();
   };
 

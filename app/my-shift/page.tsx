@@ -128,11 +128,11 @@ export default function MyShiftPage() {
       const weekEndString = selectedWeekEnd.toISOString().split('T')[0];
 
       // 通常シフトと固定シフトを並行取得（通常シフトは選択週のみ）
-      const fixedShiftsUrl = `/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`;
+      const fixedShiftsUrl = `/api/fixed-shifts?user_id=${currentUser?.id}&is_active=true`;
       console.log('🔍 [MyShift] API呼び出し URL:', fixedShiftsUrl);
       
       const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
-        fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${weekStartString}&date_to=${weekEndString}`),
+        fetch(`/api/shifts?user_id=${currentUser?.id}&date_from=${weekStartString}&date_to=${weekEndString}`),
         fetch(fixedShiftsUrl)
       ]);
       
@@ -193,7 +193,7 @@ export default function MyShiftPage() {
               generatedShifts.push({
                 id: `fixed-${dayFixedShift.id}-${dateString}`, // 仮想ID
                 date: dateString,
-                user_id: currentUser.id,
+                user_id: currentUser?.id || '',
                 store_id: dayFixedShift.store_id,
                 time_slot_id: dayFixedShift.time_slot_id,
                 status: 'confirmed', // 固定シフトは確定扱い
@@ -224,7 +224,6 @@ export default function MyShiftPage() {
         setLoading(false);
       }
     };
-  };
 
   // 週の日付を生成
   const getWeekDates = (startDate: string) => {

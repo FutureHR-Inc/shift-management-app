@@ -220,7 +220,7 @@ export default function DashboardPage() {
       if (storesResponse.ok) {
         const storesResult = await storesResponse.json();
         storesData = storesResult.data || [];
-        console.log('🏪 Stores データ取得成功:', storesData.map(store => ({
+        console.log('🏪 Stores データ取得成功:', storesData.map((store: DashboardStore) => ({
           name: store.name,
           hasRequiredStaff: !!store.required_staff,
           requiredStaffKeys: store.required_staff ? Object.keys(store.required_staff) : []
@@ -361,7 +361,7 @@ export default function DashboardPage() {
 
       // 店舗ごとのtimeSlots配列を構築  
       const timeSlotsByStore: { [storeId: string]: TimeSlot[] } = {};
-      storesData.forEach(store => {
+      storesData.forEach((store: DashboardStore) => {
         timeSlotsByStore[store.id] = timeSlotsData.filter((slot: TimeSlot) => slot.store_id === store.id);
         console.log(`🕐 [${store.name}] 時間帯データ:`, timeSlotsByStore[store.id].map(slot => ({
           id: slot.id,

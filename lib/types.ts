@@ -41,6 +41,7 @@ export interface Shift {
   customStartTime?: string; // カスタム開始時間 "HH:MM"
   customEndTime?: string;   // カスタム終了時間 "HH:MM"
   notes?: string;
+  isFixedShift?: boolean;
 }
 
 export interface TimeOffRequest {
@@ -244,7 +245,7 @@ export interface ContextMenu {
 
 export interface EmergencyModal {
   show: boolean;
-  shift: DatabaseShift | Shift | null;
+  shift: DatabaseShift | null;
 }
 
 // Supabase用の型定義
