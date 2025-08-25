@@ -1391,7 +1391,7 @@ function ShiftCreatePageInner() {
   };
 
   // 代打募集を作成
-  const handleCreateEmergencyRequest = async (shift: DatabaseShift) => {
+  const handleCreateEmergencyRequest = async (shift: DatabaseShift | Shift) => {
     try {
       setSubmittingEmergency(true);
       setError(null);
@@ -1399,11 +1399,16 @@ function ShiftCreatePageInner() {
       console.log('🔍 [FRONTEND] Creating emergency request with shift:', shift);
       console.log('🔍 [FRONTEND] Emergency reason:', emergencyReason.trim());
 
+      // shiftオブジェクトがDatabaseShift（snake_case）かShift（camelCase）かを判定して適切にアクセス
+      const getUserId = (s: any) => s.user_id || s.userId;
+      const getStoreId = (s: any) => s.store_id || s.storeId;
+      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
+
       const requestBody = {
-        original_user_id: shift.user_id,
-        store_id: shift.store_id,
+        original_user_id: getUserId(shift),
+        store_id: getStoreId(shift),
         date: shift.date,
-        time_slot_id: shift.time_slot_id, // snake_caseのプロパティ名を使用
+        time_slot_id: getTimeSlotId(shift),
         reason: emergencyReason.trim(),
         request_type: 'substitute' // 代打募集として設定
       };
@@ -1480,7 +1485,7 @@ function ShiftCreatePageInner() {
   };
 
   // 代打募集モーダルを開く
-  const handleOpenEmergencyModal = (shift: DatabaseShift) => {
+  const handleOpenEmergencyModal = (shift: DatabaseShift | Shift) => {
     setEmergencyModal({ show: true, shift });
     handleCloseContextMenu();
   };
@@ -2433,17 +2438,21 @@ function ShiftCreatePageInner() {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">対象シフト</p>
                   <p className="font-medium text-gray-900">
-                    {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.user_id)?.name} - {' '}
+                    {emergencyModal.shift && users.find(u => u.id === (emergencyModal.shift as any)?.user_id || (emergencyModal.shift as any)?.userId)?.name} - {' '}
                     {(() => {
                       if (!emergencyModal.shift) return '';
                       console.log('🔍 [MODAL DEBUG] emergencyModal.shift:', emergencyModal.shift);
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slot_id:', emergencyModal.shift.time_slot_id);
-                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slots:', emergencyModal.shift.time_slots);
+
+                      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
+                      const getTimeSlots = (s: any) => s.time_slots;
+
+                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slot_id:', getTimeSlotId(emergencyModal.shift));
+                      console.log('🔍 [MODAL DEBUG] emergencyModal.shift.time_slots:', getTimeSlots(emergencyModal.shift));
                       console.log('🔍 [MODAL DEBUG] timeSlots array:', timeSlots);
                       console.log('🔍 [MODAL DEBUG] timeSlots array detail:', timeSlots.map(ts => ({ id: ts.id, name: ts.name })));
 
-                      // emergencyModal.shiftはDatabaseShift型なので、time_slot_idプロパティを使用
-                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id);
+                      // emergencyModal.shiftはDatabaseShift型またはShift型なので、適切にアクセス
+                      const timeSlot = getTimeSlots(emergencyModal.shift) || timeSlots.find(ts => ts.id === getTimeSlotId(emergencyModal.shift));
                       console.log('🔍 [MODAL DEBUG] found timeSlot:', timeSlot);
                       return timeSlot?.name || '不明な時間帯';
                     })()}
@@ -2452,7 +2461,9 @@ function ShiftCreatePageInner() {
                     {emergencyModal.shift?.date}
                     {(() => {
                       if (!emergencyModal.shift) return '';
-                      const timeSlot = emergencyModal.shift.time_slots || timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id);
+                      const getTimeSlotId = (s: any) => s.time_slot_id || s.timeSlotId;
+                      const getTimeSlots = (s: any) => s.time_slots;
+                      const timeSlot = getTimeSlots(emergencyModal.shift) || timeSlots.find(ts => ts.id === getTimeSlotId(emergencyModal.shift));
                       return timeSlot ? ` (${timeSlot.start_time}-${timeSlot.end_time})` : '';
                     })()}
                   </p>

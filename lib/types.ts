@@ -239,12 +239,12 @@ export interface ContextMenu {
   x: number;
   y: number;
   shiftId: string;
-  shift: DatabaseShift | null;
+  shift: DatabaseShift | Shift | null;
 }
 
 export interface EmergencyModal {
   show: boolean;
-  shift: DatabaseShift | null;
+  shift: DatabaseShift | Shift | null;
 }
 
 // Supabase用の型定義
