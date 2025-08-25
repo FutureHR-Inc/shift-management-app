@@ -260,6 +260,13 @@ function ShiftCreatePageInner() {
       if (!response.ok) throw new Error('シフトデータの取得に失敗しました');
       const result = await response.json();
       
+      // デバッグ: 生のAPIレスポンス確認
+      console.log('🔍 [fetchShifts] 🔥 生のAPIレスポンス:', result);
+      console.log('🔍 [fetchShifts] 🔥 データ件数:', result.data?.length || 0);
+      if (result.data && result.data.length > 0) {
+        console.log('🔍 [fetchShifts] 🔥 最初のシフトの生データ:', result.data[0]);
+      }
+      
       // API response を Shift 型に変換（カスタム時間を含む）
       const shifts = result.data?.map((shift: { 
         id: string; 
@@ -272,17 +279,38 @@ function ShiftCreatePageInner() {
         custom_end_time?: string;
         status: string; 
         notes?: string 
-      }) => ({
-        id: shift.id,
-        userId: shift.user_id,
-        storeId: shift.store_id,
-        date: shift.date,
-        timeSlotId: shift.time_slot_id || shift.pattern_id, // 新旧両対応
-        customStartTime: shift.custom_start_time,
-        customEndTime: shift.custom_end_time,
-        status: shift.status,
-        notes: shift.notes
-      })) || [];
+      }) => {
+        // デバッグ: カスタム時間のマッピング確認（全シフト）
+        console.log(`🔍 [fetchShifts] 🔥 シフトマッピング ${shift.id}:`, {
+          id: shift.id,
+          user_id: shift.user_id,
+          date: shift.date,
+          status: shift.status,
+          custom_start_time: shift.custom_start_time,
+          custom_end_time: shift.custom_end_time,
+          mapped_customStartTime: shift.custom_start_time,
+          mapped_customEndTime: shift.custom_end_time,
+          hasCustomTime: !!(shift.custom_start_time && shift.custom_end_time)
+        });
+        
+        return {
+          id: shift.id,
+          userId: shift.user_id,
+          storeId: shift.store_id,
+          date: shift.date,
+          timeSlotId: shift.time_slot_id || shift.pattern_id, // 新旧両対応
+          customStartTime: shift.custom_start_time, // nullもそのまま保持
+          customEndTime: shift.custom_end_time,   // nullもそのまま保持
+          status: shift.status,
+          notes: shift.notes
+        };
+      }) || [];
+      
+      // デバッグ: 最終的にセットされるshifts配列の確認
+      console.log('🔍 [fetchShifts] 🎯 最終shifts配列:', shifts);
+      console.log('🔍 [fetchShifts] 🎯 カスタム時間を持つシフト:', 
+        shifts.filter(s => s.customStartTime || s.customEndTime)
+      );
       
       return shifts;
     } catch (error) {
@@ -663,7 +691,7 @@ function ShiftCreatePageInner() {
       };
 
       // デバッグ用ログ
-      console.log('シフト作成データ:', {
+      console.log('🚀 [handleAddShift] シフト作成データ:', {
         isCustomTime,
         customStartTime,
         customEndTime,
@@ -684,11 +712,22 @@ function ShiftCreatePageInner() {
         const errorData = await response.json();
         console.error('シフト作成エラー:', errorData);
         throw new Error(errorData.error || 'シフトの追加に失敗しました');
-        }
+      }
+      
+      // API レスポンス確認
+      const createdShift = await response.json();
+      console.log('✅ [handleAddShift] 🔥 作成されたシフト詳細:', {
+        createdShift,
+        hasCustomTimes: !!(createdShift.data?.custom_start_time && createdShift.data?.custom_end_time),
+        custom_start_time: createdShift.data?.custom_start_time,
+        custom_end_time: createdShift.data?.custom_end_time
+      });
 
       // シフトデータを再取得
       if (selectedStore && selectedWeek) {
+        console.log('🔄 [handleAddShift] シフトデータ再取得開始');
         const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
+        console.log('🔄 [handleAddShift] 再取得完了:', updatedShifts.length + '件');
         setShifts(updatedShifts);
       }
 
@@ -723,6 +762,43 @@ function ShiftCreatePageInner() {
       setShifts(shifts.filter(s => s.id !== shiftId));
     } catch (error) {
       setError(error instanceof Error ? error.message : 'シフトの削除に失敗しました');
+    }
+  };
+
+  // 個別シフト確定
+  const handleConfirmSingleShift = async (shiftId: string) => {
+    try {
+      setSaving(true);
+      
+      const response = await fetch('/api/shifts', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: shiftId,
+          status: 'confirmed'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'シフトの確定に失敗しました');
+      }
+
+      // シフトデータを再取得
+      if (selectedStore && selectedWeek) {
+        const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
+        setShifts(updatedShifts);
+      }
+      
+      // コンテキストメニューを閉じる
+      setContextMenu({ show: false, x: 0, y: 0, shiftId: '', shift: null });
+      
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'シフトの確定に失敗しました');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1976,8 +2052,12 @@ function ShiftCreatePageInner() {
                   <span className="text-gray-700">固定シフト（自動配置）</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-blue-600">✓</span>
+                  <span className="text-blue-600">✅</span>
                   <span className="text-blue-800">確定済みシフト（編集不可）</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-600">📝</span>
+                  <span className="text-gray-700">下書きシフト（編集可）</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="text-red-600">🆘</span>
@@ -2265,15 +2345,31 @@ function ShiftCreatePageInner() {
             className="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <button
-              onClick={() => contextMenu.shift && handleOpenEmergencyModal(contextMenu.shift)}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              代打募集
-            </button>
+            {/* 下書きシフトの場合は確定ボタンを表示 */}
+            {contextMenu.shift && contextMenu.shift.status === 'draft' && (
+              <button
+                onClick={() => handleConfirmSingleShift(contextMenu.shiftId)}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+              >
+                <svg className="w-4 h-4 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                シフト確定
+              </button>
+            )}
+            
+            {/* 確定済みシフトの場合は代打募集ボタンを表示 */}
+            {contextMenu.shift && contextMenu.shift.status === 'confirmed' && (
+              <button
+                onClick={() => contextMenu.shift && handleOpenEmergencyModal(contextMenu.shift)}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+              >
+                <svg className="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                代打募集
+              </button>
+            )}
           </div>
         )}
 

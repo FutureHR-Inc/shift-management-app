@@ -154,15 +154,53 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                   // 確定済みシフトかどうかを判定
                                   const isConfirmed = shift.status === 'confirmed';
                                   const isFixedShift = (shift as any).isFixedShift || shift.id?.startsWith('fixed-');
+                                  
+                                  // デバッグ: ステータス確認
+                                  console.log(`🔍 [DesktopTable] シフト ${shift.id}: ステータス=${shift.status}, 固定=${isFixedShift}, 確定=${isConfirmed}`);
+                                  
+                                  // デバッグ: 詳細なシフトデータ確認
+                                  console.log(`🔍 [DesktopTable] 🔥 シフトデータ詳細 ${shift.id}:`, {
+                                    userId: shift.userId,
+                                    userName: user.name,
+                                    customStartTime: shift.customStartTime,
+                                    customEndTime: shift.customEndTime,
+                                    timeSlotStart: timeSlotData.start_time,
+                                    timeSlotEnd: timeSlotData.end_time,
+                                    status: shift.status,
+                                    isFixedShift: isFixedShift,
+                                    fullShiftObject: shift
+                                  });
 
                                   // 代打募集状況をチェック（固定シフトは代打募集不可）
                                   const emergencyRequest = isFixedShift ? null : getEmergencyRequestForShift(shift.id);
                                   const isEmergencyRequested = !!emergencyRequest;
 
-                                  // 表示する時間を決定
-                                  const displayTime = shift.customStartTime && shift.customEndTime
-                                    ? `${shift.customStartTime}-${shift.customEndTime}`
+                                  // カスタム時間かどうかを判定（開始時間または終了時間のいずれかがあればOK）
+                                  const hasCustomTime = Boolean(
+                                    (shift.customStartTime && 
+                                     shift.customStartTime !== null &&
+                                     typeof shift.customStartTime === 'string' &&
+                                     shift.customStartTime.trim() !== '') ||
+                                    (shift.customEndTime && 
+                                     shift.customEndTime !== null &&
+                                     typeof shift.customEndTime === 'string' &&
+                                     shift.customEndTime.trim() !== '')
+                                  );
+                                  
+                                  console.log(`🔍 [DesktopTable] 🧪 カスタム時間判定:`, {
+                                    customStartTime: shift.customStartTime,
+                                    customEndTime: shift.customEndTime,
+                                    customStartTimeType: typeof shift.customStartTime,
+                                    customEndTimeType: typeof shift.customEndTime,
+                                    hasCustomTime: hasCustomTime
+                                  });
+                                  
+                                  // 表示する時間を決定（カスタム時間がある場合は柔軟に組み合わせ）
+                                  const displayTime = hasCustomTime
+                                    ? `${shift.customStartTime || timeSlotData.start_time}-${shift.customEndTime || timeSlotData.end_time}`
                                     : `${timeSlotData.start_time}-${timeSlotData.end_time}`;
+                                    
+                                  console.log(`🔍 [DesktopTable] 🎯 最終表示時間: "${displayTime}" (カスタム: ${hasCustomTime}, カスタム開始: "${shift.customStartTime}", カスタム終了: "${shift.customEndTime}")`);
 
                                   return (
                                     <div
@@ -204,6 +242,9 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                         <div className="flex-1 min-w-0">
                                           <div className="font-medium truncate">
                                             {isFixedShift && <span className="mr-1">📌</span>}
+                                            {!isFixedShift && isConfirmed && <span className="mr-1">✅</span>}
+                                            {!isFixedShift && shift.status === 'draft' && <span className="mr-1">📝</span>}
+                                            {!isFixedShift && hasCustomTime && <span className="mr-1">⏰</span>}
                                             {user.name}
                                           </div>
                                           <div className="text-xs text-gray-600 truncate mt-0.5">

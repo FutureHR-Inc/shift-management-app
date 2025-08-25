@@ -137,6 +137,19 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                   // 確定済みシフトかどうかを判定
                                   const isConfirmed = shift.status === 'confirmed';
                                   const isFixedShift = (shift as any).isFixedShift || shift.id?.startsWith('fixed-');
+                                  
+                                  // カスタム時間かどうかを判定（開始時間または終了時間のいずれかがあればOK）
+                                  const hasCustomTime = Boolean(
+                                    (shift.customStartTime && 
+                                     shift.customStartTime !== null &&
+                                     typeof shift.customStartTime === 'string' &&
+                                     shift.customStartTime.trim() !== '') ||
+                                    (shift.customEndTime && 
+                                     shift.customEndTime !== null &&
+                                     typeof shift.customEndTime === 'string' &&
+                                     shift.customEndTime.trim() !== '')
+                                  );
+                                  console.log(`🔍 [MobileTable] カスタム時間: start=${shift.customStartTime}, end=${shift.customEndTime}, hasCustom=${hasCustomTime}`);
 
                                   // 代打募集状況をチェック（固定シフトは代打募集不可）
                                   const emergencyRequest = isFixedShift ? null : getEmergencyRequestForShift(shift.id);
@@ -179,10 +192,22 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                     >
                                       {/* スマホ・タブレット版：詳細表示 */}
                                       <div className="flex items-center justify-between">
-                                        <span className="font-medium truncate flex-1 mr-1">
-                                          {isFixedShift && <span className="mr-1">📌</span>}
-                                          {user.name}
-                                        </span>
+                                        <div className="flex-1 mr-1">
+                                          <div className="font-medium truncate">
+                                            {isFixedShift && <span className="mr-1">📌</span>}
+                                            {!isFixedShift && isConfirmed && <span className="mr-1">✅</span>}
+                                            {!isFixedShift && shift.status === 'draft' && <span className="mr-1">📝</span>}
+                                            {!isFixedShift && hasCustomTime && <span className="mr-1">⏰</span>}
+                                            {user.name}
+                                          </div>
+                                          {/* 時間表示 */}
+                                          <div className="text-xs text-gray-500 mt-0.5">
+                                            {hasCustomTime 
+                                              ? `${shift.customStartTime || timeSlotData.start_time}-${shift.customEndTime || timeSlotData.end_time}`
+                                              : `${timeSlotData.start_time}-${timeSlotData.end_time}`
+                                            }
+                                          </div>
+                                        </div>
                                         <div className="flex items-center space-x-1">
                                           {isEmergencyRequested && (
                                             <span className="text-red-600 font-bold text-xs">🆘</span>
