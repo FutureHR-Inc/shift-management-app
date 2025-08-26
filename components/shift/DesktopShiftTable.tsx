@@ -467,56 +467,52 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                       {/* PC版：コンパクト表示 */}
                                       <div className="flex items-center justify-between">
                                         <div className="flex-1 min-w-0">
-                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                            <div className="flex-1">
-                                              <div className="flex items-center gap-1 mb-1 sm:mb-0">
-                                                <div className="flex items-center gap-1">
-                                                  {isFixedShift && (
-                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
-                                                      📌 固定
-                                                    </span>
-                                                  )}
-                                                  {!isFixedShift && isConfirmed && (
-                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
-                                                      ✅ 確定
-                                                    </span>
-                                                  )}
-                                                  {!isFixedShift && shift.status === 'draft' && (
-                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs">
-                                                      📝 下書き
-                                                    </span>
-                                                  )}
-                                                  {!isFixedShift && hasCustomTime && (
-                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs">
-                                                      ⏰ カスタム
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                <span className="font-medium">{user.name}</span>
+                                          <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1">
+                                              <div className="flex items-center gap-1 min-w-0">
+                                                {isFixedShift && (
+                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
+                                                    📌 固定
+                                                  </span>
+                                                )}
+                                                {!isFixedShift && isConfirmed && (
+                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
+                                                    ✅ 確定
+                                                  </span>
+                                                )}
+                                                {!isFixedShift && shift.status === 'draft' && (
+                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs">
+                                                    📝 下書き
+                                                  </span>
+                                                )}
+                                                {!isFixedShift && hasCustomTime && (
+                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs">
+                                                    ⏰ カスタム
+                                                  </span>
+                                                )}
+                                                <span className="font-medium truncate">{user.name}</span>
+                                                {isEmergencyRequested && (
+                                                  <span className="shrink-0 text-red-600 font-bold text-xs ml-1">🆘</span>
+                                                )}
                                               </div>
+                                              {/* 削除ボタン - 固定シフトと確定済みシフトは削除不可 */}
+                                              {!isConfirmed && !isEmergencyRequested && !isFixedShift && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteShift(shift.id);
+                                                  }}
+                                                  className="shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
+                                                  title="削除"
+                                                >
+                                                  ×
+                                                </button>
+                                              )}
+                                            </div>
+                                            <div className="text-xs text-gray-600 whitespace-nowrap">
+                                              {displayTime}
                                             </div>
                                           </div>
-                                          <div className="text-xs text-gray-600 truncate mt-0.5">
-                                            {displayTime}
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center space-x-1 ml-2">
-                                          {isEmergencyRequested && (
-                                            <span className="text-red-600 font-bold text-xs">🆘</span>
-                                          )}
-                                          {/* 削除ボタン - 固定シフトと確定済みシフトは削除不可 */}
-                                          {!isConfirmed && !isEmergencyRequested && !isFixedShift && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteShift(shift.id);
-                                              }}
-                                              className="w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
-                                              title="削除"
-                                            >
-                                              ×
-                                            </button>
-                                          )}
                                         </div>
                                       </div>
                                     </div>

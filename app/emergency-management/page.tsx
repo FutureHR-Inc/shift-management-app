@@ -76,7 +76,7 @@ export default function EmergencyManagementPage() {
                       <p className="font-medium text-blue-800 mb-1">代打募集の手順:</p>
                       <ol className="text-blue-700 space-y-1">
                         <li>1. シフト作成画面に移動</li>
-                        <li>2. 既存のスタッフ枠を右クリック</li>
+                        <li>2. 既存のスタッフ枠をクリック</li>
                         <li>3. 「代打を募集」を選択</li>
                         <li>4. 募集理由を入力して作成完了</li>
                       </ol>
