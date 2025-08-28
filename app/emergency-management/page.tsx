@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -9,6 +9,154 @@ import { Button } from '@/components/ui/Button';
 export default function EmergencyManagementPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'browse' | 'create' | 'manage'>('browse');
+  const [emergencyRequests, setEmergencyRequests] = useState<any[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // ローカルストレージからユーザー情報を取得
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser');
+    console.log('LocalStorage currentUser:', userStr);
+    
+    if (!userStr) {
+      console.log('ユーザー情報がLocalStorageにありません');
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userStr);
+      console.log('Parsed user data:', {
+        id: user.id,
+        company_id: user.company_id
+      });
+      setCurrentUser(user);
+    } catch (err) {
+      console.error('ユーザーデータのパース中にエラーが発生:', err);
+      setError('ユーザー情報の読み込みに失敗しました');
+    }
+  }, []);
+
+  // 代打募集データを取得
+  const fetchEmergencyRequests = useCallback(async () => {
+    if (!currentUser?.id) {
+      console.log('ユーザー情報が取得できていません');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null); // エラー状態をリセット
+      console.log('代打募集データの取得開始:', { 
+        currentUserId: currentUser.id,
+        company_id: currentUser.company_id 
+      });
+      
+      const response = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `データの取得に失敗しました (${response.status})`);
+      }
+
+      const data = await response.json();
+      console.log('取得した代打募集データ:', {
+        status: response.status,
+        totalCount: data.data?.length || 0,
+        firstItem: data.data?.[0] ? {
+          id: data.data[0].id,
+          store: data.data[0].stores?.name,
+          date: data.data[0].date,
+          status: data.data[0].status
+        } : null
+      });
+
+      setEmergencyRequests(data.data || []);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '予期せぬエラーが発生しました';
+      console.error('代打募集データ取得エラー:', {
+        error: err,
+        message: errorMessage,
+        userId: currentUser.id
+      });
+      setError(errorMessage);
+      setEmergencyRequests([]); // エラー時はリストをクリア
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  // ユーザー情報が取得できたらデータを取得
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchEmergencyRequests();
+    }
+  }, [currentUser]);
+
+  // 応募者を承認
+  const handleApproveVolunteer = async (volunteerId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/emergency-requests', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emergency_request_id: selectedRequest.id,
+          volunteer_id: volunteerId,
+          action: 'accept'
+        }),
+      });
+
+      if (!response.ok) throw new Error('承認処理に失敗しました');
+      
+      // データを再取得
+      await fetchEmergencyRequests();
+      alert('応募者を承認しました');
+      setActiveTab('browse');
+      setSelectedRequest(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 応募者を却下
+  const handleRejectVolunteer = async (volunteerId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/emergency-requests', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emergency_request_id: selectedRequest.id,
+          volunteer_id: volunteerId,
+          action: 'reject'
+        }),
+      });
+
+      if (!response.ok) throw new Error('却下処理に失敗しました');
+      
+      // データを再取得
+      await fetchEmergencyRequests();
+      alert('応募者を却下しました');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <AuthenticatedLayout>
@@ -56,6 +204,111 @@ export default function EmergencyManagementPage() {
         </div>
 
         {/* タブコンテンツ */}
+        {activeTab === 'browse' && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>代打募集一覧</CardTitle>
+                <p className="text-sm text-gray-600">全ての代打募集状況を確認できます</p>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">募集日時</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">店舗</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">シフト時間</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">募集理由</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">応募者数</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                            データを読み込み中...
+                          </td>
+                        </tr>
+                      ) : error ? (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-4 text-center text-sm text-red-500">
+                            {error}
+                          </td>
+                        </tr>
+                      ) : emergencyRequests?.length > 0 ? (
+                        emergencyRequests.map((request) => (
+                          <tr key={request.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Date(request.date).toLocaleDateString('ja-JP')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <div className="flex items-center">
+                                <span className="truncate max-w-[150px]">
+                                  {request.stores?.name || '不明な店舗'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <div>
+                                <span className="font-medium">{request.time_slots?.name || '不明なシフト'}</span>
+                                <br />
+                                <span className="text-gray-500">
+                                  {request.time_slots?.start_time || '--:--'}-{request.time_slots?.end_time || '--:--'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              <div className="max-w-[200px] truncate" title={request.reason}>
+                                {request.reason}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                request.status === 'open' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {request.status === 'open' ? '募集中' : '確定済み'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <div className="flex items-center space-x-1">
+                                <span>{request.emergency_volunteers?.length || 0}</span>
+                                <span>人</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <Button
+                                onClick={() => {
+                                  setActiveTab('manage');
+                                  setSelectedRequest(request);
+                                }}
+                                variant="outline"
+                                size="sm"
+                              >
+                                詳細
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                            現在、募集中の代打はありません
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {activeTab === 'create' && (
           <div className="space-y-6">
             {/* 代打募集作成 */}
@@ -107,6 +360,86 @@ export default function EmergencyManagementPage() {
                   <li>• 応募があった場合はメールで通知されます</li>
                   <li>• 代打が決定したら速やかに確定処理を行ってください</li>
                 </ul>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === 'manage' && selectedRequest && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>応募者管理</CardTitle>
+                <p className="text-sm text-gray-600">応募者の確認と承認・却下を行えます</p>
+              </CardHeader>
+              <CardContent>
+                {/* 募集シフトの詳細 */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">募集シフト詳細</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">日時</p>
+                      <p className="font-medium">{new Date(selectedRequest.date).toLocaleDateString('ja-JP')}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">店舗</p>
+                      <p className="font-medium">{selectedRequest.stores?.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">シフト時間</p>
+                      <p className="font-medium">
+                        {selectedRequest.time_slots?.name}<br />
+                        {selectedRequest.time_slots?.start_time}-{selectedRequest.time_slots?.end_time}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">募集理由</p>
+                      <p className="font-medium">{selectedRequest.reason}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 応募者一覧 */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-4">応募者一覧</h3>
+                  {selectedRequest.emergency_volunteers?.length > 0 ? (
+                    <div className="space-y-4">
+                      {selectedRequest.emergency_volunteers.map((volunteer: any) => (
+                        <div key={volunteer.id} className="border rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">{volunteer.users?.name}</p>
+                              <p className="text-sm text-gray-500">
+                                応募日時: {new Date(volunteer.applied_at).toLocaleString('ja-JP')}
+                              </p>
+                              {volunteer.notes && (
+                                <p className="text-sm text-gray-600 mt-2">{volunteer.notes}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => handleApproveVolunteer(volunteer.id)}
+                                variant="success"
+                                size="sm"
+                              >
+                                承認
+                              </Button>
+                              <Button
+                                onClick={() => handleRejectVolunteer(volunteer.id)}
+                                variant="destructive"
+                                size="sm"
+                              >
+                                却下
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">まだ応募者がいません</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
