@@ -211,9 +211,9 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           try {
                                             const convertedShift = {
                                               id: shift.id,
-                                              user_id: 'userId' in shift ? shift.userId : shift.user_id,
-                                              store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
-                                              time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
+                                              user_id: shift.userId,
+                                              store_id: shift.storeId,
+                                              time_slot_id: shift.timeSlotId,
                                               date: shift.date,
                                               status: shift.status,
                                               created_at: new Date().toISOString(),
