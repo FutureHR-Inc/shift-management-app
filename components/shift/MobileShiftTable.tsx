@@ -120,18 +120,24 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                               <button
                                                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // 既存の代打募集と同じフォーマットでデータを作成
-                                    const convertedShift: DatabaseShift = {
-                                      id: `shortage-${dateString}-${timeSlot.id}`,
-                                      user_id: '',  // 不足分の募集なのでユーザーIDは空
-                                      store_id: selectedStore,
-                                      time_slot_id: timeSlot.id,
-                                      date: dateString,
-                                      status: 'confirmed',  // 既存の代打募集と同じステータスを使用
-                                      created_at: new Date().toISOString(),
-                                      updated_at: new Date().toISOString()
-                                    };
-                                    setEmergencyModal({ show: true, shift: convertedShift });
+                                    try {
+                                      // 既存の代打募集と同じフォーマットでデータを作成
+                                      const convertedShift = {
+                                        id: `shortage-${dateString}-${timeSlot.id}`,
+                                        user_id: '',  // 不足分の募集なのでユーザーIDは空
+                                        store_id: selectedStore,
+                                        time_slot_id: timeSlot.id,
+                                        date: dateString,
+                                        status: 'confirmed',  // 既存の代打募集と同じステータスを使用
+                                        created_at: new Date().toISOString(),
+                                        updated_at: new Date().toISOString()
+                                      };
+                                      if (setEmergencyModal) {
+                                        setEmergencyModal({ show: true, shift: convertedShift });
+                                      }
+                                    } catch (error) {
+                                      console.error('Error showing emergency modal for shortage:', error);
+                                    }
                                   }}
                                 className="text-xs sm:text-sm px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 active:bg-red-300"
                               >
@@ -201,18 +207,24 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                             alert('まだ応募者がいません。');
                                           }
                                         } else if (isConfirmed) {
-                                          // 確定済みシフトの場合は代打募集モーダルを直接表示
-                                          const convertedShift = {
-                                            id: shift.id,
-                                            user_id: 'userId' in shift ? shift.userId : shift.user_id,
-                                            store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
-                                            time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
-                                            date: shift.date,
-                                            status: shift.status,
-                                            created_at: new Date().toISOString(),
-                                            updated_at: new Date().toISOString()
-                                          };
-                                          setEmergencyModal({ show: true, shift: convertedShift });
+                                          // 確定済みシフトの場合は代打募集モーダルを表示
+                                          try {
+                                            const convertedShift = {
+                                              id: shift.id,
+                                              user_id: 'userId' in shift ? shift.userId : shift.user_id,
+                                              store_id: 'storeId' in shift ? shift.storeId : shift.store_id,
+                                              time_slot_id: 'timeSlotId' in shift ? shift.timeSlotId : shift.time_slot_id,
+                                              date: shift.date,
+                                              status: shift.status,
+                                              created_at: new Date().toISOString(),
+                                              updated_at: new Date().toISOString()
+                                            };
+                                            if (setEmergencyModal) {
+                                              setEmergencyModal({ show: true, shift: convertedShift });
+                                            }
+                                          } catch (error) {
+                                            console.error('Error showing emergency modal:', error);
+                                          }
                                         } else {
                                           setContextMenu({
                                             show: true,

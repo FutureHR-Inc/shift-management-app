@@ -382,14 +382,19 @@ function ShiftCreatePageInner() {
   // 代打募集データを取得
   const fetchEmergencyRequests = async (storeId: string, startDate: string, endDate?: string) => {
     try {
+      if (!currentUser?.id) {
+        console.error('Current user not found');
+        return [];
+      }
+
       const actualEndDate = endDate || (() => {
         const weekEnd = new Date(startDate);
         weekEnd.setDate(weekEnd.getDate() + 6);
         return weekEnd.toISOString().split('T')[0];
       })();
       
-      const url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}`;
-      console.log('Fetching emergency requests from:', url);
+      const url = `/api/emergency-requests?store_id=${storeId}&date_from=${startDate}&date_to=${actualEndDate}&current_user_id=${currentUser.id}`;
+      console.log('Fetching emergency requests from:', url, { currentUserId: currentUser.id });
       
       const response = await fetch(url);
       
@@ -2316,6 +2321,7 @@ function ShiftCreatePageInner() {
               handleDeleteShift={handleDeleteShift}
               setContextMenu={setContextMenu}
               setEmergencyManagement={setEmergencyManagement}
+              setEmergencyModal={setEmergencyModal}
               currentUser={currentUser}
               shifts={shifts}
               users={users}
