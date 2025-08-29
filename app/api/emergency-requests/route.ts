@@ -69,15 +69,24 @@ export async function GET(req: NextRequest) {
         time_slots(id, name, start_time, end_time)
       `);
 
+    // 現在の日付を取得（YYYY-MM-DD形式）
+    const today = new Date().toISOString().split('T')[0];
+    console.log('Filtering dates from:', today);
+
+    // 企業フィルタリング
     if (companyIdFilter) {
       query = query.eq('stores.company_id', companyIdFilter);
     }
 
+    // 基本的なフィルタリング
     if (id) query = query.eq('id', id);
     if (storeId) query = query.eq('store_id', storeId);
-    if (startDate) query = query.gte('date', startDate);
-    if (endDate) query = query.lte('date', endDate);
     if (status) query = query.eq('status', status);
+
+    // 日付フィルタリング
+    // startDateが指定されている場合はそれを使用、そうでない場合は今日以降のデータのみを取得
+    query = query.gte('date', startDate || today);
+    if (endDate) query = query.lte('date', endDate);
 
     query = query.order('created_at', { ascending: false });
 
@@ -124,6 +133,15 @@ export async function POST(req: NextRequest) {
     if (!request_type || !['substitute', 'shortage'].includes(request_type)) {
       return NextResponse.json(
         { error: 'request_typeは "substitute" または "shortage" である必要があります' },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // 過去の日付をチェック
+    const today = new Date().toISOString().split('T')[0];
+    if (date < today) {
+      return NextResponse.json(
+        { error: '過去の日付には緊急募集を作成できません' },
         { status: 400, headers: corsHeaders }
       );
     }

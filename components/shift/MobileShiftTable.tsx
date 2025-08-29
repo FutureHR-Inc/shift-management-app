@@ -121,17 +121,19 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                                                   onClick={(e) => {
                                     e.stopPropagation();
                                     try {
-                                      // 既存の代打募集と同じフォーマットでデータを作成
-                                      const convertedShift = {
-                                        id: `shortage-${dateString}-${timeSlot.id}`,
-                                        user_id: '',  // 不足分の募集なのでユーザーIDは空
-                                        store_id: selectedStore,
-                                        time_slot_id: timeSlot.id,
-                                        date: dateString,
-                                        status: 'confirmed',  // 既存の代打募集と同じステータスを使用
-                                        created_at: new Date().toISOString(),
-                                        updated_at: new Date().toISOString()
-                                      };
+                                                                          // 不足分の募集用にデータを作成
+                                    const convertedShift = {
+                                      id: `shortage-${dateString}-${timeSlot.id}`,
+                                      user_id: currentUser?.id || '',  // 募集作成者のID
+                                      store_id: selectedStore,
+                                      time_slot_id: timeSlot.id,
+                                      date: dateString,
+                                      status: 'confirmed',
+                                      created_at: new Date().toISOString(),
+                                      updated_at: new Date().toISOString(),
+                                      request_type: 'shortage',  // 不足分の募集であることを明示
+                                      reason: `人員不足のため（必要人数: ${required}人、現在: ${current}人）`
+                                    };
                                       if (setEmergencyModal) {
                                         setEmergencyModal({ show: true, shift: convertedShift });
                                       }

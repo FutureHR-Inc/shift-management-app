@@ -1660,20 +1660,33 @@ function ShiftCreatePageInner() {
       setSubmittingEmergency(true);
       setError(null);
 
-      // 緊急募集リクエストを作成
+      // シフトの種類を判断（代打募集 or 人員不足募集）
+      const isShortageRequest = shift.request_type === 'shortage';
+      console.log('Creating emergency request:', {
+        type: isShortageRequest ? '人員不足募集' : '代打募集',
+        shift,
+        reason: isShortageRequest ? shift.reason : emergencyReason,
+        currentUser
+      });
+
+      // リクエストデータを作成
+      const requestData = {
+        original_user_id: isShortageRequest ? currentUser?.id : shift.user_id,
+        store_id: shift.store_id,
+        date: shift.date,
+        time_slot_id: shift.time_slot_id,
+        reason: isShortageRequest ? shift.reason : emergencyReason.trim(),
+        request_type: isShortageRequest ? 'shortage' : 'substitute'
+      };
+
+      console.log('Request data:', requestData);
+
       const response = await fetch('/api/emergency-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          original_user_id: shift.user_id || currentUser?.id, // 不足分の場合は現在のユーザー（店長）のIDを使用
-          store_id: shift.store_id,
-          date: shift.date,
-          time_slot_id: shift.time_slot_id,
-          reason: emergencyReason.trim(),
-          request_type: shift.user_id ? 'substitute' : 'shortage' // user_idがある場合は代打、ない場合は不足分
-        }),
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {
@@ -2698,7 +2711,9 @@ function ShiftCreatePageInner() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">代打募集</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {emergencyModal.shift?.request_type === 'shortage' ? '人員不足募集' : '代打募集'}
+                </h3>
                 <button
                   onClick={() => setEmergencyModal({ show: false, shift: null })}
                   className="text-gray-400 hover:text-gray-600"
@@ -2712,29 +2727,51 @@ function ShiftCreatePageInner() {
               <div className="space-y-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-600">対象シフト</p>
-                  <p className="font-medium text-gray-900">
-                    {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.user_id)?.name} - {' '}
-                    {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)?.name}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {emergencyModal.shift?.date} 
-                    {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id) && 
-                      ` (${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.start_time}-${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.end_time})`
-                    }
-                  </p>
+                  {emergencyModal.shift?.request_type === 'shortage' ? (
+                    <>
+                      <p className="font-medium text-gray-900">
+                        {timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)?.name}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {emergencyModal.shift?.date}
+                        {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id) && 
+                          ` (${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.start_time}-${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.end_time})`
+                        }
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-gray-900">
+                        {emergencyModal.shift && users.find(u => u.id === emergencyModal.shift!.user_id)?.name} - {' '}
+                        {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)?.name}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {emergencyModal.shift?.date}
+                        {emergencyModal.shift && timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id) && 
+                          ` (${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.start_time}-${timeSlots.find(ts => ts.id === emergencyModal.shift!.time_slot_id)!.end_time})`
+                        }
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    募集理由 *
+                    募集理由 {emergencyModal.shift?.request_type !== 'shortage' && '*'}
                   </label>
-                  <textarea
-                    value={emergencyReason}
-                    onChange={(e) => setEmergencyReason(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={3}
-                    placeholder="代打募集の理由を入力してください（例：急用のため、体調不良のため）"
-                  />
+                  {emergencyModal.shift?.request_type === 'shortage' ? (
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-gray-50">
+                      {emergencyModal.shift.reason}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={emergencyReason}
+                      onChange={(e) => setEmergencyReason(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows={3}
+                      placeholder="代打募集の理由を入力してください（例：急用のため、体調不良のため）"
+                    />
+                  )}
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
@@ -2747,7 +2784,7 @@ function ShiftCreatePageInner() {
                   </Button>
                   <Button
                     onClick={() => emergencyModal.shift && handleCreateEmergencyRequest(emergencyModal.shift)}
-                    disabled={!emergencyReason.trim() || submittingEmergency}
+                    disabled={(!emergencyModal.shift?.request_type && !emergencyReason.trim()) || submittingEmergency}
                   >
                     {submittingEmergency ? (
                       <>
@@ -2755,7 +2792,7 @@ function ShiftCreatePageInner() {
                         募集開始中...
                       </>
                     ) : (
-                      '募集開始'
+                      emergencyModal.shift?.request_type === 'shortage' ? '人員不足募集開始' : '代打募集開始'
                     )}
                   </Button>
                 </div>
