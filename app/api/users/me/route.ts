@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 export async function GET() {
   try {
     // Cookieからユーザー情報を取得
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const userCookie = cookieStore.get('user');
     
     if (!userCookie?.value) {
