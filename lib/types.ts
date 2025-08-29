@@ -96,6 +96,8 @@ export interface DatabaseShift {
   notes?: string;
   created_at: string;
   updated_at: string;
+  request_type?: 'substitute' | 'shortage';
+  reason?: string;
   users?: DatabaseUser;
   stores?: DatabaseStore;
   time_slots?: TimeSlot; // shift_patterns から time_slots に変更
