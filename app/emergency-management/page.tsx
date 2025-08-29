@@ -419,7 +419,7 @@ export default function EmergencyManagementPage() {
                             <div className="flex gap-2">
                               <Button
                                 onClick={() => handleApproveVolunteer(volunteer.id)}
-                                variant="success"
+                                variant="primary"
                                 size="sm"
                               >
                                 承認
