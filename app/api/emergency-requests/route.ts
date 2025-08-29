@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
       .eq('status', 'open')
       .limit(1);
 
-    if (existingRequest?.length > 0) {
+    if (existingRequest && existingRequest.length > 0) {
       return NextResponse.json(
         { error: 'この日時・時間帯にはすでに緊急募集リクエストが存在します' },
         { status: 409, headers: corsHeaders }
