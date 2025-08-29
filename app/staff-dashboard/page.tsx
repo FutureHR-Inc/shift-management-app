@@ -24,15 +24,14 @@ interface Shift {
   date: string;
   user_id: string;
   store_id: string;
-  pattern_id: string;
+  time_slot_id: string;
   status: 'draft' | 'confirmed' | 'completed';
   users?: { name: string };
   stores?: { name: string };
-  shift_patterns?: {
+  time_slots?: {
     name: string;
     start_time: string;
     end_time: string;
-    color: string;
   };
 }
 
@@ -161,9 +160,9 @@ export default function StaffDashboardPage() {
   // 週間勤務時間を計算
   const calculateWeeklyHours = () => {
     return weeklyShifts.reduce((total, shift) => {
-      if (!shift.shift_patterns) return total;
-      const start = new Date(`2000-01-01T${shift.shift_patterns.start_time}`);
-      const end = new Date(`2000-01-01T${shift.shift_patterns.end_time}`);
+      if (!shift.time_slots) return total;
+      const start = new Date(`2000-01-01T${shift.time_slots.start_time}`);
+      const end = new Date(`2000-01-01T${shift.time_slots.end_time}`);
       const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       return total + hours;
     }, 0);
@@ -293,19 +292,15 @@ export default function StaffDashboardPage() {
               <div className="flex items-center justify-between p-3 sm:p-4 bg-blue-50 rounded-lg">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
-                    <div
-                      className="w-4 h-4 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: todayShift.shift_patterns?.color || '#6B7280' }}
-                    ></div>
                     <span className="font-medium text-gray-900 text-sm sm:text-base">
-                      {todayShift.shift_patterns?.name || 'シフト'}
+                      {todayShift.time_slots?.name || 'シフト'}
                     </span>
                   </div>
                   <div className="text-sm sm:text-base text-gray-600 mb-1">
-                    {todayShift.shift_patterns?.start_time} - {todayShift.shift_patterns?.end_time}
+                    {todayShift.time_slots?.start_time} - {todayShift.time_slots?.end_time}
                   </div>
                   <div className="text-xs sm:text-sm text-gray-500">
-                    {todayShift.stores?.name}
+                    {todayShift.stores?.name || '店舗未設定'}
                   </div>
                 </div>
                 <div className="text-right ml-3">

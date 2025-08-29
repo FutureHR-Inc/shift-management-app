@@ -493,19 +493,26 @@ export default function MyShiftPage() {
                     <div>
                       <div className="text-sm text-gray-600">勤務時間</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {todayShift.shift_patterns?.start_time} - {todayShift.shift_patterns?.end_time}
+                        {todayShift.custom_start_time && todayShift.custom_end_time
+                          ? `${todayShift.custom_start_time} - ${todayShift.custom_end_time}`
+                          : todayShift.time_slots
+                            ? `${todayShift.time_slots.start_time} - ${todayShift.time_slots.end_time}`
+                            : todayShift.shift_patterns
+                              ? `${todayShift.shift_patterns.start_time} - ${todayShift.shift_patterns.end_time}`
+                              : '時間未設定'
+                        }
                       </div>
                     </div>
                     <div>
                       <div className="text-sm text-gray-600">勤務先</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {todayShift.stores?.name}
+                        {todayShift.stores?.name || '店舗未設定'}
                       </div>
                     </div>
                     <div>
                       <div className="text-sm text-gray-600">シフト</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {todayShift.shift_patterns?.name}
+                        {todayShift.time_slots?.name || todayShift.shift_patterns?.name || 'シフト未設定'}
                       </div>
                     </div>
                   </div>
