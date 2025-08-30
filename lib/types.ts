@@ -98,6 +98,7 @@ export interface DatabaseShift {
   updated_at: string;
   request_type?: 'substitute' | 'shortage';
   reason?: string;
+  isFixedShift?: boolean;
   users?: DatabaseUser;
   stores?: DatabaseStore;
   time_slots?: TimeSlot; // shift_patterns から time_slots に変更
@@ -202,6 +203,7 @@ export interface DatabaseEmergencyRequest {
   reason: string;
   status: 'open' | 'filled' | 'cancelled';
   created_at: string;
+  request_type?: 'substitute' | 'shortage';
   emergency_volunteers?: EmergencyVolunteer[];
   users?: DatabaseUser;
   stores?: DatabaseStore;

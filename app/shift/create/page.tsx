@@ -552,9 +552,9 @@ function ShiftCreatePageInner() {
           ]);
 
           // シフトデータを種類でソート
-          const sortedShifts = shiftsData.sort((a, b) => {
+          const sortedShifts = shiftsData.sort((a: DatabaseShift, b: DatabaseShift) => {
             // まず種類でソート（固定 → 確定 → 下書き）
-            const getTypeOrder = (shift: any) => {
+            const getTypeOrder = (shift: DatabaseShift) => {
               if (shift.isFixedShift) return 0;
               if (shift.status === 'confirmed') return 1;
               return 2;
@@ -571,8 +571,8 @@ function ShiftCreatePageInner() {
             const dateCompare = a.date.localeCompare(b.date);
             if (dateCompare !== 0) return dateCompare;
             
-            const timeSlotA = timeSlots.find(ts => ts.id === a.timeSlotId);
-            const timeSlotB = timeSlots.find(ts => ts.id === b.timeSlotId);
+            const timeSlotA = timeSlots.find(ts => ts.id === a.time_slot_id);
+            const timeSlotB = timeSlots.find(ts => ts.id === b.time_slot_id);
             
             if (timeSlotA && timeSlotB) {
               return timeSlotA.start_time.localeCompare(timeSlotB.start_time);

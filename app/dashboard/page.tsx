@@ -544,7 +544,7 @@ export default function DashboardPage() {
                               <div className="mt-2 flex flex-wrap gap-1">
                                 {emergency.emergency_volunteers.map((volunteer) => (
                                   <span key={volunteer.id} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
-                                    {volunteer.users?.name || '不明なスタッフ'}
+                                    {volunteer.user?.name || '不明なスタッフ'}
                                   </span>
                                 ))}
                               </div>
