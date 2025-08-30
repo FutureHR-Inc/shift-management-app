@@ -6,8 +6,12 @@ import {
   sendNotificationEmail,
   sendTodayShiftNotificationEmail,
   sendSubstituteApprovedEmail,
+  sendSubstituteRejectedEmail,
   sendShiftRequestConfirmationEmail,
-  sendShiftRequestReminderEmail
+  sendShiftRequestReminderEmail,
+  sendManagerShiftRequestNotificationEmail,
+  sendManagerEmergencyVolunteerNotificationEmail,
+  sendShiftChangeNotificationEmail
 } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -109,6 +113,62 @@ export async function POST(request: NextRequest) {
           reminderUser,
           reminderPeriod,
           deadline
+        );
+        break;
+
+      case 'manager-shift-request-notification':
+        const {
+          userEmail: managerEmail,
+          userName: managerName,
+          staffName,
+          submissionPeriod: notificationPeriod,
+          submittedRequestsCount: requestCount
+        } = emailData;
+        await sendManagerShiftRequestNotificationEmail(
+          managerEmail,
+          managerName,
+          staffName,
+          notificationPeriod,
+          requestCount
+        );
+        break;
+
+      case 'manager-emergency-volunteer-notification':
+        const {
+          userEmail: managerVolunteerEmail,
+          userName: managerVolunteerName,
+          details: volunteerDetails
+        } = emailData;
+        await sendManagerEmergencyVolunteerNotificationEmail(
+          managerVolunteerEmail,
+          managerVolunteerName,
+          volunteerDetails
+        );
+        break;
+
+      case 'shift-change-notification':
+        const {
+          userEmail: changeEmail,
+          userName: changeUser,
+          details: changeDetails
+        } = emailData;
+        await sendShiftChangeNotificationEmail(
+          changeEmail,
+          changeUser,
+          changeDetails
+        );
+        break;
+
+      case 'substitute-rejected':
+        const {
+          userEmail: rejectedEmail,
+          userName: rejectedUser,
+          details: rejectedDetails
+        } = emailData;
+        await sendSubstituteRejectedEmail(
+          rejectedEmail,
+          rejectedUser,
+          rejectedDetails
         );
         break;
 

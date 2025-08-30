@@ -67,14 +67,19 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   return (
     <div className="hidden lg:block">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed" style={{ width: viewMode === 'month' ? '1800px' : viewMode === 'half-month' ? '1200px' : '100%' }}>
+        <table className="w-full border-collapse table-fixed" style={{ 
+          width: viewMode === 'month' ? '2000px' : 
+                 viewMode === 'half-month' ? '1400px' : 
+                 '100%',
+          minWidth: '800px'
+        }}>
           <colgroup>
-            <col style={{ width: viewMode === 'week' ? '120px' : '100px' }} />
+            <col style={{ width: viewMode === 'week' ? '140px' : '120px' }} />
             {(displayDates || []).map((_, index) => (
               <col key={index} style={{
-                width: viewMode === 'month' ? '120px' :
-                  viewMode === 'half-month' ? '150px' :
-                    `calc((100% - 120px) / ${displayDates.length})`
+                width: viewMode === 'month' ? '140px' :
+                       viewMode === 'half-month' ? '160px' :
+                       `calc((100% - 140px) / ${displayDates.length})`
               }} />
             ))}
           </colgroup>
@@ -125,7 +130,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                     return (
                       <td key={dayIndex} className="p-1 sm:p-2 lg:p-1 align-top">
                         <div
-                          className={`min-h-16 border-2 rounded-lg sm:rounded-xl lg:rounded-lg p-1 sm:p-2 lg:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation h-auto ${cellStyle}`}
+                          className={`min-h-16 border-2 rounded-lg sm:rounded-xl lg:rounded-lg p-1 sm:p-2 lg:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation h-auto overflow-hidden ${cellStyle}`}
                           onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
                         >
                           {/* 必要人数表示 */}
@@ -249,7 +254,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                   return (
                                     <div
                                       key={shift.id}
-                                      className={`text-xs sm:text-sm lg:text-xs p-1.5 sm:p-2 lg:p-1.5 rounded-md border transition-all group relative ${isFixedShift
+                                      className={`text-xs sm:text-sm lg:text-xs p-1.5 sm:p-2 lg:p-1.5 rounded-md border transition-all group relative overflow-hidden ${isFixedShift
                                         ? 'bg-green-100 border-green-300 text-green-800'
                                         : isConfirmed
                                           ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
@@ -471,31 +476,35 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                         <div className="flex-1 min-w-0">
                                           <div className="flex flex-col gap-1">
                                             <div className="flex items-center gap-1">
-                                              <div className="flex items-center gap-1 min-w-0">
-                                                {isFixedShift && (
-                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
-                                                    📌 固定
+                                              <div className="flex flex-wrap items-center gap-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-1 shrink-0">
+                                                  {isFixedShift && (
+                                                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-xs">
+                                                      📌 固定
+                                                    </span>
+                                                  )}
+                                                  {!isFixedShift && isConfirmed && (
+                                                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
+                                                      ✅ 確定
+                                                    </span>
+                                                  )}
+                                                  {!isFixedShift && shift.status === 'draft' && (
+                                                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs">
+                                                      📝 下書き
+                                                    </span>
+                                                  )}
+                                                                                                  {!isFixedShift && hasCustomTime && (
+                                                  <span className="shrink-0 inline-flex items-center text-purple-800 text-xs">
+                                                    ⏰
                                                   </span>
                                                 )}
-                                                {!isFixedShift && isConfirmed && (
-                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">
-                                                    ✅ 確定
-                                                  </span>
-                                                )}
-                                                {!isFixedShift && shift.status === 'draft' && (
-                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs">
-                                                    📝 下書き
-                                                  </span>
-                                                )}
-                                                {!isFixedShift && hasCustomTime && (
-                                                  <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-xs">
-                                                    ⏰ カスタム
-                                                  </span>
-                                                )}
-                                                <span className="font-medium truncate">{user.name}</span>
-                                                {isEmergencyRequested && (
-                                                  <span className="shrink-0 text-red-600 font-bold text-xs ml-1">🆘</span>
-                                                )}
+                                                </div>
+                                                <div className="flex items-center gap-1 min-w-0 flex-1">
+                                                  <span className="font-medium truncate">{user.name}</span>
+                                                  {isEmergencyRequested && (
+                                                    <span className="shrink-0 text-red-600 font-bold text-xs">🆘</span>
+                                                  )}
+                                                </div>
                                               </div>
                                               {/* 削除ボタン - 固定シフトと確定済みシフトは削除不可 */}
                                               {!isConfirmed && !isEmergencyRequested && !isFixedShift && (
@@ -511,7 +520,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                                 </button>
                                               )}
                                             </div>
-                                            <div className="text-xs text-gray-600 whitespace-nowrap">
+                                            <div className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
                                               {displayTime}
                                             </div>
                                           </div>

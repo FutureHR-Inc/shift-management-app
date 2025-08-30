@@ -739,4 +739,286 @@ export async function sendBatchShiftRequestReminders(
   console.log(`Batch reminder sending completed: ${results.success} success, ${results.failed} failed`);
   
   return results;
-} 
+}
+
+/**
+ * 店長向け：シフト希望提出通知メールを送信
+ */
+export async function sendManagerShiftRequestNotificationEmail(
+  managerEmail: string,
+  managerName: string,
+  staffName: string,
+  submissionPeriod: string,
+  submittedRequestsCount: number
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>シフト希望提出通知</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+          📋 シフト希望提出通知
+        </h1>
+        
+        <p>お疲れ様です、${managerName}さん。</p>
+        
+        <p>${staffName}さんから${submissionPeriod}のシフト希望が提出されました。</p>
+        
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+          <h3 style="margin: 0 0 15px 0; color: #3b82f6;">提出内容</h3>
+          <p style="margin: 5px 0;"><strong>スタッフ:</strong> ${staffName}</p>
+          <p style="margin: 5px 0;"><strong>対象期間:</strong> ${submissionPeriod}</p>
+          <p style="margin: 5px 0;"><strong>提出日数:</strong> ${submittedRequestsCount}日分</p>
+          <p style="margin: 5px 0;"><strong>提出日時:</strong> ${new Date().toLocaleString('ja-JP')}</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/shift-requests" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            シフト希望を確認
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: managerEmail,
+    subject: `【シフト希望提出】${staffName}さんから${submissionPeriod}のシフト希望が提出されました`,
+    html,
+  });
+}
+
+/**
+ * 店長向け：代打応募通知メールを送信
+ */
+export async function sendManagerEmergencyVolunteerNotificationEmail(
+  managerEmail: string,
+  managerName: string,
+  details: {
+    volunteerName: string;
+    storeName: string;
+    date: string;
+    timeSlot: string;
+    startTime: string;
+    endTime: string;
+    originalStaffName: string;
+    notes?: string;
+  }
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>代打応募通知</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+          🔔 代打応募通知
+        </h1>
+        
+        <p>お疲れ様です、${managerName}さん。</p>
+        
+        <p>${details.volunteerName}さんから代打の応募がありました。</p>
+        
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+          <h3 style="margin: 0 0 15px 0; color: #3b82f6;">応募内容</h3>
+          <p style="margin: 5px 0;"><strong>応募者:</strong> ${details.volunteerName}</p>
+          <p style="margin: 5px 0;"><strong>対象シフト:</strong> ${details.originalStaffName}さんの代打</p>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>シフト:</strong> ${details.timeSlot}</p>
+          <p style="margin: 5px 0;"><strong>時間:</strong> ${details.startTime} - ${details.endTime}</p>
+          ${details.notes ? `<p style="margin: 15px 0 5px 0;"><strong>応募メモ:</strong><br>${details.notes}</p>` : ''}
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/emergency-management?tab=manage" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            応募を確認
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: managerEmail,
+    subject: `【代打応募】${details.volunteerName}さんから応募がありました`,
+    html,
+  });
+}
+
+/**
+ * スタッフ向け：シフト変更通知メールを送信
+ */
+export async function sendShiftChangeNotificationEmail(
+  userEmail: string,
+  userName: string,
+  details: {
+    date: string;
+    storeName: string;
+    oldTimeSlot?: string;
+    newTimeSlot?: string;
+    oldTime?: { start: string; end: string };
+    newTime?: { start: string; end: string };
+    type: 'add' | 'remove' | 'change';
+  }
+) {
+  let title = '';
+  let message = '';
+  let color = '';
+
+  switch (details.type) {
+    case 'add':
+      title = 'シフトが追加されました';
+      message = `新しいシフトが追加されました：<br>
+        ${details.newTimeSlot} (${details.newTime?.start} - ${details.newTime?.end})`;
+      color = '#10b981'; // green
+      break;
+    case 'remove':
+      title = 'シフトが削除されました';
+      message = `以下のシフトが削除されました：<br>
+        ${details.oldTimeSlot} (${details.oldTime?.start} - ${details.oldTime?.end})`;
+      color = '#ef4444'; // red
+      break;
+    case 'change':
+      title = 'シフトが変更されました';
+      message = `シフトが変更されました：<br>
+        変更前：${details.oldTimeSlot} (${details.oldTime?.start} - ${details.oldTime?.end})<br>
+        変更後：${details.newTimeSlot} (${details.newTime?.start} - ${details.newTime?.end})`;
+      color = '#f59e0b'; // yellow
+      break;
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${title}</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: ${color}; border-bottom: 2px solid ${color}; padding-bottom: 10px;">
+          ${title}
+        </h1>
+        
+        <p>お疲れ様です、${userName}さん。</p>
+        
+        <p>${details.date}のシフトに変更がありましたので、お知らせいたします。</p>
+        
+        <div style="background-color: ${color}10; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${color};">
+          <h3 style="margin: 0 0 15px 0; color: ${color};">変更内容</h3>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 15px 0 5px 0;">${message}</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/my-shift" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            マイシフトを確認
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `【シフト変更】${details.date}のシフトに変更があります`,
+    html,
+  });
+}
+
+/**
+ * スタッフ向け：代打応募不採用通知メールを送信
+ */
+export async function sendSubstituteRejectedEmail(
+  userEmail: string,
+  userName: string,
+  details: {
+    storeName: string;
+    date: string;
+    timeSlot: string;
+    startTime: string;
+    endTime: string;
+  }
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>代打応募結果のお知らせ</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #6b7280; border-bottom: 2px solid #6b7280; padding-bottom: 10px;">
+          代打応募結果のお知らせ
+        </h1>
+        
+        <p>お疲れ様です、${userName}さん。</p>
+        
+        <p>ご応募いただいた代打について、結果をお知らせいたします。</p>
+        
+        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #6b7280;">
+          <h3 style="margin: 0 0 15px 0; color: #6b7280;">応募内容</h3>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>シフト:</strong> ${details.timeSlot}</p>
+          <p style="margin: 5px 0;"><strong>時間:</strong> ${details.startTime} - ${details.endTime}</p>
+          <p style="margin: 15px 0 5px 0; color: #6b7280;">
+            <strong>結果: 不採用</strong><br>
+            申し訳ございませんが、今回は他のスタッフが採用となりました。<br>
+            またの機会がございましたら、ぜひご応募ください。
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/emergency" 
+             style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            代打募集を確認
+          </a>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject: `【代打応募結果】${details.date} ${details.storeName}の代打応募について`,
+    html,
+  });
+}

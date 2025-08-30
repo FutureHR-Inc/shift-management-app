@@ -519,45 +519,63 @@ export default function DashboardPage() {
                   {openEmergencies.slice(0, 3).map((emergency: DatabaseEmergencyRequest) => (
                     <div key={emergency.id} className="border-l-4 border-orange-400 pl-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {users.find(u => u.id === emergency.original_user_id)?.name || '不明なユーザー'}さん
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {new Date(emergency.date || '').toLocaleDateString('ja-JP', { 
-                              month: 'numeric', 
-                              day: 'numeric', 
-                              weekday: 'short' 
-                            })} | {stores.find(s => s.id === emergency.store_id)?.name || '不明な店舗'}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            📝 {emergency.reason}
-                          </p>
-                        </div>
-                        {userRole === 'manager' && (emergency.emergency_volunteers?.length || 0) > 0 && (
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full whitespace-nowrap">
-                              応募{emergency.emergency_volunteers?.length || 0}名
-                            </span>
-                            <Button
-                              onClick={() => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`)}
-                              size="sm"
-                              variant="secondary"
-                              className="text-xs whitespace-nowrap w-full sm:w-auto"
-                            >
-                              管理
-                            </Button>
+                                                  <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {users.find(u => u.id === emergency.original_user_id)?.name || '不明なユーザー'}さん
+                              </p>
+                              {emergency.request_type === 'shortage' && (
+                                <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                                  人員不足
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">
+                              {new Date(emergency.date || '').toLocaleDateString('ja-JP', { 
+                                month: 'numeric', 
+                                day: 'numeric', 
+                                weekday: 'short' 
+                              })} | {stores.find(s => s.id === emergency.store_id)?.name || '不明な店舗'}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              📝 {emergency.reason}
+                            </p>
+                            {emergency.emergency_volunteers && emergency.emergency_volunteers.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {emergency.emergency_volunteers.map((volunteer) => (
+                                  <span key={volunteer.id} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+                                    {volunteer.users?.name || '不明なスタッフ'}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {userRole === 'staff' && !emergency.emergency_volunteers?.some(v => v.user_id === currentUser?.id) && (
-                          <Button
-                            onClick={() => handleApplyEmergency(emergency.id)}
-                            size="sm"
-                            className="text-xs whitespace-nowrap w-full sm:w-auto"
-                          >
-                            応募する
-                          </Button>
-                        )}
+                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                            {userRole === 'manager' && (emergency.emergency_volunteers?.length || 0) > 0 && (
+                              <>
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full whitespace-nowrap">
+                                  応募{emergency.emergency_volunteers?.length || 0}名
+                                </span>
+                                <Button
+                                  onClick={() => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`)}
+                                  size="sm"
+                                  variant="secondary"
+                                  className="text-xs whitespace-nowrap w-full sm:w-auto"
+                                >
+                                  応募確認
+                                </Button>
+                              </>
+                            )}
+                            {userRole === 'staff' && !emergency.emergency_volunteers?.some(v => v.user_id === currentUser?.id) && (
+                              <Button
+                                onClick={() => handleApplyEmergency(emergency.id)}
+                                size="sm"
+                                className="text-xs whitespace-nowrap w-full sm:w-auto"
+                              >
+                                応募する
+                              </Button>
+                            )}
+                          </div>
                       </div>
                     </div>
                   ))}

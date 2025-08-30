@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // シフト希望提出確認メール送信処理
+    // メール送信処理
     try {
       // ユーザー情報を取得
       const { data: userData } = await supabase
@@ -232,8 +232,24 @@ export async function POST(request: NextRequest) {
         .eq('id', user_id)
         .single();
 
+      // 店舗の管理者情報を取得
+      const { data: storeData } = await supabase
+        .from('stores')
+        .select(`
+          id,
+          name,
+          users!store_managers(
+            id,
+            name,
+            email
+          )
+        `)
+        .eq('id', store_id)
+        .single();
+
+      // スタッフへの確認メール送信
       if (userData?.email) {
-        const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+        const staffEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -243,18 +259,47 @@ export async function POST(request: NextRequest) {
             userEmail: userData.email,
             userName: userData.name || '不明',
             submissionPeriod: submission_period,
-            submittedRequestsCount: data.length // 実際に挿入された件数
+            submittedRequestsCount: data.length
           }),
         });
 
-        if (!emailResponse.ok) {
-          console.warn('シフト希望提出確認メール送信に失敗しましたが、提出は完了しました');
+        if (!staffEmailResponse.ok) {
+          console.warn('スタッフへのシフト希望提出確認メール送信に失敗しましたが、提出は完了しました');
         } else {
-          console.log('シフト希望提出確認メールを送信しました');
+          console.log('スタッフへのシフト希望提出確認メールを送信しました');
+        }
+      }
+
+      // 店長への通知メール送信
+      if (storeData?.users) {
+        const managers = storeData.users;
+        for (const manager of managers) {
+          if (manager.email) {
+            const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'manager-shift-request-notification',
+                userEmail: manager.email,
+                userName: manager.name || '不明',
+                staffName: userData?.name || '不明',
+                submissionPeriod: submission_period,
+                submittedRequestsCount: data.length
+              }),
+            });
+
+            if (!managerEmailResponse.ok) {
+              console.warn('店長へのシフト希望提出通知メール送信に失敗しました');
+            } else {
+              console.log('店長へのシフト希望提出通知メールを送信しました');
+            }
+          }
         }
       }
     } catch (emailError) {
-      console.error('シフト希望提出確認メール送信エラー:', emailError);
+      console.error('メール送信エラー:', emailError);
       // メール送信失敗でも提出は成功とする
     }
 

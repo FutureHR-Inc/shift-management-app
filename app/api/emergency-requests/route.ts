@@ -230,6 +230,87 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (action === 'accept') {
+      // 緊急募集情報を取得
+      const { data: emergencyRequest, error: emergencyError } = await supabase
+        .from('emergency_requests')
+        .select('*, time_slots(*)')
+        .eq('id', emergency_request_id)
+        .single();
+
+      if (emergencyError || !emergencyRequest) {
+        return NextResponse.json(
+          { error: '緊急募集データの取得に失敗しました' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      // 既存のシフトを確認（代打募集の場合のみ）
+      if (emergencyRequest.request_type === 'substitute') {
+        // 元のシフトを削除
+        const { error: deleteError } = await supabase
+          .from('shifts')
+          .delete()
+          .eq('user_id', emergencyRequest.original_user_id)
+          .eq('store_id', emergencyRequest.store_id)
+          .eq('date', emergencyRequest.date)
+          .eq('time_slot_id', emergencyRequest.time_slot_id)
+          .eq('status', 'confirmed');
+
+        if (deleteError) {
+          console.error('元のシフトの削除に失敗:', deleteError);
+          return NextResponse.json(
+            { error: '元のシフトの削除に失敗しました' },
+            { status: 500, headers: corsHeaders }
+          );
+        }
+      }
+
+      // 新しいシフトを作成
+      const { error: shiftError } = await supabase
+        .from('shifts')
+        .insert({
+          user_id: volunteer.user_id,
+          store_id: emergencyRequest.store_id,
+          date: emergencyRequest.date,
+          time_slot_id: emergencyRequest.time_slot_id,
+          status: 'confirmed',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (shiftError) {
+        return NextResponse.json(
+          { error: 'シフトの作成に失敗しました' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      // 元のスタッフにメール通知（代打募集の場合のみ）
+      if (emergencyRequest.request_type === 'substitute') {
+        try {
+          const { data: originalUser } = await supabase
+            .from('users')
+            .select('email, name')
+            .eq('id', emergencyRequest.original_user_id)
+            .single();
+
+          if (originalUser) {
+            // メール送信処理（実装は省略）
+            console.log('元のスタッフにメール通知:', {
+              to: originalUser.email,
+              subject: '代打が見つかりました',
+              name: originalUser.name,
+              date: emergencyRequest.date,
+              timeSlot: emergencyRequest.time_slots?.name
+            });
+          }
+        } catch (error) {
+          console.error('メール通知エラー:', error);
+          // メール送信失敗はシフト作成に影響させない
+        }
+      }
+
+      // 緊急募集を完了状態に更新
       const { error: updateError } = await supabase
         .from('emergency_requests')
         .update({ status: 'filled' })

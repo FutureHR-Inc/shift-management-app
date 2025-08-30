@@ -22,9 +22,9 @@ export default function EmergencyManagementPage() {
     
     if (!userStr) {
       console.log('ユーザー情報がLocalStorageにありません');
-      return;
-    }
-
+        return;
+      }
+      
     try {
       const user = JSON.parse(userStr);
       console.log('Parsed user data:', {
@@ -104,6 +104,8 @@ export default function EmergencyManagementPage() {
   const handleApproveVolunteer = async (volunteerId: string) => {
     try {
       setLoading(true);
+      
+      // ボタンを無効化するために、承認中の応募者IDを保存
       const response = await fetch('/api/emergency-requests', {
         method: 'PATCH',
         headers: {
@@ -117,12 +119,19 @@ export default function EmergencyManagementPage() {
       });
 
       if (!response.ok) throw new Error('承認処理に失敗しました');
+
+      const result = await response.json();
       
-      // データを再取得
+      // シフト作成の成功メッセージを表示
+      alert('応募者を承認し、シフトを作成しました');
+      
+      // データを再取得してから画面を更新
       await fetchEmergencyRequests();
-      alert('応募者を承認しました');
       setActiveTab('browse');
       setSelectedRequest(null);
+      
+      // シフト作成画面に遷移（作成されたシフトを確認できるように）
+      router.push('/shift/create');
     } catch (err) {
       setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
     } finally {
@@ -212,7 +221,7 @@ export default function EmergencyManagementPage() {
                 <p className="text-sm text-gray-600">全ての代打募集状況を確認できます</p>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
+                        <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -223,8 +232,8 @@ export default function EmergencyManagementPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ステータス</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">応募者数</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                      </tr>
-                    </thead>
+                                </tr>
+                              </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {loading ? (
                         <tr>
@@ -249,21 +258,21 @@ export default function EmergencyManagementPage() {
                                 <span className="truncate max-w-[150px]">
                                   {request.stores?.name || '不明な店舗'}
                                 </span>
-                              </div>
-                            </td>
+                                      </div>
+                                    </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               <div>
                                 <span className="font-medium">{request.time_slots?.name || '不明なシフト'}</span>
                                 <br />
                                 <span className="text-gray-500">
                                   {request.time_slots?.start_time || '--:--'}-{request.time_slots?.end_time || '--:--'}
-                                </span>
-                              </div>
+                                              </span>
+                                            </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-900">
                               <div className="max-w-[200px] truncate" title={request.reason}>
                                 {request.reason}
-                              </div>
+                                                      </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -272,14 +281,14 @@ export default function EmergencyManagementPage() {
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
                                 {request.status === 'open' ? '募集中' : '確定済み'}
-                              </span>
+                                                  </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               <div className="flex items-center space-x-1">
                                 <span>{request.emergency_volunteers?.length || 0}</span>
                                 <span>人</span>
-                              </div>
-                            </td>
+                                          </div>
+                                        </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               <Button
                                 onClick={() => {
@@ -292,7 +301,7 @@ export default function EmergencyManagementPage() {
                                 詳細
                               </Button>
                             </td>
-                          </tr>
+                                  </tr>
                         ))
                       ) : (
                         <tr>
@@ -301,9 +310,9 @@ export default function EmergencyManagementPage() {
                           </td>
                         </tr>
                       )}
-                    </tbody>
-                  </table>
-                </div>
+                              </tbody>
+                            </table>
+                          </div>
               </CardContent>
             </Card>
           </div>
@@ -313,18 +322,18 @@ export default function EmergencyManagementPage() {
           <div className="space-y-6">
             {/* 代打募集作成 */}
             <Card>
-              <CardHeader>
+                <CardHeader>
                 <CardTitle>代打募集の作成</CardTitle>
                 <p className="text-sm text-gray-600">代打募集を作成するには、シフト作成画面から代打を募集したいスタッフ枠を選択して、代打募集をしてください</p>
-              </CardHeader>
-              <CardContent>
+                </CardHeader>
+                <CardContent>
                 <div className="bg-blue-50 p-4 rounded-lg mb-6">
                   <div className="flex items-start">
                     <div className="flex-shrink-0">
                       <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                    </div>
+                  </div>
                     <div className="ml-3">
                       <p className="font-medium text-blue-800 mb-1">代打募集の手順:</p>
                       <ol className="text-blue-700 space-y-1">
@@ -380,66 +389,100 @@ export default function EmergencyManagementPage() {
                     <div>
                       <p className="text-gray-500">日時</p>
                       <p className="font-medium">{new Date(selectedRequest.date).toLocaleDateString('ja-JP')}</p>
-                    </div>
+                  </div>
                     <div>
                       <p className="text-gray-500">店舗</p>
                       <p className="font-medium">{selectedRequest.stores?.name}</p>
-                    </div>
+                                </div>
                     <div>
                       <p className="text-gray-500">シフト時間</p>
                       <p className="font-medium">
                         {selectedRequest.time_slots?.name}<br />
                         {selectedRequest.time_slots?.start_time}-{selectedRequest.time_slots?.end_time}
                       </p>
-                    </div>
+                                      </div>
                     <div>
                       <p className="text-gray-500">募集理由</p>
                       <p className="font-medium">{selectedRequest.reason}</p>
-                    </div>
-                  </div>
-                </div>
+                                    </div>
+                                </div>
+                              </div>
 
                 {/* 応募者一覧 */}
                 <div>
                   <h3 className="text-sm font-medium text-gray-900 mb-4">応募者一覧</h3>
                   {selectedRequest.emergency_volunteers?.length > 0 ? (
-                    <div className="space-y-4">
-                      {selectedRequest.emergency_volunteers.map((volunteer: any) => (
+                <div className="space-y-4">
+                                            {selectedRequest.emergency_volunteers.map((volunteer: any) => (
                         <div key={volunteer.id} className="border rounded-lg p-4">
                           <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">{volunteer.users?.name}</p>
-                              <p className="text-sm text-gray-500">
-                                応募日時: {new Date(volunteer.applied_at).toLocaleString('ja-JP')}
-                              </p>
-                              {volunteer.notes && (
+                        <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{volunteer.users?.name}</p>
+                                {volunteer.status === 'accepted' && (
+                                  <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                    採用済み
+                                  </span>
+                                )}
+                                {volunteer.status === 'rejected' && (
+                                  <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">
+                                    不採用
+                                  </span>
+                                )}
+                              </div>
+                          <p className="text-sm text-gray-500">
+                                応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
+                          </p>
+                          {volunteer.notes && (
                                 <p className="text-sm text-gray-600 mt-2">{volunteer.notes}</p>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => handleApproveVolunteer(volunteer.id)}
+                          )}
+                        </div>
+                            {!volunteer.status && (
+                              <div className="flex gap-2">
+                                                      <Button
+                            onClick={() => {
+                                  if (confirm(selectedRequest.request_type === 'substitute' 
+                                    ? 'このスタッフを採用し、元のスタッフのシフトと入れ替えますか？'
+                                    : 'このスタッフを採用し、シフトを作成しますか？'
+                                  )) {
+                                    handleApproveVolunteer(volunteer.id);
+                                  }
+                                }}
                                 variant="primary"
                                 size="sm"
+                                disabled={loading}
                               >
-                                承認
+                                {loading ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    シフト作成中...
+                                  </>
+                                ) : (
+                                  '採用してシフト作成'
+                                )}
                               </Button>
-                              <Button
-                                onClick={() => handleRejectVolunteer(volunteer.id)}
+                        <Button
+                          onClick={() => {
+                                  if (confirm('このスタッフの応募を不採用にしますか？')) {
+                                    handleRejectVolunteer(volunteer.id);
+                                  }
+                                }}
                                 variant="destructive"
                                 size="sm"
+                                disabled={loading}
                               >
-                                却下
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                                不採用
+                        </Button>
+                              </div>
+                            )}
+                      </div>
                     </div>
+                  ))}
+                </div>
                   ) : (
                     <p className="text-sm text-gray-500">まだ応募者がいません</p>
-                  )}
-                </div>
+              )}
+            </div>
               </CardContent>
             </Card>
           </div>

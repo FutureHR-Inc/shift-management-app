@@ -166,6 +166,83 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('データ挿入成功:', data);
+
+    // メール送信処理
+    try {
+      // 応募者の情報を取得
+      const { data: volunteerData } = await supabase
+        .from('users')
+        .select('name, email')
+        .eq('id', user_id)
+        .single();
+
+      // 代打募集の詳細情報を取得
+      const { data: requestData } = await supabase
+        .from('emergency_requests')
+        .select(`
+          *,
+          original_user:users!original_user_id(id, name, email),
+          stores(id, name),
+          time_slots(id, name, start_time, end_time)
+        `)
+        .eq('id', emergency_request_id)
+        .single();
+
+      // 店舗の管理者情報を取得
+      const { data: storeData } = await supabase
+        .from('stores')
+        .select(`
+          id,
+          name,
+          users!store_managers(
+            id,
+            name,
+            email
+          )
+        `)
+        .eq('id', requestData?.store_id)
+        .single();
+
+      // 店長への通知メール送信
+      if (storeData?.users && requestData && volunteerData) {
+        const managers = storeData.users;
+        for (const manager of managers) {
+          if (manager.email) {
+            const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'manager-emergency-volunteer-notification',
+                userEmail: manager.email,
+                userName: manager.name || '不明',
+                details: {
+                  volunteerName: volunteerData.name || '不明',
+                  storeName: requestData.stores?.name || '不明',
+                  date: requestData.date,
+                  timeSlot: requestData.time_slots?.name || '不明',
+                  startTime: requestData.time_slots?.start_time || '00:00',
+                  endTime: requestData.time_slots?.end_time || '00:00',
+                  originalStaffName: requestData.original_user?.name || '不明',
+                  notes: notes || undefined
+                }
+              }),
+            });
+
+            if (!managerEmailResponse.ok) {
+              console.warn('店長への代打応募通知メール送信に失敗しました');
+            } else {
+              console.log('店長への代打応募通知メールを送信しました');
+            }
+          }
+        }
+      }
+    } catch (emailError) {
+      console.error('メール送信エラー:', emailError);
+      // メール送信失敗でも応募は成功とする
+    }
+
     console.log('=== Emergency Volunteers POST API 終了 ===');
 
     return NextResponse.json({

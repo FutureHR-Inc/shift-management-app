@@ -23,6 +23,9 @@ async function getCurrentUserCompanyId(userId: string): Promise<string | null> {
 }
 
 // 🔧 企業分離対応: シフト一覧取得
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId') || searchParams.get('store_id');

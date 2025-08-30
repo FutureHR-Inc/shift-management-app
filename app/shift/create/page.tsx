@@ -279,8 +279,16 @@ function ShiftCreatePageInner() {
         return weekEnd.toISOString().split('T')[0];
       })();
       
+      // キャッシュ制御を追加
       const response = await fetch(
-        `/api/shifts?storeId=${storeId}&startDate=${startDate}&endDate=${actualEndDate}`
+        `/api/shifts?storeId=${storeId}&startDate=${startDate}&endDate=${actualEndDate}`,
+        {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }
       );
       if (!response.ok) throw new Error('シフトデータの取得に失敗しました');
       const result = await response.json();
@@ -536,12 +544,45 @@ function ShiftCreatePageInner() {
             endDate = end.toISOString().split('T')[0];
           }
           
+          // 並列でデータを取得
           const [shiftsData, timeOffData, emergencyData] = await Promise.all([
             fetchShifts(selectedStore, startDate, endDate),
             fetchApprovedTimeOffRequests(startDate, endDate),
             fetchEmergencyRequests(selectedStore, startDate, endDate)
           ]);
-          setShifts(shiftsData);
+
+          // シフトデータを種類でソート
+          const sortedShifts = shiftsData.sort((a, b) => {
+            // まず種類でソート（固定 → 確定 → 下書き）
+            const getTypeOrder = (shift: any) => {
+              if (shift.isFixedShift) return 0;
+              if (shift.status === 'confirmed') return 1;
+              return 2;
+            };
+            
+            const typeOrderA = getTypeOrder(a);
+            const typeOrderB = getTypeOrder(b);
+            
+            if (typeOrderA !== typeOrderB) {
+              return typeOrderA - typeOrderB;
+            }
+            
+            // 同じ種類の場合は日付と時間でソート
+            const dateCompare = a.date.localeCompare(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            
+            const timeSlotA = timeSlots.find(ts => ts.id === a.timeSlotId);
+            const timeSlotB = timeSlots.find(ts => ts.id === b.timeSlotId);
+            
+            if (timeSlotA && timeSlotB) {
+              return timeSlotA.start_time.localeCompare(timeSlotB.start_time);
+            }
+            
+            return 0;
+          });
+
+          // 一括でステート更新
+          setShifts(sortedShifts);
           setApprovedTimeOffRequests(timeOffData);
           setEmergencyRequests(emergencyData);
         } catch (error) {
@@ -555,7 +596,7 @@ function ShiftCreatePageInner() {
       setShifts([]);
       setEmergencyRequests([]);
     }
-  }, [selectedStore, selectedWeek, stores, viewMode]); // viewModeを依存配列に追加
+  }, [selectedStore, selectedWeek, stores, viewMode, timeSlots]); // timeSlots を依存配列に追加
 
   // 表示期間に応じた日付を生成
   const getDisplayDates = (startDate: string, mode: 'week' | 'half-month' | 'month') => {
@@ -679,7 +720,34 @@ function ShiftCreatePageInner() {
       console.log(`  → 生成された固定シフト: ${fixedShiftsAsShifts.length}件`);
       console.log(`  → 最終返却シフト数: ${regularShifts.length + fixedShiftsAsShifts.length}件 (通常: ${regularShifts.length}, 固定: ${fixedShiftsAsShifts.length})`);
 
-      return [...regularShifts, ...fixedShiftsAsShifts];
+      // シフトを種類と日時でソート
+      const allShifts = [...regularShifts, ...fixedShiftsAsShifts].sort((a, b) => {
+        // まず種類でソート（固定 → 確定 → 下書き）
+        const getTypeOrder = (shift: any) => {
+          if (shift.isFixedShift) return 0;
+          if (shift.status === 'confirmed') return 1;
+          return 2;
+        };
+        
+        const typeOrderA = getTypeOrder(a);
+        const typeOrderB = getTypeOrder(b);
+        
+        if (typeOrderA !== typeOrderB) {
+          return typeOrderA - typeOrderB;
+        }
+        
+        // 同じ種類の場合は時間でソート
+        const timeSlotA = timeSlots.find(ts => ts.id === a.timeSlotId);
+        const timeSlotB = timeSlots.find(ts => ts.id === b.timeSlotId);
+        
+        if (timeSlotA && timeSlotB) {
+          return timeSlotA.start_time.localeCompare(timeSlotB.start_time);
+        }
+        
+        return 0;
+      });
+
+      return allShifts;
     } catch (error) {
       console.error('Error in getShiftForSlot:', error);
       return [];
@@ -699,6 +767,14 @@ function ShiftCreatePageInner() {
       timeSlot,
       dayIndex
     });
+    
+    // モーダルの初期状態をリセット
+    setSelectedUser('');
+    setSelectedTimeSlot(timeSlot);
+    setIsCustomTime(false);
+    setCustomStartTime('');
+    setCustomEndTime('');
+    
     setIsModalOpen(true);
   };
 
@@ -757,13 +833,53 @@ function ShiftCreatePageInner() {
         custom_end_time: createdShift.data?.custom_end_time
       });
 
-      // シフトデータを再取得
-      if (selectedStore && selectedWeek) {
-        console.log('🔄 [handleAddShift] シフトデータ再取得開始');
-        const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
-        console.log('🔄 [handleAddShift] 再取得完了:', updatedShifts.length + '件');
-        setShifts(updatedShifts);
-      }
+      // 新しいシフトをShift型に変換して追加
+      const newShift = {
+        id: createdShift.data.id,
+        userId: createdShift.data.user_id,
+        storeId: createdShift.data.store_id,
+        date: createdShift.data.date,
+        timeSlotId: createdShift.data.time_slot_id,
+        customStartTime: createdShift.data.custom_start_time,
+        customEndTime: createdShift.data.custom_end_time,
+        status: createdShift.data.status,
+        notes: createdShift.data.notes
+      };
+      
+      console.log('🔄 [handleAddShift] 新しいシフトをローカルに追加:', newShift);
+      
+      // 既存のシフトと新しいシフトを種類と日時でソート
+      setShifts(prevShifts => {
+        const updatedShifts = [...prevShifts, newShift].sort((a, b) => {
+          // まず種類でソート（固定 → 確定 → 下書き）
+          const getTypeOrder = (shift: any) => {
+            if (shift.isFixedShift) return 0;
+            if (shift.status === 'confirmed') return 1;
+            return 2;
+          };
+          
+          const typeOrderA = getTypeOrder(a);
+          const typeOrderB = getTypeOrder(b);
+          
+          if (typeOrderA !== typeOrderB) {
+            return typeOrderA - typeOrderB;
+          }
+          
+          // 同じ種類の場合は日付と時間でソート
+          const dateCompare = a.date.localeCompare(b.date);
+          if (dateCompare !== 0) return dateCompare;
+          
+          const timeSlotA = timeSlots.find(ts => ts.id === a.timeSlotId);
+          const timeSlotB = timeSlots.find(ts => ts.id === b.timeSlotId);
+          
+          if (timeSlotA && timeSlotB) {
+            return timeSlotA.start_time.localeCompare(timeSlotB.start_time);
+          }
+          
+          return 0;
+        });
+        return updatedShifts;
+      });
 
       // モーダルを閉じる
       handleCloseModal();
@@ -820,10 +936,18 @@ function ShiftCreatePageInner() {
         throw new Error(errorData.error || 'シフトの確定に失敗しました');
       }
 
-      // シフトデータを再取得
+      // 削除したシフトをローカルステートから除外
+      setShifts(prevShifts => prevShifts.filter(s => s.id !== shiftId));
+
+      // バックグラウンドで完全なデータを再取得
       if (selectedStore && selectedWeek) {
-        const updatedShifts = await fetchShifts(selectedStore, selectedWeek);
-        setShifts(updatedShifts);
+        console.log('🔄 [handleDeleteShift] バックグラウンドでデータ更新開始');
+        fetchShifts(selectedStore, selectedWeek).then(updatedShifts => {
+          console.log('🔄 [handleDeleteShift] バックグラウンド更新完了:', updatedShifts.length + '件');
+          setShifts(updatedShifts);
+        }).catch(error => {
+          console.error('バックグラウンド更新エラー:', error);
+        });
       }
       
       // コンテキストメニューを閉じる
