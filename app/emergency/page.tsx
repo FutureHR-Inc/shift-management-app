@@ -162,22 +162,43 @@ export default function EmergencyPage() {
 
           if (fixedShiftsResponse.ok) {
             const fixedShiftsData = await fixedShiftsResponse.json();
-            const todayDayOfWeek = new Date(today).getDay();
-            
-            // 固定シフトを通常のシフト形式に変換
-            const fixedShifts = (fixedShiftsData.data || [])
-              .filter((fs: any) => fs.is_active && fs.day_of_week === todayDayOfWeek)
-              .map((fs: any) => ({
-                id: `fixed-${fs.id}`,
-                date: today,
-                user_id: fs.user_id,
-                store_id: fs.store_id,
-                time_slot_id: fs.time_slot_id,
-                status: 'confirmed',
-                stores: fs.stores,
-                time_slots: fs.time_slots,
-                isFixedShift: true
-              }));
+            console.log('🔍 固定シフトデータ取得:', {
+              total: fixedShiftsData.data?.length || 0,
+              data: fixedShiftsData.data
+            });
+
+            // 今日から1週間分の日付を生成
+            const dates = [];
+            for (let i = 0; i < 30; i++) {
+              const date = new Date(today);
+              date.setDate(date.getDate() + i);
+              dates.push(date);
+            }
+
+            // 各日付に対応する固定シフトを生成
+            const fixedShifts = dates.flatMap(date => {
+              const dayOfWeek = date.getDay();
+              const dateStr = date.toISOString().split('T')[0];
+
+              return (fixedShiftsData.data || [])
+                .filter((fs: any) => fs.is_active && fs.day_of_week === dayOfWeek)
+                .map((fs: any) => ({
+                  id: `fixed-${fs.id}-${dateStr}`,
+                  date: dateStr,
+                  user_id: fs.user_id,
+                  store_id: fs.store_id,
+                  time_slot_id: fs.time_slot_id,
+                  status: 'confirmed',
+                  stores: fs.stores,
+                  time_slots: fs.time_slots,
+                  isFixedShift: true
+                }));
+            });
+
+            console.log('🔍 変換後の固定シフト:', {
+              total: fixedShifts.length,
+              shifts: fixedShifts
+            });
             
             allShifts = [...allShifts, ...fixedShifts];
           }
@@ -190,12 +211,31 @@ export default function EmergencyPage() {
               req.original_user_id === currentUser.id && req.status === 'open'
             );
             
-            const filteredShifts = allShifts.filter((shift: Shift) => {
-              return !existingRequests.some((req: EmergencyRequest) => 
+            // 今日以降のシフトのみを抽出
+            const today = new Date().toISOString().split('T')[0];
+            const futureShifts = allShifts.filter((shift: Shift) => shift.date >= today);
+
+            console.log('🔍 フィルタリング前のシフト:', {
+              total: futureShifts.length,
+              regular: futureShifts.filter(s => !s.isFixedShift).length,
+              fixed: futureShifts.filter(s => s.isFixedShift).length
+            });
+
+            const filteredShifts = futureShifts.filter((shift: Shift) => {
+              // 既に代打募集があるシフトを除外
+              const hasExistingRequest = existingRequests.some((req: EmergencyRequest) => 
                 req.date === shift.date && 
                 req.store_id === shift.store_id &&
                 req.time_slot_id === shift.time_slot_id
               );
+
+              return !hasExistingRequest;
+            });
+
+            console.log('🔍 フィルタリング後のシフト:', {
+              total: filteredShifts.length,
+              regular: filteredShifts.filter(s => !s.isFixedShift).length,
+              fixed: filteredShifts.filter(s => s.isFixedShift).length
             });
             
             setMyShifts(filteredShifts);
@@ -655,13 +695,24 @@ export default function EmergencyPage() {
                 <p className="text-sm text-gray-600">代打を募集したいシフトを選択してください</p>
               </CardHeader>
               <CardContent>
+                {console.log('🔍 表示するシフト:', {
+                  total: myShifts.length,
+                  shifts: myShifts.map(shift => ({
+                    id: shift.id,
+                    date: shift.date,
+                    isFixed: shift.isFixedShift,
+                    timeSlot: shift.time_slots?.name
+                  }))
+                })}
                 {myShifts.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <p>確定済みのシフトがありません</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {myShifts.map((shift) => (
+                    {[...myShifts]
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map((shift) => (
                       <div
                         key={shift.id}
                         className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
