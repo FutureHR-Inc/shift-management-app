@@ -4,16 +4,10 @@ import { supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-type RouteParams = {
-  params: {
-    id: string;
-  };
-};
-
 // PUT: シフトの更新（個別）
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest) {
   try {
-    const { id } = params;
+    const id = request.nextUrl.pathname.split('/').pop();
     const body = await request.json();
     const {
       user_id,
@@ -137,9 +131,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE: シフトの削除（個別）
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest) {
   try {
-    const { id } = params;
+    const id = request.nextUrl.pathname.split('/').pop();
 
     // 削除前のシフト情報を取得
     const { data: oldShift, error: oldShiftError } = await supabase
