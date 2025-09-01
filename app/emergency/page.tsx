@@ -695,15 +695,6 @@ export default function EmergencyPage() {
                 <p className="text-sm text-gray-600">代打を募集したいシフトを選択してください</p>
               </CardHeader>
               <CardContent>
-                {console.log('🔍 表示するシフト:', {
-                  total: myShifts.length,
-                  shifts: myShifts.map(shift => ({
-                    id: shift.id,
-                    date: shift.date,
-                    isFixed: shift.isFixedShift,
-                    timeSlot: shift.time_slots?.name
-                  }))
-                })}
                 {myShifts.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <p>確定済みのシフトがありません</p>
