@@ -157,10 +157,27 @@ export default function StaffDashboardPage() {
     fetchDashboardData();
   }, [currentUser]);
 
-  // 週間勤務時間を計算
+  // 週間勤務時間を計算（月曜から日曜）
   const calculateWeeklyHours = () => {
-    return weeklyShifts.reduce((total, shift) => {
-      if (!shift.time_slots) return total;
+    // 今週の月曜日と日曜日を取得
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1); // 1 = 月曜日
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    // 今週のシフトのみをフィルタリング
+    const thisWeekShifts = weeklyShifts.filter(shift => {
+      const shiftDate = new Date(shift.date);
+      return shiftDate >= monday && shiftDate <= sunday;
+    });
+
+    // 確定シフトのみの時間を合計
+    return thisWeekShifts.reduce((total, shift) => {
+      if (!shift.time_slots || shift.status !== 'confirmed') return total;
       const start = new Date(`2000-01-01T${shift.time_slots.start_time}`);
       const end = new Date(`2000-01-01T${shift.time_slots.end_time}`);
       const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);

@@ -69,6 +69,7 @@ interface Shift {
   status: 'draft' | 'confirmed' | 'completed';
   stores?: { id: string; name: string };
   time_slots?: TimeSlot;
+  isFixedShift?: boolean;
 }
 
 interface CurrentUser {
@@ -142,35 +143,64 @@ export default function EmergencyPage() {
           setEmergencyRequests(openRequests);
         }
 
-        // スタッフの場合は確定済みシフトも取得
+        // スタッフの場合は確定済みシフトと固定シフトを取得
         if (currentUser.role === 'staff') {
           const today = new Date().toISOString().split('T')[0];
-          const shiftsResponse = await fetch(
-            `/api/shifts?user_id=${currentUser.id}&date_from=${today}&status=confirmed`
-          );
+          
+          // 確定済みシフトと固定シフトを並行して取得
+          const [shiftsResponse, fixedShiftsResponse] = await Promise.all([
+            fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&status=confirmed`),
+            fetch(`/api/fixed-shifts?user_id=${currentUser.id}&current_user_id=${currentUser.id}`)
+          ]);
+
+          let allShifts: Shift[] = [];
+
           if (shiftsResponse.ok) {
             const shiftsData = await shiftsResponse.json();
+            allShifts = [...(shiftsData.data || [])];
+          }
+
+          if (fixedShiftsResponse.ok) {
+            const fixedShiftsData = await fixedShiftsResponse.json();
+            const todayDayOfWeek = new Date(today).getDay();
             
-            // 既に代打募集があるシフトを除外
-            const allEmergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
-            if (allEmergencyResponse.ok) {
-              const allEmergencyData = await allEmergencyResponse.json();
-              const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
-                req.original_user_id === currentUser.id && req.status === 'open'
+            // 固定シフトを通常のシフト形式に変換
+            const fixedShifts = (fixedShiftsData.data || [])
+              .filter((fs: any) => fs.is_active && fs.day_of_week === todayDayOfWeek)
+              .map((fs: any) => ({
+                id: `fixed-${fs.id}`,
+                date: today,
+                user_id: fs.user_id,
+                store_id: fs.store_id,
+                time_slot_id: fs.time_slot_id,
+                status: 'confirmed',
+                stores: fs.stores,
+                time_slots: fs.time_slots,
+                isFixedShift: true
+              }));
+            
+            allShifts = [...allShifts, ...fixedShifts];
+          }
+
+          // 既に代打募集があるシフトを除外
+          const allEmergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+          if (allEmergencyResponse.ok) {
+            const allEmergencyData = await allEmergencyResponse.json();
+            const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
+              req.original_user_id === currentUser.id && req.status === 'open'
+            );
+            
+            const filteredShifts = allShifts.filter((shift: Shift) => {
+              return !existingRequests.some((req: EmergencyRequest) => 
+                req.date === shift.date && 
+                req.store_id === shift.store_id &&
+                req.time_slot_id === shift.time_slot_id
               );
-              
-              const filteredShifts = (shiftsData.data || []).filter((shift: Shift) => {
-                return !existingRequests.some((req: EmergencyRequest) => 
-                  req.date === shift.date && 
-                  req.store_id === shift.store_id &&
-                  req.time_slot_id === shift.time_slot_id
-                );
-              });
-              
-              setMyShifts(filteredShifts);
-            } else {
-              setMyShifts(shiftsData.data || []);
-            }
+            });
+            
+            setMyShifts(filteredShifts);
+          } else {
+            setMyShifts(allShifts);
           }
         }
       } catch (error) {
@@ -650,9 +680,16 @@ export default function EmergencyPage() {
                                 weekday: 'short'
                               })}
                             </h3>
-                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                              確定済み
-                            </span>
+                            <div className="flex gap-2">
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                確定済み
+                              </span>
+                              {shift.isFixedShift && (
+                                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                                  固定シフト
+                                </span>
+                              )}
+                            </div>
                           </div>
                           
                           <div className="text-sm text-gray-600">

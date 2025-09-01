@@ -37,6 +37,7 @@ export default function ShiftRequestPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Data states
   const [periods, setPeriods] = useState<SubmissionPeriod[]>([]);
@@ -326,6 +327,16 @@ export default function ShiftRequestPage() {
 
       // 既存の希望と比較して新規分のみを抽出
       const newRequests = allRequests.filter(newReq => {
+        // 既に提出済みの日付のシフトは除外
+        const hasSubmittedForDate = existingRequests.some(existing => 
+          existing.date === newReq.date && 
+          existing.status === 'submitted'
+        );
+        if (hasSubmittedForDate) {
+          return false;
+        }
+
+        // 既存の希望と完全一致するものは除外
         return !existingRequests.some(existing => {
           // 各フィールドを個別に比較
           const dateMatch = existing.date === newReq.date;
@@ -378,8 +389,16 @@ export default function ShiftRequestPage() {
       const result = await response.json();
       
       // 成功メッセージを表示
-      setSuccessMessage(`${newRequests.length}件の新しいシフト希望を追加提出しました`);
+      const message = `${newRequests.length}件の新しいシフト希望を追加提出しました`;
+      setSuccessMessage(message);
       setError(null);
+      setShowSuccessModal(true);
+
+      // 3秒後にモーダルを閉じる
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        setSuccessMessage(null);
+      }, 3000);
       
       // 既存データを更新
       await loadPeriodData();
@@ -438,15 +457,31 @@ export default function ShiftRequestPage() {
         </div>
 
         {/* 成功・エラーメッセージ */}
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-green-700 text-sm">{successMessage}</p>
-          </div>
-        )}
-        
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3">
             <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* 成功モーダル */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black opacity-30"></div>
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 relative z-10">
+              <div className="flex items-center justify-center mb-4">
+                <div className="bg-green-100 rounded-full p-3">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-lg font-medium text-center text-gray-900 mb-2">
+                提出完了
+              </h3>
+              <p className="text-sm text-gray-600 text-center">
+                {successMessage}
+              </p>
+            </div>
           </div>
         )}
 

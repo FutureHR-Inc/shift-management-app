@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
     "@supabase/supabase-js": "^2.50.3",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.2",
