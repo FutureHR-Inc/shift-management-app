@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
 import { supabase } from '@/lib/supabase';
-import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot } from '@/lib/types';
+import { DatabaseUser, DatabaseEmergencyRequest, TimeSlot, DatabaseFixedShift } from '@/lib/types';
 import { getSubmissionPeriods } from '@/lib/utils';
 
 // ダッシュボード専用の型定義
@@ -154,19 +154,21 @@ export default function DashboardPage() {
 
       // 並列でデータを取得（企業フィルタリング対応）
       const [
-        { data: shiftsData },
-        shiftRequestsResponse, // APIルート経由に変更
-        emergencyResponse, // APIルート経由に変更
-        usersResponse, // APIルート経由に変更（企業フィルタリング）
-        storesResponse, // APIルート経由に変更（企業フィルタリング）
-        timeSlotsResponse
+        shiftsResponse,
+        shiftRequestsResponse,
+        emergencyResponse,
+        usersResponse,
+        storesResponse,
+        timeSlotsResponse,
+        fixedShiftsResponse
       ] = await Promise.all([
-        supabase.from('shifts').select('*'),
-        fetch('/api/shift-requests?status=submitted'), // シフト希望APIルート経由
-        fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`), // 企業フィルタリング付き
-        fetch(`/api/users?current_user_id=${currentUser.id}`), // 企業フィルタリング
-        fetch(`/api/stores?current_user_id=${currentUser.id}`), // 企業フィルタリング
-        fetch(`/api/time-slots?current_user_id=${currentUser.id}`) // shift_patternsの代替としてtime_slotsを使用
+        fetch(`/api/shifts?current_user_id=${currentUser.id}`), // 企業フィルタリング付き
+        fetch('/api/shift-requests?status=submitted'),
+        fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`),
+        fetch(`/api/users?current_user_id=${currentUser.id}`),
+        fetch(`/api/stores?current_user_id=${currentUser.id}`),
+        fetch(`/api/time-slots?current_user_id=${currentUser.id}`),
+        fetch(`/api/fixed-shifts?current_user_id=${currentUser.id}`) // 固定シフトも取得
       ]);
 
       // emergency_requestsはAPIレスポンスから取得
@@ -187,18 +189,59 @@ export default function DashboardPage() {
         console.error('Shift requests API error:', await shiftRequestsResponse.text());
       }
 
+      // シフトデータを取得
+      let shiftsData = [];
+      if (shiftsResponse.ok) {
+        const shiftsResult = await shiftsResponse.json();
+        shiftsData = shiftsResult.data || [];
+      } else {
+        console.error('Shifts API error:', await shiftsResponse.text());
+      }
+
+      // 固定シフトデータを取得
+      let fixedShiftsData = [];
+      if (fixedShiftsResponse.ok) {
+        const fixedShiftsResult = await fixedShiftsResponse.json();
+        fixedShiftsData = fixedShiftsResult.data || [];
+      } else {
+        console.error('Fixed shifts API error:', await fixedShiftsResponse.text());
+      }
+
       // 今日の日付
       const today = new Date().toISOString().split('T')[0];
-      const allTodayShifts = (shiftsData as DashboardShift[])?.filter(shift => shift.date === today) || [];
-      const todayShifts = allTodayShifts.filter(shift => shift.status === 'confirmed');
+      const todayDayOfWeek = new Date().getDay();
+
+      // 今日の固定シフトを取得
+      const todayFixedShifts = fixedShiftsData.filter((fs: DatabaseFixedShift) => 
+        fs.day_of_week === todayDayOfWeek && 
+        fs.is_active
+      ).map((fs: DatabaseFixedShift) => ({
+        id: `fixed-${fs.id}`,
+        user_id: fs.user_id,
+        store_id: fs.store_id,
+        date: today,
+        time_slot_id: fs.time_slot_id,
+        status: 'confirmed',
+        isFixedShift: true
+      }));
+
+      // 今日の通常シフトを取得
+      const todayRegularShifts = shiftsData.filter((shift: DashboardShift) => shift.date === today);
+
+      // 全てのシフトを結合
+      const allTodayShifts = [...todayRegularShifts, ...todayFixedShifts];
+      const todayShifts = allTodayShifts.filter(shift => shift.status === 'confirmed' || shift.isFixedShift);
       
       console.log(`📅 今日の日付: ${today}`);
       console.log(`📊 今日のシフト統計:`, {
         allShifts: allTodayShifts.length,
         confirmedShifts: todayShifts.length,
+        regularShifts: todayRegularShifts.length,
+        fixedShifts: todayFixedShifts.length,
         draftShifts: allTodayShifts.filter(s => s.status === 'draft').length,
         statusBreakdown: allTodayShifts.reduce((acc, shift) => {
-          acc[shift.status] = (acc[shift.status] || 0) + 1;
+          const status = shift.isFixedShift ? 'fixed' : shift.status;
+          acc[status] = (acc[status] || 0) + 1;
           return acc;
         }, {} as Record<string, number>)
       });
@@ -281,6 +324,7 @@ export default function DashboardPage() {
 
       // 店舗別スタッフィング状況
       const staffingData = (storesData as DashboardStore[] || []).map(store => {
+        // 確定シフトと固定シフトを結合
         const storeShifts = todayShifts.filter(shift => shift.store_id === store.id);
         
         // 今日の曜日を取得
@@ -288,9 +332,16 @@ export default function DashboardPage() {
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayDayName = dayNames[today.getDay()];
         
-        // 実際に勤務するユニークなスタッフ数を計算
+        // 実際に勤務するユニークなスタッフ数を計算（確定シフトと固定シフトを含む）
         const uniqueStaffIds = new Set(storeShifts.map(shift => shift.user_id));
         const actualStaffCount = uniqueStaffIds.size;
+
+        console.log(`🏪 [${store.name}] シフト内訳:`, {
+          total: storeShifts.length,
+          fixed: storeShifts.filter(s => s.isFixedShift).length,
+          confirmed: storeShifts.filter(s => !s.isFixedShift && s.status === 'confirmed').length,
+          uniqueStaff: actualStaffCount
+        });
         
         console.log(`👥 [${store.name}] 今日のシフト:`, {
           totalShifts: storeShifts.length,

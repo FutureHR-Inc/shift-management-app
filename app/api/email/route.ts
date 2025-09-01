@@ -11,7 +11,9 @@ import {
   sendShiftRequestReminderEmail,
   sendManagerShiftRequestNotificationEmail,
   sendManagerEmergencyVolunteerNotificationEmail,
-  sendShiftChangeNotificationEmail
+  sendShiftChangeNotificationEmail,
+  sendManagerShiftConfirmationEmail,
+  sendManagerSubstituteConfirmationEmail
 } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
@@ -169,6 +171,32 @@ export async function POST(request: NextRequest) {
           rejectedEmail,
           rejectedUser,
           rejectedDetails
+        );
+        break;
+
+      case 'manager-shift-confirmation':
+        const {
+          userEmail: managerShiftEmail,
+          userName: managerShiftName,
+          details: shiftConfirmationDetails
+        } = emailData;
+        await sendManagerShiftConfirmationEmail(
+          managerShiftEmail,
+          managerShiftName,
+          shiftConfirmationDetails
+        );
+        break;
+
+      case 'manager-substitute-confirmation':
+        const {
+          userEmail: managerSubEmail,
+          userName: managerSubName,
+          details: subConfirmationDetails
+        } = emailData;
+        await sendManagerSubstituteConfirmationEmail(
+          managerSubEmail,
+          managerSubName,
+          subConfirmationDetails
         );
         break;
 

@@ -310,6 +310,73 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      // 店長への通知メール送信
+      try {
+        // 店舗の管理者情報を取得
+        const { data: storeData } = await supabase
+          .from('stores')
+          .select(`
+            id,
+            name,
+            users!store_managers(
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', emergencyRequest.store_id)
+          .single();
+
+        // 応募者の情報を取得
+        const { data: volunteerUser } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', volunteer.user_id)
+          .single();
+
+        // 元のスタッフの情報を取得
+        const { data: originalUser } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', emergencyRequest.original_user_id)
+          .single();
+
+        if (storeData?.users) {
+          const managers = storeData.users;
+          for (const manager of managers) {
+            if (manager.email) {
+              const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  type: 'manager-substitute-confirmation',
+                  userEmail: manager.email,
+                  userName: manager.name || '不明',
+                  details: {
+                    storeName: storeData.name || '不明な店舗',
+                    date: emergencyRequest.date,
+                    timeSlot: emergencyRequest.time_slots?.name || '不明',
+                    originalStaffName: originalUser?.name || '不明',
+                    newStaffName: volunteerUser?.name || '不明'
+                  }
+                }),
+              });
+
+              if (!managerEmailResponse.ok) {
+                console.warn('店長への代打確定通知メール送信に失敗しました');
+              } else {
+                console.log('店長への代打確定通知メールを送信しました');
+              }
+            }
+          }
+        }
+      } catch (managerEmailError) {
+        console.error('店長へのメール送信エラー:', managerEmailError);
+        // 店長へのメール送信失敗でも処理は続行
+      }
+
       // 緊急募集を完了状態に更新
       const { error: updateError } = await supabase
         .from('emergency_requests')

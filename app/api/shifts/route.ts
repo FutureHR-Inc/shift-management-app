@@ -466,7 +466,60 @@ export async function PATCH(request: NextRequest) {
         });
 
         await Promise.all(emailPromises);
-        console.log('🎉 全てのシフト確定メール送信処理が完了しました');
+        console.log('🎉 全てのスタッフへのシフト確定メール送信処理が完了しました');
+
+        // 店長への通知メール送信
+        try {
+          // 店舗の管理者情報を取得
+          const { data: storeData } = await supabase
+            .from('stores')
+            .select(`
+              id,
+              name,
+              users!store_managers(
+                id,
+                name,
+                email
+              )
+            `)
+            .eq('id', store_id)
+            .single();
+
+          if (storeData?.users) {
+            const managers = storeData.users;
+            for (const manager of managers) {
+              if (manager.email) {
+                const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    type: 'manager-shift-confirmation',
+                    userEmail: manager.email,
+                    userName: manager.name || '不明',
+                    details: {
+                      storeName: storeData.name || '不明な店舗',
+                      period: `${weekStartStr} ～ ${weekEndStr}`,
+                      confirmedShiftsCount: updatedShifts.length
+                    }
+                  }),
+                });
+
+                if (!managerEmailResponse.ok) {
+                  console.warn('店長へのシフト確定通知メール送信に失敗しました');
+                } else {
+                  console.log('店長へのシフト確定通知メールを送信しました');
+                }
+              }
+            }
+          }
+        } catch (managerEmailError) {
+          console.error('店長へのメール送信エラー:', managerEmailError);
+          // 店長へのメール送信失敗でもシフト確定は成功とする
+        }
+
+        console.log('🎉 全てのメール送信処理が完了しました');
       } catch (emailError) {
         console.error('❌ シフト確定メール送信エラー:', emailError);
         console.error('エラースタック:', emailError instanceof Error ? emailError.stack : 'No stack trace');

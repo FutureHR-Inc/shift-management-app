@@ -959,6 +959,118 @@ export async function sendShiftChangeNotificationEmail(
 /**
  * スタッフ向け：代打応募不採用通知メールを送信
  */
+/**
+ * 店長向け：シフト確定完了通知メールを送信
+ */
+export async function sendManagerShiftConfirmationEmail(
+  managerEmail: string,
+  managerName: string,
+  details: {
+    storeName: string;
+    period: string;
+    confirmedShiftsCount: number;
+  }
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>シフト確定完了通知</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #10b981; border-bottom: 2px solid #10b981; padding-bottom: 10px;">
+          シフト確定完了通知
+        </h1>
+        
+        <p>お疲れ様です、${managerName}さん。</p>
+        
+        <p>${details.storeName}の${details.period}のシフトが確定されました。</p>
+        
+        <div style="background-color: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <h3 style="margin: 0 0 15px 0; color: #10b981;">確定内容</h3>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>対象期間:</strong> ${details.period}</p>
+          <p style="margin: 5px 0;"><strong>確定シフト数:</strong> ${details.confirmedShiftsCount}件</p>
+        </div>
+        
+        <p>スタッフへの通知メールは自動送信されます。</p>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: managerEmail,
+    subject: `【シフト確定完了】${details.storeName}の${details.period}のシフトを確定しました`,
+    html,
+  });
+}
+
+/**
+ * 店長向け：代打確定通知メールを送信
+ */
+export async function sendManagerSubstituteConfirmationEmail(
+  managerEmail: string,
+  managerName: string,
+  details: {
+    storeName: string;
+    date: string;
+    timeSlot: string;
+    originalStaffName: string;
+    newStaffName: string;
+  }
+) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>代打確定通知</title>
+    </head>
+    <body style="font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #3b82f6; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+          代打確定通知
+        </h1>
+        
+        <p>お疲れ様です、${managerName}さん。</p>
+        
+        <p>代打の確定処理が完了しましたので、お知らせいたします。</p>
+        
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+          <h3 style="margin: 0 0 15px 0; color: #3b82f6;">確定内容</h3>
+          <p style="margin: 5px 0;"><strong>店舗:</strong> ${details.storeName}</p>
+          <p style="margin: 5px 0;"><strong>日付:</strong> ${details.date}</p>
+          <p style="margin: 5px 0;"><strong>シフト:</strong> ${details.timeSlot}</p>
+          <p style="margin: 5px 0;"><strong>元のスタッフ:</strong> ${details.originalStaffName}</p>
+          <p style="margin: 5px 0;"><strong>代打スタッフ:</strong> ${details.newStaffName}</p>
+        </div>
+        
+        <p>関係するスタッフへの通知メールは自動送信されます。</p>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 14px;">
+          <p>このメールは自動送信されています。</p>
+          <p>シフト管理システム</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: managerEmail,
+    subject: `【代打確定】${details.date} ${details.storeName}の代打が確定しました`,
+    html,
+  });
+}
+
 export async function sendSubstituteRejectedEmail(
   userEmail: string,
   userName: string,

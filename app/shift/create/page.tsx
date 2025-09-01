@@ -62,25 +62,26 @@ function ShiftCreatePageInner() {
   // 表示期間モードに応じた適切な開始日を取得
   const getAppropriateStartDate = (mode: 'week' | 'half-month' | 'month') => {
     const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const date = today.getDate();
     
     switch (mode) {
       case 'week':
-        return getCurrentWeekMonday();
+        // 今日の日付を取得
+        return today.toISOString().split('T')[0];
       case 'half-month':
-        // 今月の1日または15日のうち、今日に近い方
-        const currentDate = today.getDate();
-        const firstHalf = new Date(today.getFullYear(), today.getMonth(), 1);
-        const secondHalf = new Date(today.getFullYear(), today.getMonth(), 15);
-        
-        return currentDate < 15 
-          ? firstHalf.toISOString().split('T')[0]
-          : secondHalf.toISOString().split('T')[0];
+        // 1-15日と16日-月末で分割
+        if (date <= 15) {
+          return new Date(year, month, 1).toISOString().split('T')[0];
+        } else {
+          return new Date(year, month, 16).toISOString().split('T')[0];
+        }
       case 'month':
-        // 今月の1日
-        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        return monthStart.toISOString().split('T')[0];
+        // 月の1日
+        return new Date(year, month, 1).toISOString().split('T')[0];
       default:
-        return getCurrentWeekMonday();
+        return today.toISOString().split('T')[0];
     }
   };
 
@@ -600,32 +601,45 @@ function ShiftCreatePageInner() {
 
   // 表示期間に応じた日付を生成
   const getDisplayDates = (startDate: string, mode: 'week' | 'half-month' | 'month') => {
-    const start = new Date(startDate);
     const dates = [];
-    let dayCount = 7; // デフォルトは週表示
+    const date = new Date(startDate);
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    
+    // 月の最終日を取得
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
 
     switch (mode) {
       case 'week':
-        dayCount = 7;
+        // 選択された日から1週間
+        for (let i = 0; i < 7; i++) {
+          const currentDate = new Date(year, month, day + i);
+          dates.push(currentDate);
+        }
         break;
+
       case 'half-month':
-        dayCount = 14;
+        // 1-15日または16日-月末
+        const isFirstHalf = day <= 15;
+        const startDay = isFirstHalf ? 1 : 16;
+        const endDay = isFirstHalf ? 15 : lastDayOfMonth;
+        
+        for (let i = startDay; i <= endDay; i++) {
+          const currentDate = new Date(year, month, i);
+          dates.push(currentDate);
+        }
         break;
+
       case 'month':
-        // 月の開始日に調整
-        start.setDate(1);
-        const year = start.getFullYear();
-        const month = start.getMonth();
-        const lastDay = new Date(year, month + 1, 0).getDate();
-        dayCount = lastDay;
+        // 月の1日から月末まで
+        for (let i = 1; i <= lastDayOfMonth; i++) {
+          const currentDate = new Date(year, month, i);
+          dates.push(currentDate);
+        }
         break;
     }
 
-    for (let i = 0; i < dayCount; i++) {
-      const date = new Date(start);
-      date.setDate(start.getDate() + i);
-      dates.push(date);
-    }
     return dates;
   };
 
@@ -2303,10 +2317,25 @@ function ShiftCreatePageInner() {
                     <Button
                       variant="secondary"
                       onClick={() => {
-                        const prevWeek = new Date(selectedWeek);
-                        prevWeek.setDate(prevWeek.getDate() - 
-                          (viewMode === 'half-month' ? 14 : 7));
-                        setSelectedWeek(prevWeek.toISOString().split('T')[0]);
+                        const currentDate = new Date(selectedWeek);
+                        
+                        if (viewMode === 'half-month') {
+                          // 半月表示の場合
+                          const day = currentDate.getDate();
+                          if (day >= 16) {
+                            // 後半から前半へ
+                            currentDate.setDate(1);
+                          } else {
+                            // 前半から前月後半へ
+                            currentDate.setMonth(currentDate.getMonth() - 1);
+                            currentDate.setDate(16);
+                          }
+                        } else {
+                          // 週表示の場合
+                          currentDate.setDate(currentDate.getDate() - 7);
+                        }
+                        
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
@@ -2319,17 +2348,40 @@ function ShiftCreatePageInner() {
                     <input
                       type="date"
                       value={selectedWeek}
-                      onChange={(e) => setSelectedWeek(e.target.value)}
+                      onChange={(e) => {
+                        const selectedDate = new Date(e.target.value);
+                        if (viewMode === 'half-month') {
+                          // 1日か16日に調整
+                          const day = selectedDate.getDate();
+                          selectedDate.setDate(day < 16 ? 1 : 16);
+                        }
+                        setSelectedWeek(selectedDate.toISOString().split('T')[0]);
+                      }}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       disabled={loading}
                     />
                     <Button
                       variant="secondary"
                       onClick={() => {
-                        const nextWeek = new Date(selectedWeek);
-                        nextWeek.setDate(nextWeek.getDate() + 
-                          (viewMode === 'half-month' ? 14 : 7));
-                        setSelectedWeek(nextWeek.toISOString().split('T')[0]);
+                        const currentDate = new Date(selectedWeek);
+                        
+                        if (viewMode === 'half-month') {
+                          // 半月表示の場合
+                          const day = currentDate.getDate();
+                          if (day >= 16) {
+                            // 後半から次月前半へ
+                            currentDate.setMonth(currentDate.getMonth() + 1);
+                            currentDate.setDate(1);
+                          } else {
+                            // 前半から後半へ
+                            currentDate.setDate(16);
+                          }
+                        } else {
+                          // 週表示の場合
+                          currentDate.setDate(currentDate.getDate() + 7);
+                        }
+                        
+                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
