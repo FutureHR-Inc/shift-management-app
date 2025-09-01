@@ -4,11 +4,14 @@ import { supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+type RouteParams = {
+  params: {
+    id: string;
+  };
+};
+
 // PUT: シフトの更新（個別）
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = params;
     const body = await request.json();
@@ -134,10 +137,7 @@ export async function PUT(
 }
 
 // DELETE: シフトの削除（個別）
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = params;
 
