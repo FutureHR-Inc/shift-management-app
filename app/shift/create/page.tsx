@@ -602,19 +602,21 @@ function ShiftCreatePageInner() {
   // 表示期間に応じた日付を生成
   const getDisplayDates = (startDate: string, mode: 'week' | 'half-month' | 'month') => {
     const dates = [];
-    const date = new Date(startDate);
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const day = date.getDate();
     
-    // 月の最終日を取得
-    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    // 日付文字列を 'YYYY-MM-DD' 形式で解析（タイムゾーンの影響を受けないように）
+    const [yearStr, monthStr, dayStr] = startDate.split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr) - 1; // JavaScriptの月は0-11
+    const day = parseInt(dayStr);
+    
+    // 月の最終日を取得（タイムゾーンの影響を受けないように）
+    const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
     switch (mode) {
       case 'week':
         // 選択された日から1週間
         for (let i = 0; i < 7; i++) {
-          const currentDate = new Date(year, month, day + i);
+          const currentDate = new Date(Date.UTC(year, month, day + i));
           dates.push(currentDate);
         }
         break;
@@ -626,7 +628,7 @@ function ShiftCreatePageInner() {
         const endDay = isFirstHalf ? 15 : lastDayOfMonth;
         
         for (let i = startDay; i <= endDay; i++) {
-          const currentDate = new Date(year, month, i);
+          const currentDate = new Date(Date.UTC(year, month, i));
           dates.push(currentDate);
         }
         break;
@@ -634,7 +636,7 @@ function ShiftCreatePageInner() {
       case 'month':
         // 月の1日から月末まで
         for (let i = 1; i <= lastDayOfMonth; i++) {
-          const currentDate = new Date(year, month, i);
+          const currentDate = new Date(Date.UTC(year, month, i));
           dates.push(currentDate);
         }
         break;
@@ -696,7 +698,9 @@ function ShiftCreatePageInner() {
       });
 
       // 固定シフトをチェックして追加（期間制限なし・恒常表示）
-      const dayOfWeek = new Date(date).getDay();
+      // 日付文字列を 'YYYY-MM-DD' 形式で解析（タイムゾーンの影響を受けないように）
+      const [yearStr, monthStr, dayStr] = date.split('-');
+      const dayOfWeek = new Date(Date.UTC(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr))).getUTCDay();
       console.log(`🔍 [getShiftForSlot] ${date} (${dayOfWeek}曜日) - ${timeSlot}`);
       
       const fixedShiftsForSlot = fixedShifts.filter(fixedShift => 
