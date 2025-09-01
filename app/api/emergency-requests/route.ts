@@ -163,7 +163,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    // 緊急募集リクエストを作成
+    const { data: emergencyRequest, error } = await supabase
       .from('emergency_requests')
       .insert({
         original_user_id,
@@ -174,7 +175,12 @@ export async function POST(req: NextRequest) {
         request_type,
         status: 'open'
       })
-      .select()
+      .select(`
+        *,
+        stores(id, name),
+        time_slots(id, name, start_time, end_time),
+        original_user:users!original_user_id(id, name)
+      `)
       .single();
 
     if (error) {
@@ -185,7 +191,60 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ data }, { status: 201, headers: corsHeaders });
+    try {
+      // 同じ店舗の他のスタッフにメール通知
+      const { data: eligibleStaff } = await supabase
+        .from('users')
+        .select('id, name, email')
+        .eq('role', 'staff')
+        .eq('company_id', emergencyRequest.stores?.company_id)
+        .neq('id', original_user_id); // 募集作成者を除外
+
+      if (eligibleStaff && eligibleStaff.length > 0) {
+        const staffEmails = eligibleStaff
+          .filter(staff => staff.email) // メールアドレスがあるスタッフのみ
+          .map(staff => staff.email);
+
+        if (staffEmails.length > 0) {
+          try {
+            const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'emergency-shift-request',
+                userEmails: staffEmails,
+                details: {
+                  storeName: emergencyRequest.stores?.name || '不明な店舗',
+                  date: emergencyRequest.date,
+                  shiftPattern: emergencyRequest.time_slots?.name || 'カスタム時間',
+                  startTime: emergencyRequest.time_slots?.start_time || '00:00',
+                  endTime: emergencyRequest.time_slots?.end_time || '00:00',
+                  reason: emergencyRequest.reason,
+                }
+              }),
+            });
+
+            if (!emailResponse.ok) {
+              const errorText = await emailResponse.text();
+              throw new Error(`メール送信に失敗: ${errorText}`);
+            }
+
+            const responseData = await emailResponse.json();
+            console.log('✅ 代打募集開始メール送信成功:', responseData);
+          } catch (emailError) {
+            console.error('❌ 代打募集開始メール送信エラー:', emailError);
+            // メール送信失敗は緊急募集作成の成功に影響させない
+          }
+        }
+      }
+    } catch (staffError) {
+      console.error('スタッフ情報の取得に失敗:', staffError);
+      // スタッフ情報取得失敗は緊急募集作成の成功に影響させない
+    }
+
+    return NextResponse.json({ data: emergencyRequest }, { status: 201, headers: corsHeaders });
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(
@@ -246,22 +305,78 @@ export async function PATCH(req: NextRequest) {
 
       // 既存のシフトを確認（代打募集の場合のみ）
       if (emergencyRequest.request_type === 'substitute') {
-        // 元のシフトを削除
-        const { error: deleteError } = await supabase
-          .from('shifts')
-          .delete()
+        // 固定シフトかどうかを確認
+        const { data: fixedShift, error: fixedShiftError } = await supabase
+          .from('fixed_shifts')
+          .select('*')
           .eq('user_id', emergencyRequest.original_user_id)
           .eq('store_id', emergencyRequest.store_id)
-          .eq('date', emergencyRequest.date)
           .eq('time_slot_id', emergencyRequest.time_slot_id)
-          .eq('status', 'confirmed');
+          .eq('day_of_week', new Date(emergencyRequest.date).getDay())
+          .eq('is_active', true)
+          .maybeSingle();
 
-        if (deleteError) {
-          console.error('元のシフトの削除に失敗:', deleteError);
+        if (fixedShiftError) {
+          console.error('固定シフトの確認に失敗:', fixedShiftError);
           return NextResponse.json(
-            { error: '元のシフトの削除に失敗しました' },
+            { error: '固定シフトの確認に失敗しました' },
             { status: 500, headers: corsHeaders }
           );
+        }
+
+        if (fixedShift) {
+          // 固定シフトの場合、非アクティブにして新しい固定シフトを作成
+          const { error: deactivateError } = await supabase
+            .from('fixed_shifts')
+            .update({ is_active: false })
+            .eq('id', fixedShift.id);
+
+          if (deactivateError) {
+            console.error('固定シフトの無効化に失敗:', deactivateError);
+            return NextResponse.json(
+              { error: '固定シフトの無効化に失敗しました' },
+              { status: 500, headers: corsHeaders }
+            );
+          }
+
+          // 新しい固定シフトを作成
+          const { error: newFixedShiftError } = await supabase
+            .from('fixed_shifts')
+            .insert({
+              user_id: volunteer.user_id,
+              store_id: emergencyRequest.store_id,
+              time_slot_id: emergencyRequest.time_slot_id,
+              day_of_week: new Date(emergencyRequest.date).getDay(),
+              is_active: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (newFixedShiftError) {
+            console.error('新しい固定シフトの作成に失敗:', newFixedShiftError);
+            return NextResponse.json(
+              { error: '新しい固定シフトの作成に失敗しました' },
+              { status: 500, headers: corsHeaders }
+            );
+          }
+        } else {
+          // 通常シフトの場合、元のシフトを削除
+          const { error: deleteError } = await supabase
+            .from('shifts')
+            .delete()
+            .eq('user_id', emergencyRequest.original_user_id)
+            .eq('store_id', emergencyRequest.store_id)
+            .eq('date', emergencyRequest.date)
+            .eq('time_slot_id', emergencyRequest.time_slot_id)
+            .eq('status', 'confirmed');
+
+          if (deleteError) {
+            console.error('元のシフトの削除に失敗:', deleteError);
+            return NextResponse.json(
+              { error: '元のシフトの削除に失敗しました' },
+              { status: 500, headers: corsHeaders }
+            );
+          }
         }
       }
 
@@ -285,29 +400,67 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      // 元のスタッフにメール通知（代打募集の場合のみ）
-      if (emergencyRequest.request_type === 'substitute') {
-        try {
-          const { data: originalUser } = await supabase
-            .from('users')
-            .select('email, name')
-            .eq('id', emergencyRequest.original_user_id)
-            .single();
+      // 元のスタッフと応募者にメール通知
+      try {
+        // 元のスタッフの情報を取得
+        const { data: originalUser } = await supabase
+          .from('users')
+          .select('email, name')
+          .eq('id', emergencyRequest.original_user_id)
+          .single();
 
-          if (originalUser) {
-            // メール送信処理（実装は省略）
-            console.log('元のスタッフにメール通知:', {
-              to: originalUser.email,
-              subject: '代打が見つかりました',
-              name: originalUser.name,
-              date: emergencyRequest.date,
-              timeSlot: emergencyRequest.time_slots?.name
+        // 応募者の情報を取得
+        const { data: volunteerUser } = await supabase
+          .from('users')
+          .select('email, name')
+          .eq('id', volunteer.user_id)
+          .single();
+
+        // 店舗情報を取得
+        const { data: store } = await supabase
+          .from('stores')
+          .select('name')
+          .eq('id', emergencyRequest.store_id)
+          .single();
+
+        if (originalUser?.email && volunteerUser?.email) {
+          try {
+            const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'substitute-approved',
+                approvedUserEmail: volunteerUser.email,
+                approvedUserName: volunteerUser.name || '不明',
+                originalUserEmail: originalUser.email,
+                originalUserName: originalUser.name || '不明',
+                details: {
+                  storeName: store?.name || '不明な店舗',
+                  date: emergencyRequest.date,
+                  timeSlot: emergencyRequest.time_slots?.name || 'カスタム時間',
+                  startTime: emergencyRequest.time_slots?.start_time || '00:00',
+                  endTime: emergencyRequest.time_slots?.end_time || '00:00'
+                }
+              }),
             });
+
+            if (!emailResponse.ok) {
+              const errorText = await emailResponse.text();
+              throw new Error(`メール送信に失敗: ${errorText}`);
+            }
+
+            const responseData = await emailResponse.json();
+            console.log('✅ 代打決定メール送信成功:', responseData);
+          } catch (emailError) {
+            console.error('❌ 代打決定メール送信エラー:', emailError);
+            // メール送信失敗はシフト作成に影響させない
           }
-        } catch (error) {
-          console.error('メール通知エラー:', error);
-          // メール送信失敗はシフト作成に影響させない
         }
+      } catch (error) {
+        console.error('メール通知用のユーザー情報取得エラー:', error);
+        // メール送信失敗はシフト作成に影響させない
       }
 
       // 店長への通知メール送信
