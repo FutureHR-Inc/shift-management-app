@@ -59,7 +59,10 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
   return (
     <div className="lg:hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-auto" style={{ minWidth: viewMode === 'month' ? '1600px' : viewMode === 'half-month' ? '1000px' : '700px' }}>
+        <table className="w-full border-collapse table-auto" style={{ 
+          minWidth: viewMode === 'month' ? '1200px' : viewMode === 'half-month' ? '800px' : '600px',
+          maxWidth: viewMode === 'month' ? '2000px' : viewMode === 'half-month' ? '1400px' : '1000px'
+        }}>
           <thead>
             <tr className="border-b border-gray-200">
               <th className="text-left p-2 sm:p-3 font-medium text-gray-900 bg-gray-50 sticky left-0 z-10 text-xs sm:text-sm min-w-[80px]">時間帯</th>
@@ -112,13 +115,13 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                           onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
                         >
                           {/* 必要人数表示 */}
-                          <div className="flex items-center justify-between mb-1 sm:mb-2">
-                            <span className="text-xs sm:text-sm font-medium text-gray-600">
+                          <div className="flex items-center justify-between mb-1 sm:mb-2 min-h-[24px] sm:min-h-[28px]">
+                            <span className="text-xs sm:text-sm font-medium text-gray-600 whitespace-nowrap">
                               {current}/{required}人
                             </span>
                             {current < required ? (
                               <button
-                                                                  onClick={(e) => {
+                                onClick={(e) => {
                                     e.stopPropagation();
                                     try {
                                                                           // 不足分の募集用にデータを作成
@@ -141,9 +144,9 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                       console.error('Error showing emergency modal for shortage:', error);
                                     }
                                   }}
-                                className="text-xs sm:text-sm px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 active:bg-red-300"
+                                className="text-xs sm:text-sm px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 active:bg-red-300 whitespace-nowrap shrink-0 ml-1"
                               >
-                                募集 {required - current}人
+                                募集{required - current}人
                               </button>
                             ) : current > required ? (
                               <span className="text-xs sm:text-sm">🔵</span>
@@ -240,16 +243,20 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                     >
                                       {/* スマホ・タブレット版：詳細表示 */}
                                       <div className="flex items-center justify-between">
-                                        <div className="flex-1 mr-1">
-                                          <div className="font-medium truncate">
-                                            {isFixedShift && <span className="mr-1">📌</span>}
-                                            {!isFixedShift && isConfirmed && <span className="mr-1">✅</span>}
-                                            {!isFixedShift && shift.status === 'draft' && <span className="mr-1">📝</span>}
-                                            {!isFixedShift && hasCustomTime && <span className="mr-1">⏰</span>}
-                                            {user.name}
+                                        <div className="flex-1 mr-1 min-w-0">
+                                          <div className="flex items-center space-x-1 mb-0.5">
+                                            <div className="flex-shrink-0">
+                                              {isFixedShift && <span>📌</span>}
+                                              {!isFixedShift && isConfirmed && <span>✅</span>}
+                                              {!isFixedShift && shift.status === 'draft' && <span>📝</span>}
+                                              {!isFixedShift && hasCustomTime && <span>⏰</span>}
+                                            </div>
+                                            <div className="font-medium truncate">
+                                              {user.name}
+                                            </div>
                                           </div>
                                           {/* 時間表示 */}
-                                          <div className="text-xs text-gray-500 mt-0.5">
+                                          <div className="text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis">
                                             {hasCustomTime 
                                               ? `${shift.customStartTime || timeSlotData.start_time}-${shift.customEndTime || timeSlotData.end_time}`
                                               : `${timeSlotData.start_time}-${timeSlotData.end_time}`
@@ -275,24 +282,27 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           )}
                                         </div>
                                       </div>
-                                      {/* カスタム時間表示 */}
-                                      {(shift.customStartTime && shift.customEndTime) && (
-                                        <div className="text-xs text-purple-600 mt-1">
-                                          ⏰ {shift.customStartTime}-{shift.customEndTime}
-                                        </div>
-                                      )}
-                                      {/* 固定シフト表示 */}
-                                      {isFixedShift && (
-                                        <div className="text-xs text-green-600 mt-1">
-                                          📌 固定
-                                        </div>
-                                      )}
-                                      {/* 確定マーク */}
-                                      {isConfirmed && !isFixedShift && (
-                                        <div className="text-xs text-blue-600 mt-1">
-                                          ✓ 確定
-                                        </div>
-                                      )}
+                                      {/* ステータスバッジ */}
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {/* カスタム時間表示 */}
+                                        {(shift.customStartTime && shift.customEndTime) && (
+                                          <div className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                            ⏰ {shift.customStartTime}-{shift.customEndTime}
+                                          </div>
+                                        )}
+                                        {/* 固定シフト表示 */}
+                                        {isFixedShift && (
+                                          <div className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                            📌 固定
+                                          </div>
+                                        )}
+                                        {/* 確定マーク */}
+                                        {isConfirmed && !isFixedShift && (
+                                          <div className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                            ✓ 確定
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 } catch (shiftError) {

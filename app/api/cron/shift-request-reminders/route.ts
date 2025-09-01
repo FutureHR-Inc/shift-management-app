@@ -26,7 +26,15 @@ export async function GET(request: NextRequest) {
     // 今日が提出期間内かチェック
     for (const period of currentPeriods) {
       const deadlineDate = new Date(period.submissionDeadline);
-      const reminderDate = new Date(deadlineDate.getTime() - 24 * 60 * 60 * 1000); // 締切1日前
+      const reminderDate = new Date(deadlineDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 締切3日前
+
+      console.log('🔍 期間チェック:', {
+        period: period.label,
+        deadline: period.submissionDeadline,
+        reminderDate: reminderDate.toISOString(),
+        today: jstToday.toISOString(),
+        isInRange: jstToday >= reminderDate && jstToday <= deadlineDate
+      });
 
       if (jstToday >= reminderDate && jstToday <= deadlineDate) {
         activeSubmissionPeriod = period.label;
@@ -97,12 +105,28 @@ export async function GET(request: NextRequest) {
     console.log(`${unsubmittedStaff.length}人の未提出スタッフにリマインダーを送信します`);
 
     // リマインダーメール送信データを準備
+    console.log('📧 未提出スタッフ:', unsubmittedStaff.map(staff => ({
+      id: staff.id,
+      name: staff.name,
+      email: staff.email
+    })));
+
     const reminders = unsubmittedStaff.map(staff => ({
       userEmail: staff.email!,
       userName: staff.name || '不明',
       submissionPeriod: activeSubmissionPeriod!,
       deadline: deadline!
     }));
+
+    console.log('📧 送信予定のリマインダー:', {
+      count: reminders.length,
+      period: activeSubmissionPeriod,
+      deadline: deadline,
+      reminders: reminders.map(r => ({
+        email: r.userEmail,
+        name: r.userName
+      }))
+    });
 
     // バッチ処理でメール送信
     const results = await sendBatchShiftRequestReminders(reminders);

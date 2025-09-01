@@ -385,7 +385,7 @@ export async function PATCH(request: NextRequest) {
       .lte('date', weekEndStr)
       .select(`
         *,
-        users(id, name, role, skill_level),
+        users(id, name, email, role, skill_level),
         stores(id, name),
         time_slots(id, name, start_time, end_time)
       `);
@@ -435,34 +435,47 @@ export async function PATCH(request: NextRequest) {
           console.log('📤 メール送信試行:', {
             email: group.user.email,
             name: group.user.name,
-            shiftsCount: group.shifts.length
+            shiftsCount: group.shifts.length,
+            shifts: group.shifts.map((s: any) => ({
+              date: s.date,
+              timeSlot: s.time_slots?.name,
+              store: s.stores?.name
+            }))
           });
 
-          const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              type: 'shift-confirmation',
-              userEmail: group.user.email,
-              userName: group.user.name || '不明',
-              shifts: group.shifts.map((shift: any) => ({
-                date: shift.date,
-                storeName: shift.stores?.name || '不明な店舗',
-                shiftPattern: shift.time_slots?.name || 'カスタム時間',
-                startTime: shift.custom_start_time || shift.time_slots?.start_time || '00:00',
-                endTime: shift.custom_end_time || shift.time_slots?.end_time || '00:00'
-              }))
-            }),
-          });
+          try {
+            const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'shift-confirmation',
+                userEmail: group.user.email,
+                userName: group.user.name || '不明',
+                shifts: group.shifts.map((shift: any) => ({
+                  date: shift.date,
+                  storeName: shift.stores?.name || '不明な店舗',
+                  shiftPattern: shift.time_slots?.name || 'カスタム時間',
+                  startTime: shift.custom_start_time || shift.time_slots?.start_time || '00:00',
+                  endTime: shift.custom_end_time || shift.time_slots?.end_time || '00:00'
+                }))
+              }),
+            });
 
-          if (!emailResponse.ok) {
-            const errorText = await emailResponse.text();
-            console.error(`❌ シフト確定メール送信に失敗: ${group.user.email}`, errorText);
-          } else {
-            console.log(`✅ シフト確定メール送信成功: ${group.user.email}`);
+            if (!emailResponse.ok) {
+              const errorText = await emailResponse.text();
+              throw new Error(`メール送信に失敗: ${errorText}`);
+            }
+
+            const responseData = await emailResponse.json();
+            console.log(`✅ シフト確定メール送信成功: ${group.user.email}`, responseData);
+          } catch (error) {
+            console.error(`❌ シフト確定メール送信エラー: ${group.user.email}`, error);
+            throw error;
           }
+
+          // エラーハンドリングは上のtry-catchブロックで行われます
         });
 
         await Promise.all(emailPromises);
@@ -489,27 +502,34 @@ export async function PATCH(request: NextRequest) {
             const managers = storeData.users;
             for (const manager of managers) {
               if (manager.email) {
-                const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    type: 'manager-shift-confirmation',
-                    userEmail: manager.email,
-                    userName: manager.name || '不明',
-                    details: {
-                      storeName: storeData.name || '不明な店舗',
-                      period: `${weekStartStr} ～ ${weekEndStr}`,
-                      confirmedShiftsCount: updatedShifts.length
-                    }
-                  }),
-                });
+                try {
+                  const managerEmailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/email`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      type: 'manager-shift-confirmation',
+                      userEmail: manager.email,
+                      userName: manager.name || '不明',
+                      details: {
+                        storeName: storeData.name || '不明な店舗',
+                        period: `${weekStartStr} ～ ${weekEndStr}`,
+                        confirmedShiftsCount: updatedShifts.length
+                      }
+                    }),
+                  });
 
-                if (!managerEmailResponse.ok) {
-                  console.warn('店長へのシフト確定通知メール送信に失敗しました');
-                } else {
-                  console.log('店長へのシフト確定通知メールを送信しました');
+                  if (!managerEmailResponse.ok) {
+                    const errorText = await managerEmailResponse.text();
+                    throw new Error(`店長へのメール送信に失敗: ${errorText}`);
+                  }
+
+                  const responseData = await managerEmailResponse.json();
+                  console.log(`✅ 店長へのシフト確定通知メール送信成功: ${manager.email}`, responseData);
+                } catch (error) {
+                  console.error(`❌ 店長へのシフト確定通知メール送信エラー: ${manager.email}`, error);
+                  throw error;
                 }
               }
             }

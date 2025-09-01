@@ -7,10 +7,10 @@ export const revalidate = 0;
 // PUT: シフトの更新（個別）
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const body = await request.json();
     const {
       user_id,
@@ -136,10 +136,10 @@ export async function PUT(
 // DELETE: シフトの削除（個別）
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
 
     // 削除前のシフト情報を取得
     const { data: oldShift, error: oldShiftError } = await supabase
