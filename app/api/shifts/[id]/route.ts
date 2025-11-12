@@ -5,9 +5,12 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // PUT: シフトの更新（個別）
-export async function PUT(request: NextRequest) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const id = request.nextUrl.pathname.split('/').pop();
+    const { id } = await params;
     const body = await request.json();
     const {
       user_id,
@@ -131,9 +134,12 @@ export async function PUT(request: NextRequest) {
 }
 
 // DELETE: シフトの削除（個別）
-export async function DELETE(request: NextRequest) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const id = request.nextUrl.pathname.split('/').pop();
+    const { id } = await params;
 
     // 削除前のシフト情報を取得
     const { data: oldShift, error: oldShiftError } = await supabase

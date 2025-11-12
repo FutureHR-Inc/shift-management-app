@@ -343,6 +343,11 @@ function StaffPageContent() {
       const updatedUsers = await fetchUsers();
       setUsers(updatedUsers);
 
+      // 時給更新を他のページに通知（シフト作成ページなどで使用）
+      window.dispatchEvent(new CustomEvent('userDataUpdated', { detail: { userId: editingUser?.id } }));
+      // ストレージイベントも発火（別タブへの通知）
+      localStorage.setItem('userDataUpdate', JSON.stringify({ userId: editingUser?.id, timestamp: Date.now() }));
+
       setIsModalOpen(false);
       resetForm();
     } catch (error) {

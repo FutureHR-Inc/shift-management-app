@@ -84,6 +84,7 @@ interface CurrentUser {
 export default function EmergencyPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequest[]>([]);
+  const [myEmergencyRequests, setMyEmergencyRequests] = useState<EmergencyRequest[]>([]);
   const [myShifts, setMyShifts] = useState<Shift[]>([]);
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [reason, setReason] = useState('');
@@ -136,11 +137,15 @@ export default function EmergencyPage() {
         const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
         if (emergencyResponse.ok) {
           const emergencyData = await emergencyResponse.json();
-          // オープン状態で、自分が作成したもの以外の代打募集のみを表示
-          const openRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          // 自分が作成した代打募集と他のスタッフの代打募集を分ける
+          const myRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+            req.original_user_id === currentUser.id && req.status === 'open'
+          );
+          const otherRequests = emergencyData.data.filter((req: EmergencyRequest) => 
             req.status === 'open' && req.original_user_id !== currentUser.id
           );
-          setEmergencyRequests(openRequests);
+          setMyEmergencyRequests(myRequests);
+          setEmergencyRequests(otherRequests);
         }
 
         // スタッフの場合は確定済みシフトと固定シフトを取得
@@ -207,9 +212,10 @@ export default function EmergencyPage() {
           const allEmergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
           if (allEmergencyResponse.ok) {
             const allEmergencyData = await allEmergencyResponse.json();
-            const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
-              req.original_user_id === currentUser.id && req.status === 'open'
-            );
+              // すべての状態の代打募集を取得（open, filled, closed）
+  const existingRequests = allEmergencyData.data.filter((req: EmergencyRequest) => 
+    req.original_user_id === currentUser.id
+  );
             
             // 今日以降のシフトのみを抽出
             const today = new Date().toISOString().split('T')[0];
@@ -324,6 +330,54 @@ export default function EmergencyPage() {
     } finally {
       setApplyingTo(null);
       console.log('=== 代打応募処理終了 ===');
+    }
+  };
+
+  // 代打募集削除
+  const handleDeleteEmergencyRequest = async (requestId: string) => {
+    if (!confirm('この代打募集を削除してもよろしいですか？')) {
+      return;
+    }
+
+    try {
+      setError(null);
+
+      const response = await fetch(`/api/emergency-requests/${requestId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '代打募集の削除に失敗しました');
+      }
+
+      // 成功時にデータを再取得
+      const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser!.id}`);
+      if (emergencyResponse.ok) {
+        const emergencyData = await emergencyResponse.json();
+        // 削除されたリクエストを除外して更新
+        const updatedRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.status === 'open'
+        );
+        
+        // 自分の代打募集と他のスタッフの代打募集を分ける
+        const myRequests = updatedRequests.filter((req: EmergencyRequest) => 
+          req.original_user_id === currentUser!.id
+        );
+        const otherRequests = updatedRequests.filter((req: EmergencyRequest) => 
+          req.original_user_id !== currentUser!.id
+        );
+        
+        setMyEmergencyRequests(myRequests);
+        setEmergencyRequests(otherRequests);
+
+        // 成功メッセージを表示
+        alert('代打募集を削除しました');
+      }
+
+    } catch (error) {
+      console.error('代打募集削除エラー:', error);
+      setError(error instanceof Error ? error.message : '代打募集の削除に失敗しました');
     }
   };
 
@@ -531,7 +585,70 @@ export default function EmergencyPage() {
               </CardContent>
             </Card>
 
-            {/* 代打募集一覧 */}
+            {/* 自分の代打募集一覧 */}
+            {currentUser?.role === 'staff' && myEmergencyRequests.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">自分の代打募集</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {myEmergencyRequests.map((request) => (
+                      <div key={request.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <h3 className="font-medium text-gray-900">
+                              {new Date(request.date).toLocaleDateString('ja-JP', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'long'
+                              })}
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {request.time_slots?.name} ({request.time_slots?.start_time} - {request.time_slots?.end_time})
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {request.stores?.name}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-2">
+                              理由: {request.reason}
+                            </p>
+                            {request.emergency_volunteers && request.emergency_volunteers.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-sm font-medium text-gray-700">
+                                  応募者: {request.emergency_volunteers.length}名
+                                </p>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {request.emergency_volunteers.map((volunteer) => (
+                                    <span 
+                                      key={volunteer.id}
+                                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full"
+                                    >
+                                      {volunteer.users.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteEmergencyRequest(request.id)}
+                            className="bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 whitespace-nowrap px-4 min-w-[4rem] flex-shrink-0 shadow-sm"
+                          >
+                            削除
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 他のスタッフの代打募集一覧 */}
             {emergencyRequests.length === 0 ? (
               <Card>
                 <CardContent className="pt-6">
