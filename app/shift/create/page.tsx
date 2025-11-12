@@ -59,6 +59,34 @@ function ShiftCreatePageInner() {
     return monday.toISOString().split('T')[0];
   };
 
+  // 指定された日が含まれる週の月曜日を取得する関数
+  const getWeekMonday = (date: string | Date) => {
+    const targetDate = typeof date === 'string' ? new Date(date) : date;
+    const dayOfWeek = targetDate.getDay(); // 0=日曜日, 1=月曜日, ...
+    const monday = new Date(targetDate);
+    
+    // 月曜日を0として計算（日曜日の場合は前週の月曜日）
+    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    monday.setDate(targetDate.getDate() + daysToMonday);
+    
+    return monday.toISOString().split('T')[0];
+  };
+
+  // 指定された日が含まれる週の日曜日を取得する関数
+  const getWeekSunday = (date: string | Date) => {
+    const monday = new Date(getWeekMonday(date));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return sunday.toISOString().split('T')[0];
+  };
+
+  // 日付をYYYY-MM-DD形式の文字列に変換（タイムゾーンの影響を受けない）
+  const formatDateString = (year: number, month: number, day: number): string => {
+    const monthStr = String(month + 1).padStart(2, '0'); // monthは0-11なので+1
+    const dayStr = String(day).padStart(2, '0');
+    return `${year}-${monthStr}-${dayStr}`;
+  };
+
   // 表示期間モードに応じた適切な開始日を取得
   const getAppropriateStartDate = (mode: 'week' | 'half-month' | 'month') => {
     const today = new Date();
@@ -68,20 +96,20 @@ function ShiftCreatePageInner() {
     
     switch (mode) {
       case 'week':
-        // 今日の日付を取得
-        return today.toISOString().split('T')[0];
+        // 今日が含まれる週の月曜日を取得
+        return getWeekMonday(today);
       case 'half-month':
         // 1-15日と16日-月末で分割
         if (date <= 15) {
-          return new Date(year, month, 1).toISOString().split('T')[0];
+          return formatDateString(year, month, 1);
         } else {
-          return new Date(year, month, 16).toISOString().split('T')[0];
+          return formatDateString(year, month, 16);
         }
       case 'month':
         // 月の1日
-        return new Date(year, month, 1).toISOString().split('T')[0];
+        return formatDateString(year, month, 1);
       default:
-        return today.toISOString().split('T')[0];
+        return formatDateString(year, month, date);
     }
   };
 
@@ -492,6 +520,66 @@ function ShiftCreatePageInner() {
     loadInitialData();
   }, [currentUser, searchParams]);
 
+  // ユーザーデータ更新イベントの監視（スタッフ管理ページで時給更新時など）
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleUserDataUpdate = async () => {
+      try {
+        console.log('🔄 [ShiftCreate] ユーザーデータ更新イベント検知 - ユーザーデータを再取得します');
+        const usersData = await fetchUsers();
+        setUsers(usersData);
+        console.log('✅ [ShiftCreate] ユーザーデータ再取得完了（イベント経由）');
+      } catch (error) {
+        console.error('❌ [ShiftCreate] ユーザーデータ再取得エラー:', error);
+      }
+    };
+
+    // 同一タブ内のイベント監視
+    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    
+    // 別タブからのストレージイベント監視
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'userDataUpdate') {
+        handleUserDataUpdate();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    };
+  }, [currentUser]);
+
+  // ページフォーカス時にユーザーデータを再取得（時給更新を反映）
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleVisibilityChange = async () => {
+      // ページが表示されたとき（フォーカスされたとき）にユーザーデータを再取得
+      if (document.visibilityState === 'visible') {
+        try {
+          console.log('🔄 [ShiftCreate] ページフォーカス検知 - ユーザーデータを再取得します');
+          const usersData = await fetchUsers();
+          setUsers(usersData);
+          console.log('✅ [ShiftCreate] ユーザーデータ再取得完了');
+        } catch (error) {
+          console.error('❌ [ShiftCreate] ユーザーデータ再取得エラー:', error);
+        }
+      }
+    };
+
+    // visibilitychangeイベントを監視
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // ページフォーカス時にも再取得（別タブから戻ってきたとき）
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [currentUser]);
+
   // 店舗データ（時間帯・固定シフト）を読み込む
   const loadStoreData = async (storeId: string) => {
     try {
@@ -614,9 +702,16 @@ function ShiftCreatePageInner() {
 
     switch (mode) {
       case 'week':
-        // 選択された日から1週間
+        // 選択された日が含まれる週の月曜日から日曜日まで
+        const weekMonday = getWeekMonday(startDate);
+        const [mondayYearStr, mondayMonthStr, mondayDayStr] = weekMonday.split('-');
+        const mondayYear = parseInt(mondayYearStr);
+        const mondayMonth = parseInt(mondayMonthStr) - 1; // JavaScriptの月は0-11
+        const mondayDay = parseInt(mondayDayStr);
+        
+        // 月曜日から日曜日まで（7日間）
         for (let i = 0; i < 7; i++) {
-          const currentDate = new Date(Date.UTC(year, month, day + i));
+          const currentDate = new Date(Date.UTC(mondayYear, mondayMonth, mondayDay + i));
           dates.push(currentDate);
         }
         break;
@@ -1154,9 +1249,11 @@ function ShiftCreatePageInner() {
     }
 
     // その週のユーザーのシフトを包括的に取得（通常シフト + 固定シフト）
-    const weekStart = new Date(selectedWeek);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
+    // 選択された日が含まれる週の月曜日から日曜日までを計算
+    const weekMondayStr = getWeekMonday(date);
+    const weekSundayStr = getWeekSunday(date);
+    const weekStart = new Date(weekMondayStr);
+    const weekEnd = new Date(weekSundayStr);
 
      console.log('🔍 [checkWorkRuleViolations] 週範囲:', {
        weekStart: weekStart.toISOString().split('T')[0],
@@ -1435,9 +1532,10 @@ function ShiftCreatePageInner() {
   const getHourlyWage = (user: any) => {
     if (!user) return 0;
     
-    // 個別時給が設定されている場合はそれを使用
-    if (user.hourly_wage && user.hourly_wage > 0) {
-      return user.hourly_wage;
+    // 個別時給が設定されている場合はそれを使用（キャメルケースとスネークケースの両方をチェック）
+    const hourlyWage = user.hourlyWage || user.hourly_wage;
+    if (hourlyWage && hourlyWage > 0) {
+      return hourlyWage;
     }
     
     // フォールバック：スキルレベルベースのデフォルト値
@@ -2279,9 +2377,11 @@ function ShiftCreatePageInner() {
                       onClick={() => {
                         const currentDate = new Date(selectedWeek);
                         currentDate.setMonth(currentDate.getMonth() - 1);
-                        const newMonth = currentDate.getFullYear() + '-' + 
-                          String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
-                        setSelectedWeek(newMonth);
+                        setSelectedWeek(formatDateString(
+                          currentDate.getFullYear(),
+                          currentDate.getMonth(),
+                          1
+                        ));
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
@@ -2303,9 +2403,11 @@ function ShiftCreatePageInner() {
                       onClick={() => {
                         const currentDate = new Date(selectedWeek);
                         currentDate.setMonth(currentDate.getMonth() + 1);
-                        const newMonth = currentDate.getFullYear() + '-' + 
-                          String(currentDate.getMonth() + 1).padStart(2, '0') + '-01';
-                        setSelectedWeek(newMonth);
+                        setSelectedWeek(formatDateString(
+                          currentDate.getFullYear(),
+                          currentDate.getMonth(),
+                          1
+                        ));
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
@@ -2334,12 +2436,26 @@ function ShiftCreatePageInner() {
                             currentDate.setMonth(currentDate.getMonth() - 1);
                             currentDate.setDate(16);
                           }
+                          setSelectedWeek(formatDateString(
+                            currentDate.getFullYear(),
+                            currentDate.getMonth(),
+                            currentDate.getDate()
+                          ));
+                        } else if (viewMode === 'week') {
+                          // 週表示の場合、前週の月曜日を取得
+                          const weekMonday = getWeekMonday(currentDate);
+                          const prevWeekMonday = new Date(weekMonday);
+                          prevWeekMonday.setDate(prevWeekMonday.getDate() - 7);
+                          setSelectedWeek(prevWeekMonday.toISOString().split('T')[0]);
                         } else {
-                          // 週表示の場合
-                          currentDate.setDate(currentDate.getDate() - 7);
+                          // 月表示の場合
+                          currentDate.setMonth(currentDate.getMonth() - 1);
+                          setSelectedWeek(formatDateString(
+                            currentDate.getFullYear(),
+                            currentDate.getMonth(),
+                            1
+                          ));
                         }
-                        
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
@@ -2354,12 +2470,27 @@ function ShiftCreatePageInner() {
                       value={selectedWeek}
                       onChange={(e) => {
                         const selectedDate = new Date(e.target.value);
-                        if (viewMode === 'half-month') {
+                        if (viewMode === 'week') {
+                          // 週表示の場合、選択された日が含まれる週の月曜日を設定
+                          const weekMonday = getWeekMonday(selectedDate);
+                          setSelectedWeek(weekMonday);
+                        } else if (viewMode === 'half-month') {
                           // 1日か16日に調整
                           const day = selectedDate.getDate();
                           selectedDate.setDate(day < 16 ? 1 : 16);
+                          setSelectedWeek(formatDateString(
+                            selectedDate.getFullYear(),
+                            selectedDate.getMonth(),
+                            selectedDate.getDate()
+                          ));
+                        } else {
+                          // 月表示の場合、選択された日が含まれる月の1日を設定
+                          setSelectedWeek(formatDateString(
+                            selectedDate.getFullYear(),
+                            selectedDate.getMonth(),
+                            1
+                          ));
                         }
-                        setSelectedWeek(selectedDate.toISOString().split('T')[0]);
                       }}
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       disabled={loading}
@@ -2380,12 +2511,26 @@ function ShiftCreatePageInner() {
                             // 前半から後半へ
                             currentDate.setDate(16);
                           }
+                          setSelectedWeek(formatDateString(
+                            currentDate.getFullYear(),
+                            currentDate.getMonth(),
+                            currentDate.getDate()
+                          ));
+                        } else if (viewMode === 'week') {
+                          // 週表示の場合、次週の月曜日を取得
+                          const weekMonday = getWeekMonday(currentDate);
+                          const nextWeekMonday = new Date(weekMonday);
+                          nextWeekMonday.setDate(nextWeekMonday.getDate() + 7);
+                          setSelectedWeek(nextWeekMonday.toISOString().split('T')[0]);
                         } else {
-                          // 週表示の場合
-                          currentDate.setDate(currentDate.getDate() + 7);
+                          // 月表示の場合
+                          currentDate.setMonth(currentDate.getMonth() + 1);
+                          setSelectedWeek(formatDateString(
+                            currentDate.getFullYear(),
+                            currentDate.getMonth(),
+                            1
+                          ));
                         }
-                        
-                        setSelectedWeek(currentDate.toISOString().split('T')[0]);
                       }}
                       disabled={loading}
                       className="px-2 sm:px-3 py-2"
