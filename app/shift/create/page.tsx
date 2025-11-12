@@ -46,45 +46,67 @@ interface TimeOffRequest {
 }
 
 function ShiftCreatePageInner() {
-  // 今週の月曜日を取得する関数
-  const getCurrentWeekMonday = () => {
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0=日曜日, 1=月曜日, ...
-    const monday = new Date(today);
-    
-    // 月曜日を0として計算（日曜日の場合は前週の月曜日）
-    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    monday.setDate(today.getDate() + daysToMonday);
-    
-    return monday.toISOString().split('T')[0];
-  };
-
-  // 指定された日が含まれる週の月曜日を取得する関数
-  const getWeekMonday = (date: string | Date) => {
-    const targetDate = typeof date === 'string' ? new Date(date) : date;
-    const dayOfWeek = targetDate.getDay(); // 0=日曜日, 1=月曜日, ...
-    const monday = new Date(targetDate);
-    
-    // 月曜日を0として計算（日曜日の場合は前週の月曜日）
-    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    monday.setDate(targetDate.getDate() + daysToMonday);
-    
-    return monday.toISOString().split('T')[0];
-  };
-
-  // 指定された日が含まれる週の日曜日を取得する関数
-  const getWeekSunday = (date: string | Date) => {
-    const monday = new Date(getWeekMonday(date));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return sunday.toISOString().split('T')[0];
-  };
-
   // 日付をYYYY-MM-DD形式の文字列に変換（タイムゾーンの影響を受けない）
   const formatDateString = (year: number, month: number, day: number): string => {
     const monthStr = String(month + 1).padStart(2, '0'); // monthは0-11なので+1
     const dayStr = String(day).padStart(2, '0');
     return `${year}-${monthStr}-${dayStr}`;
+  };
+
+  // 指定された日が含まれる週の月曜日を取得する関数（タイムゾーンに依存しない）
+  const getWeekMonday = (date: string | Date): string => {
+    let year: number, month: number, day: number;
+    
+    if (typeof date === 'string') {
+      // 文字列の場合は直接パース
+      const [yearStr, monthStr, dayStr] = date.split('-');
+      year = parseInt(yearStr);
+      month = parseInt(monthStr) - 1; // JavaScriptの月は0-11
+      day = parseInt(dayStr);
+    } else {
+      // Dateオブジェクトの場合はローカル時間で取得
+      year = date.getFullYear();
+      month = date.getMonth();
+      day = date.getDate();
+    }
+    
+    // 日付から曜日を計算
+    const dateObj = new Date(year, month, day);
+    const dayOfWeek = dateObj.getDay(); // 0=日曜日, 1=月曜日, ...
+    
+    // 月曜日を0として計算（日曜日の場合は前週の月曜日）
+    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    
+    // 月曜日の日付を計算
+    const mondayDate = new Date(year, month, day + daysToMonday);
+    
+    return formatDateString(
+      mondayDate.getFullYear(),
+      mondayDate.getMonth(),
+      mondayDate.getDate()
+    );
+  };
+
+  // 指定された日が含まれる週の日曜日を取得する関数
+  const getWeekSunday = (date: string | Date): string => {
+    const mondayStr = getWeekMonday(date);
+    const [yearStr, monthStr, dayStr] = mondayStr.split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr) - 1;
+    const day = parseInt(dayStr);
+    
+    const sundayDate = new Date(year, month, day + 6);
+    return formatDateString(
+      sundayDate.getFullYear(),
+      sundayDate.getMonth(),
+      sundayDate.getDate()
+    );
+  };
+
+  // 今週の月曜日を取得する関数（今日が含まれる週の月曜日）
+  const getCurrentWeekMonday = () => {
+    const today = new Date();
+    return getWeekMonday(today);
   };
 
   // 表示期間モードに応じた適切な開始日を取得
@@ -888,6 +910,9 @@ function ShiftCreatePageInner() {
     setCustomStartTime('');
     setCustomEndTime('');
     
+    // 確定済みシフトのチェックを実行
+    await checkAllStaffConfirmedShifts(date);
+    
     setIsModalOpen(true);
   };
 
@@ -897,6 +922,24 @@ function ShiftCreatePageInner() {
 
       setSaving(true);
     try {
+      // 異なる店舗への重複シフトチェック（通常シフト + 固定シフト）
+      const shiftConflict = await checkStaffShiftStatus(selectedUser, modalData.date);
+      
+      // 異なる店舗への重複がある場合はエラー
+      if (shiftConflict.hasOtherStoreConflict) {
+        const conflictStores = shiftConflict.conflicts
+          .filter((c: { isSameStore: boolean }) => !c.isSameStore)
+          .map((c: { storeName: string }) => c.storeName)
+          .join('、');
+        throw new Error(`このスタッフは同日に他の店舗（${conflictStores}）でシフトが設定されています。異なる店舗への重複シフトは設定できません。`);
+      }
+      
+      // 固定シフトの重複チェック
+      const fixedShiftConflict = checkUserFixedShift(selectedUser, modalData.dayIndex, selectedTimeSlot);
+      if (fixedShiftConflict) {
+        throw new Error('このスタッフはこの時間帯に固定シフトが設定されています。固定シフトと重複するシフトは設定できません。');
+      }
+      
       // カスタム時間の値を検証
       const validateTime = (time: string) => {
         return time && time.trim() !== '' && /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time) ? time : null;
@@ -1524,8 +1567,39 @@ function ShiftCreatePageInner() {
     violations: currentViolations
   });
 
+  // 特定の日・ユーザーの固定シフトをチェック（getAvailableStaffより前に定義）
+  const checkUserFixedShift = (userId: string, dayOfWeek: number, timeSlotId: string) => {
+    return fixedShifts.find(fixedShift => 
+      fixedShift.user_id === userId &&
+      fixedShift.day_of_week === dayOfWeek && 
+      fixedShift.time_slot_id === timeSlotId &&
+      fixedShift.is_active
+    );
+  };
+
   // 店舗所属スタッフのみフィルタ（基本的なシフト作成は所属スタッフ内で完結）
-  const availableStaff = selectedStore ? users.filter(user => user.stores?.includes(selectedStore)) : [];
+  // 固定シフトが設定されているスタッフは除外
+  const getAvailableStaff = (date: string, dayOfWeek: number, timeSlotId: string) => {
+    if (!selectedStore) return [];
+    
+    return users.filter(user => {
+      // 店舗に所属しているかチェック
+      if (!user.stores?.includes(selectedStore)) return false;
+      
+      // 固定シフトが設定されている場合は除外
+      if (timeSlotId && checkUserFixedShift(user.id, dayOfWeek, timeSlotId)) {
+        return false;
+      }
+      
+      return true;
+    });
+  };
+  
+  // モーダルが開いている場合は、選択された時間帯に基づいてフィルタリング
+  // モーダルが閉じている場合は、店舗所属スタッフのみ
+  const availableStaff = isModalOpen && modalData && selectedTimeSlot
+    ? getAvailableStaff(modalData.date, modalData.dayIndex, selectedTimeSlot)
+    : (selectedStore ? users.filter(user => user.stores?.includes(selectedStore)) : []);
 
   // 時給計算（個別給与ベース）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1809,33 +1883,67 @@ function ShiftCreatePageInner() {
 
   const shiftStatus = weekShiftStatus();
 
-  // 特定のスタッフの同日シフト状況をチェック（同店舗・他店舗両方）
+  // 特定のスタッフの同日シフト状況をチェック（同店舗・他店舗両方、通常シフト + 固定シフト）
   const checkStaffShiftStatus = async (userId: string, date: string) => {
     try {
+      // 通常シフトを取得
       const response = await fetch(`/api/shifts?user_id=${userId}&date_from=${date}&date_to=${date}`);
-      if (!response.ok) return { hasConflict: false, conflicts: [] };
+      const existingShifts: DatabaseShift[] = [];
       
-      const result = await response.json();
-      const existingShifts = result.data || [];
+      if (response.ok) {
+        const result = await response.json();
+        existingShifts.push(...(result.data || []));
+      }
       
-             const conflicts = existingShifts.map((shift: DatabaseShift) => ({
-         storeName: shift.stores?.name || '不明な店舗',
-         storeId: shift.store_id,
-         status: shift.status,
-         isConfirmed: shift.status === 'confirmed',
-         isSameStore: shift.store_id === selectedStore,
-                   shiftPattern: shift.time_slots?.name || '不明なパターン',
-          startTime: shift.time_slots?.start_time || '',
-          endTime: shift.time_slots?.end_time || ''
-       }));
+      // 固定シフトもチェック（指定された日の曜日を取得）
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay();
+      const userFixedShifts = fixedShifts.filter(fs => 
+        fs.user_id === userId && 
+        fs.day_of_week === dayOfWeek && 
+        fs.is_active
+      );
+      
+      // 固定シフトを通常シフト形式に変換して追加
+      const fixedShiftsAsConflicts = userFixedShifts.map(fs => ({
+        id: `fixed-${fs.id}`,
+        user_id: fs.user_id,
+        store_id: fs.store_id,
+        date: date,
+        time_slot_id: fs.time_slot_id,
+        status: 'confirmed' as const,
+        stores: stores.find(s => s.id === fs.store_id) ? { name: stores.find(s => s.id === fs.store_id)!.name } : undefined,
+        time_slots: timeSlots.find(ts => ts.id === fs.time_slot_id) ? {
+          name: timeSlots.find(ts => ts.id === fs.time_slot_id)!.name,
+          start_time: timeSlots.find(ts => ts.id === fs.time_slot_id)!.start_time,
+          end_time: timeSlots.find(ts => ts.id === fs.time_slot_id)!.end_time
+        } : undefined,
+        isFixedShift: true
+      }));
+      
+      // 通常シフトと固定シフトを結合
+      const allShifts = [...existingShifts, ...fixedShiftsAsConflicts];
+      
+      const conflicts = allShifts.map((shift: DatabaseShift & { isFixedShift?: boolean }) => ({
+        storeName: shift.stores?.name || '不明な店舗',
+        storeId: shift.store_id,
+        status: shift.status,
+        isConfirmed: shift.status === 'confirmed' || shift.isFixedShift,
+        isSameStore: shift.store_id === selectedStore,
+        isFixedShift: shift.isFixedShift || false,
+        shiftPattern: shift.time_slots?.name || '不明なパターン',
+        startTime: shift.time_slots?.start_time || '',
+        endTime: shift.time_slots?.end_time || ''
+      }));
        
-        return {
-         hasConflict: conflicts.length > 0,
-         conflicts: conflicts,
-         hasOtherStoreConflict: conflicts.some((c: { isSameStore: boolean }) => !c.isSameStore),
-         hasSameStoreConflict: conflicts.some((c: { isSameStore: boolean }) => c.isSameStore),
-         hasConfirmedConflict: conflicts.some((c: { isConfirmed: boolean }) => c.isConfirmed)
-       };
+      return {
+        hasConflict: conflicts.length > 0,
+        conflicts: conflicts,
+        hasOtherStoreConflict: conflicts.some((c: { isSameStore: boolean }) => !c.isSameStore),
+        hasSameStoreConflict: conflicts.some((c: { isSameStore: boolean }) => c.isSameStore),
+        hasConfirmedConflict: conflicts.some((c: { isConfirmed: boolean }) => c.isConfirmed),
+        hasFixedShiftConflict: conflicts.some((c: { isFixedShift: boolean }) => c.isFixedShift)
+      };
     } catch (error) {
       console.error('Error checking staff shift status:', error);
       return { hasConflict: false, conflicts: [] };
@@ -1847,16 +1955,6 @@ function ShiftCreatePageInner() {
     return fixedShifts.filter(fixedShift => 
       fixedShift.day_of_week === dayOfWeek && 
       (timeSlotId === '' || fixedShift.time_slot_id === timeSlotId) &&
-      fixedShift.is_active
-    );
-  };
-
-  // 特定の日・ユーザーの固定シフトをチェック
-  const checkUserFixedShift = (userId: string, dayOfWeek: number, timeSlotId: string) => {
-    return fixedShifts.find(fixedShift => 
-      fixedShift.user_id === userId &&
-      fixedShift.day_of_week === dayOfWeek && 
-      fixedShift.time_slot_id === timeSlotId &&
       fixedShift.is_active
     );
   };
@@ -1876,18 +1974,33 @@ function ShiftCreatePageInner() {
     }
   };
 
-  // モーダル開時に全スタッフの確定シフト状況をチェック
+  // モーダル開時に全スタッフの確定シフト状況をチェック（通常シフト + 固定シフト）
   const checkAllStaffConfirmedShifts = async (date: string) => {
     try {
+      // 通常シフトの確定済みシフトを取得
       const response = await fetch(`/api/shifts?date_from=${date}&date_to=${date}&status=confirmed`);
-      if (!response.ok) return;
+      const confirmedShifts: { user_id: string }[] = [];
       
-      const result = await response.json();
-      const confirmedShifts = result.data || [];
+      if (response.ok) {
+        const result = await response.json();
+        confirmedShifts.push(...(result.data || []));
+      }
       
-      const staffWithConfirmed = confirmedShifts
-        .map((shift: { user_id: string }) => shift.user_id as string)
-        .filter((userId: string) => userId);
+      // 固定シフトもチェック（指定された日の曜日を取得）
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay();
+      const fixedShiftsForDay = fixedShifts.filter(fs => 
+        fs.day_of_week === dayOfWeek && 
+        fs.is_active &&
+        fs.store_id === selectedStore // 選択された店舗の固定シフトのみ
+      );
+      
+      // 確定済みシフトと固定シフトのスタッフIDを結合
+      const staffWithConfirmed = [
+        ...confirmedShifts.map((shift: { user_id: string }) => shift.user_id),
+        ...fixedShiftsForDay.map(fs => fs.user_id)
+      ].filter((userId: string) => userId);
+      
       setStaffWithConfirmedShifts(Array.from(new Set(staffWithConfirmed)));
     } catch (error) {
       console.error('Error checking confirmed shifts:', error);
@@ -2444,9 +2557,16 @@ function ShiftCreatePageInner() {
                         } else if (viewMode === 'week') {
                           // 週表示の場合、前週の月曜日を取得
                           const weekMonday = getWeekMonday(currentDate);
-                          const prevWeekMonday = new Date(weekMonday);
-                          prevWeekMonday.setDate(prevWeekMonday.getDate() - 7);
-                          setSelectedWeek(prevWeekMonday.toISOString().split('T')[0]);
+                          const [yearStr, monthStr, dayStr] = weekMonday.split('-');
+                          const year = parseInt(yearStr);
+                          const month = parseInt(monthStr) - 1;
+                          const day = parseInt(dayStr);
+                          const prevWeekMonday = new Date(year, month, day - 7);
+                          setSelectedWeek(formatDateString(
+                            prevWeekMonday.getFullYear(),
+                            prevWeekMonday.getMonth(),
+                            prevWeekMonday.getDate()
+                          ));
                         } else {
                           // 月表示の場合
                           currentDate.setMonth(currentDate.getMonth() - 1);
@@ -2519,9 +2639,16 @@ function ShiftCreatePageInner() {
                         } else if (viewMode === 'week') {
                           // 週表示の場合、次週の月曜日を取得
                           const weekMonday = getWeekMonday(currentDate);
-                          const nextWeekMonday = new Date(weekMonday);
-                          nextWeekMonday.setDate(nextWeekMonday.getDate() + 7);
-                          setSelectedWeek(nextWeekMonday.toISOString().split('T')[0]);
+                          const [yearStr, monthStr, dayStr] = weekMonday.split('-');
+                          const year = parseInt(yearStr);
+                          const month = parseInt(monthStr) - 1;
+                          const day = parseInt(dayStr);
+                          const nextWeekMonday = new Date(year, month, day + 7);
+                          setSelectedWeek(formatDateString(
+                            nextWeekMonday.getFullYear(),
+                            nextWeekMonday.getMonth(),
+                            nextWeekMonday.getDate()
+                          ));
                         } else {
                           // 月表示の場合
                           currentDate.setMonth(currentDate.getMonth() + 1);
@@ -2768,13 +2895,6 @@ function ShiftCreatePageInner() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     スタッフ選択 *
                   </label>
-                  {staffWithConfirmedShifts.length > 0 && (
-                    <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-xs text-blue-700">
-                        ℹ️ この日に確定済みシフトがあるスタッフは選択肢から除外されています
-                      </p>
-                    </div>
-                  )}
                   <select
                     value={selectedUser}
                     onChange={(e) => handleStaffSelection(e.target.value)}
@@ -2785,7 +2905,6 @@ function ShiftCreatePageInner() {
                       .filter(user => !staffWithConfirmedShifts.includes(user.id)) // 確定済みシフトがあるスタッフを除外
                       .map(user => {
                       const isOnTimeOff = isStaffOnTimeOff(user.id, modalData.date);
-                      const fixedShift = checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot);
                         
                       return (
                         <option 
@@ -2796,7 +2915,6 @@ function ShiftCreatePageInner() {
                         >
                           {user.name} ({user.skillLevel === 'veteran' ? 'ベテラン' : user.skillLevel === 'regular' ? '一般' : '研修中'})
                           {isOnTimeOff && ' [希望休承認済み]'}
-                          {fixedShift && ' [固定シフト]'}
                         </option>
                       );
                     })}
@@ -2816,15 +2934,18 @@ function ShiftCreatePageInner() {
                     </div>
                   )}
                   
-                  {/* 固定シフトスタッフの情報表示 */}
-                  {selectedTimeSlot && availableStaff.some(user => checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot)) && (
+                  {/* 固定シフトスタッフの情報表示（選択肢から除外されていることを通知） */}
+                  {selectedTimeSlot && users.some(user => 
+                    user.stores?.includes(selectedStore) && 
+                    checkUserFixedShift(user.id, modalData.dayIndex, selectedTimeSlot)
+                  ) && (
                     <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                       <div className="flex items-center">
                         <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                         <p className="text-sm text-purple-700">
-                          📌 この時間帯に固定シフトが設定されているスタッフがいます
+                          📌 この時間帯に固定シフトが設定されているスタッフは選択肢から除外されています
                         </p>
                       </div>
                     </div>
