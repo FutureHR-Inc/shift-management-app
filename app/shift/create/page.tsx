@@ -1924,17 +1924,23 @@ function ShiftCreatePageInner() {
       // 通常シフトと固定シフトを結合
       const allShifts = [...existingShifts, ...fixedShiftsAsConflicts];
       
-      const conflicts = allShifts.map((shift: DatabaseShift & { isFixedShift?: boolean }) => ({
-        storeName: shift.stores?.name || '不明な店舗',
-        storeId: shift.store_id,
-        status: shift.status,
-        isConfirmed: shift.status === 'confirmed' || shift.isFixedShift,
-        isSameStore: shift.store_id === selectedStore,
-        isFixedShift: shift.isFixedShift || false,
-        shiftPattern: shift.time_slots?.name || '不明なパターン',
-        startTime: shift.time_slots?.start_time || '',
-        endTime: shift.time_slots?.end_time || ''
-      }));
+      const conflicts = allShifts.map((shift: any) => {
+        // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+        const store = Array.isArray(shift.stores) ? shift.stores[0] : shift.stores;
+        const timeSlot = Array.isArray(shift.time_slots) ? shift.time_slots[0] : shift.time_slots;
+        
+        return {
+          storeName: store?.name || '不明な店舗',
+          storeId: shift.store_id,
+          status: shift.status,
+          isConfirmed: shift.status === 'confirmed' || shift.isFixedShift,
+          isSameStore: shift.store_id === selectedStore,
+          isFixedShift: shift.isFixedShift || false,
+          shiftPattern: timeSlot?.name || '不明なパターン',
+          startTime: timeSlot?.start_time || '',
+          endTime: timeSlot?.end_time || ''
+        };
+      });
        
       return {
         hasConflict: conflicts.length > 0,

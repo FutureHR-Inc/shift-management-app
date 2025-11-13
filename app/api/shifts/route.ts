@@ -190,7 +190,11 @@ export async function POST(request: Request) {
 
     if (existingShifts && existingShifts.length > 0) {
       const otherStoreNames = existingShifts
-        .map((shift: { stores?: { name: string } }) => shift.stores?.name || '不明な店舗')
+        .map((shift: any) => {
+          // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+          const store = Array.isArray(shift.stores) ? shift.stores[0] : shift.stores;
+          return store?.name || '不明な店舗';
+        })
         .join('、');
       return NextResponse.json(
         { error: `このスタッフは同日に他の店舗（${otherStoreNames}）でシフトが設定されています。異なる店舗への重複シフトは設定できません。` },
@@ -221,7 +225,11 @@ export async function POST(request: Request) {
 
     if (existingFixedShifts && existingFixedShifts.length > 0) {
       const otherStoreNames = existingFixedShifts
-        .map((fs: { stores?: { name: string } }) => fs.stores?.name || '不明な店舗')
+        .map((fs: any) => {
+          // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+          const store = Array.isArray(fs.stores) ? fs.stores[0] : fs.stores;
+          return store?.name || '不明な店舗';
+        })
         .join('、');
       return NextResponse.json(
         { error: `このスタッフはこの曜日・時間帯に他の店舗（${otherStoreNames}）で固定シフトが設定されています。異なる店舗への重複シフトは設定できません。` },
