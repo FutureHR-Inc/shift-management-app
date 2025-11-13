@@ -171,6 +171,72 @@ export async function POST(request: Request) {
 
     // 時間の論理チェックは削除 - 柔軟な時間設定を許可
 
+    // 異なる店舗への重複シフトチェック（通常シフト + 固定シフト）
+    // 1. 通常シフトの重複チェック（異なる店舗）
+    const { data: existingShifts, error: shiftCheckError } = await supabase
+      .from('shifts')
+      .select('id, store_id, stores(id, name)')
+      .eq('user_id', user_id)
+      .eq('date', date)
+      .neq('store_id', store_id); // 異なる店舗
+
+    if (shiftCheckError) {
+      console.error('シフト重複チェックエラー:', shiftCheckError);
+      return NextResponse.json(
+        { error: '重複チェックに失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    if (existingShifts && existingShifts.length > 0) {
+      const otherStoreNames = existingShifts
+        .map((shift: any) => {
+          // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+          const store = Array.isArray(shift.stores) ? shift.stores[0] : shift.stores;
+          return store?.name || '不明な店舗';
+        })
+        .join('、');
+      return NextResponse.json(
+        { error: `このスタッフは同日に他の店舗（${otherStoreNames}）でシフトが設定されています。異なる店舗への重複シフトは設定できません。` },
+        { status: 409 }
+      );
+    }
+
+    // 2. 固定シフトの重複チェック（異なる店舗）
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+    
+    const { data: existingFixedShifts, error: fixedShiftCheckError } = await supabase
+      .from('fixed_shifts')
+      .select('id, store_id, stores(id, name)')
+      .eq('user_id', user_id)
+      .eq('day_of_week', dayOfWeek)
+      .eq('time_slot_id', finalTimeSlotId)
+      .eq('is_active', true)
+      .neq('store_id', store_id); // 異なる店舗
+
+    if (fixedShiftCheckError) {
+      console.error('固定シフト重複チェックエラー:', fixedShiftCheckError);
+      return NextResponse.json(
+        { error: '固定シフト重複チェックに失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    if (existingFixedShifts && existingFixedShifts.length > 0) {
+      const otherStoreNames = existingFixedShifts
+        .map((fs: any) => {
+          // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+          const store = Array.isArray(fs.stores) ? fs.stores[0] : fs.stores;
+          return store?.name || '不明な店舗';
+        })
+        .join('、');
+      return NextResponse.json(
+        { error: `このスタッフはこの曜日・時間帯に他の店舗（${otherStoreNames}）で固定シフトが設定されています。異なる店舗への重複シフトは設定できません。` },
+        { status: 409 }
+      );
+    }
+
     // データ挿入オブジェクトを構築
     const insertData: Record<string, unknown> = {
       user_id,

@@ -225,12 +225,18 @@ export default function DashboardPage() {
         isFixedShift: true
       }));
 
-      // 今日の通常シフトを取得
-      const todayRegularShifts = shiftsData.filter((shift: DashboardShift) => shift.date === today);
+      // 今日の通常シフトを取得（確定済みのみ）
+      const todayRegularShifts = shiftsData.filter((shift: DashboardShift) => 
+        shift.date === today && shift.status === 'confirmed'
+      );
 
-      // 全てのシフトを結合
+      // 全てのシフトを結合（確定済み通常シフト + 固定シフト）
+      // 固定シフトは常に確定扱いのため、そのまま含める
       const allTodayShifts = [...todayRegularShifts, ...todayFixedShifts];
-      const todayShifts = allTodayShifts.filter(shift => shift.status === 'confirmed' || shift.isFixedShift);
+      
+      // 今日の確定済みシフト数（確定済み通常シフト + 固定シフト）
+      // 下書きシフトは含めない
+      const todayShifts = allTodayShifts;
       
       console.log(`📅 今日の日付: ${today}`);
       console.log(`📊 今日のシフト統計:`, {

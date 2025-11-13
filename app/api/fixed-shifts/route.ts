@@ -78,14 +78,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 重複チェック
+    // 重複チェック（同じ店舗・同じ曜日・同じ時間帯）
     const { data: existingData, error: checkError } = await supabase
       .from('fixed_shifts')
-      .select('id')
+      .select('id, store_id, stores(id, name)')
       .eq('user_id', user_id)
       .eq('store_id', store_id)
       .eq('day_of_week', day_of_week)
       .eq('time_slot_id', time_slot_id)
+      .eq('is_active', true)
       .single();
 
     if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
@@ -99,6 +100,37 @@ export async function POST(request: NextRequest) {
     if (existingData) {
       return NextResponse.json({ 
         error: 'この条件の固定シフトは既に存在します' 
+      }, { status: 409 });
+    }
+
+    // 異なる店舗への重複チェック（同じユーザー・同じ曜日・同じ時間帯で、異なる店舗）
+    const { data: otherStoreShifts, error: otherStoreCheckError } = await supabase
+      .from('fixed_shifts')
+      .select('id, store_id, stores(id, name)')
+      .eq('user_id', user_id)
+      .neq('store_id', store_id) // 異なる店舗
+      .eq('day_of_week', day_of_week)
+      .eq('time_slot_id', time_slot_id)
+      .eq('is_active', true);
+
+    if (otherStoreCheckError) {
+      console.error('異なる店舗重複チェックエラー:', otherStoreCheckError);
+      return NextResponse.json({ 
+        error: '異なる店舗への重複チェックに失敗しました',
+        details: otherStoreCheckError 
+      }, { status: 500 });
+    }
+
+    if (otherStoreShifts && otherStoreShifts.length > 0) {
+      const otherStoreNames = otherStoreShifts
+        .map((fs: any) => {
+          // storesはリレーションで単一オブジェクトまたは配列として返される可能性がある
+          const store = Array.isArray(fs.stores) ? fs.stores[0] : fs.stores;
+          return store?.name || '不明な店舗';
+        })
+        .join('、');
+      return NextResponse.json({ 
+        error: `このスタッフはこの曜日・時間帯に他の店舗（${otherStoreNames}）で固定シフトが設定されています。異なる店舗への重複シフトは設定できません。` 
       }, { status: 409 });
     }
 
