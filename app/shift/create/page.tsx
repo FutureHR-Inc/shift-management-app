@@ -1076,13 +1076,13 @@ function ShiftCreatePageInner() {
     try {
       setSaving(true);
       
-      const response = await fetch('/api/shifts', {
+      // 個別シフトの更新は /api/shifts/[id] エンドポイントを使用
+      const response = await fetch(`/api/shifts/${shiftId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: shiftId,
           status: 'confirmed'
         }),
       });
@@ -1092,19 +1092,79 @@ function ShiftCreatePageInner() {
         throw new Error(errorData.error || 'シフトの確定に失敗しました');
       }
 
-      // 削除したシフトをローカルステートから除外
-      setShifts(prevShifts => prevShifts.filter(s => s.id !== shiftId));
+      const result = await response.json();
+      console.log('📦 [SHIFT CONFIRM SINGLE] APIレスポンス:', {
+        result,
+        shiftId: shiftId
+      });
 
       // バックグラウンドで完全なデータを再取得
       if (selectedStore && selectedWeek) {
-        console.log('🔄 [handleDeleteShift] バックグラウンドでデータ更新開始');
+        console.log('🔄 [handleConfirmSingleShift] バックグラウンドでデータ更新開始');
         fetchShifts(selectedStore, selectedWeek).then(updatedShifts => {
-          console.log('🔄 [handleDeleteShift] バックグラウンド更新完了:', updatedShifts.length + '件');
+          console.log('🔄 [handleConfirmSingleShift] バックグラウンド更新完了:', updatedShifts.length + '件');
           setShifts(updatedShifts);
         }).catch(error => {
           console.error('バックグラウンド更新エラー:', error);
         });
       }
+      
+      // ナビゲーションの通知件数を更新
+      window.dispatchEvent(new CustomEvent('updateShiftConfirmations'));
+      
+      // ダッシュボードを自動更新（データベースの更新が反映されるまで少し待機）
+      const shiftDate = result.data?.date || new Date().toISOString().split('T')[0];
+      console.log('🔄 [SHIFT CONFIRM SINGLE] 個別シフト確定完了、ダッシュボード更新イベントを発火', {
+        shiftId: shiftId,
+        shiftDate: shiftDate,
+        today: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString()
+      });
+      
+      // localStorageにシフト確定の情報を保存（ダッシュボードが後からマウントされた場合でも更新できるように）
+      const shiftConfirmInfo = {
+        timestamp: new Date().toISOString(),
+        shiftId: shiftId,
+        shiftDate: shiftDate,
+        source: 'shiftConfirmSingle'
+      };
+      localStorage.setItem('lastShiftConfirm', JSON.stringify(shiftConfirmInfo));
+      console.log('💾 [SHIFT CONFIRM SINGLE] localStorageにシフト確定情報を保存', shiftConfirmInfo);
+      
+      // データベースの更新が確実に反映されるまで待機
+      setTimeout(() => {
+        try {
+          console.log('🔄 [SHIFT CONFIRM SINGLE] dashboardRefreshイベントを発火', {
+            shiftId: shiftId,
+            shiftDate: shiftDate,
+            timestamp: new Date().toISOString(),
+            eventWillBeDispatched: true
+          });
+          const event = new CustomEvent('dashboardRefresh', {
+            detail: {
+              source: 'shiftConfirmSingle',
+              shiftId: shiftId,
+              shiftDate: shiftDate,
+              timestamp: new Date().toISOString()
+            }
+          });
+          window.dispatchEvent(event);
+          console.log('✅ [SHIFT CONFIRM SINGLE] dashboardRefreshイベントを発火しました', {
+            eventType: event.type,
+            detail: event.detail
+          });
+          
+          // イベントが受信されなかった場合に備えて、少し遅れて再度発火
+          setTimeout(() => {
+            console.log('🔄 [SHIFT CONFIRM SINGLE] dashboardRefreshイベントを再発火（念のため）');
+            window.dispatchEvent(new CustomEvent('dashboardRefresh', {
+              detail: shiftConfirmInfo
+            }));
+          }, 2000); // 2秒後に再発火
+        } catch (error) {
+          console.error('❌ [SHIFT CONFIRM SINGLE] イベント発火エラー:', error);
+        }
+      }, 500); // 500ms待機してからイベント発火
       
       // コンテキストメニューを閉じる
       setContextMenu({ show: false, x: 0, y: 0, shiftId: '', shift: null });
@@ -1160,12 +1220,73 @@ function ShiftCreatePageInner() {
 
       const result = await response.json();
       
+      console.log('📦 [SHIFT CONFIRM] APIレスポンス:', {
+        result,
+        hasUpdatedCount: 'updated_count' in result,
+        updatedCount: result.updated_count,
+        dataLength: result.data?.length
+      });
+      
       // 成功メッセージを表示
       const periodName = viewMode === 'week' ? '週' : viewMode === 'half-month' ? '半月' : '月';
-      alert(`${result.updated_count}件の${periodName}間シフトを確定しました`);
+      const updatedCount = result.updated_count || result.data?.length || 0;
+      alert(`${updatedCount}件の${periodName}間シフトを確定しました`);
       
       // ナビゲーションの通知件数を更新
       window.dispatchEvent(new CustomEvent('updateShiftConfirmations'));
+      
+      // ダッシュボードを自動更新（データベースの更新が反映されるまで少し待機）
+      console.log('🔄 [SHIFT CONFIRM] シフト確定完了、ダッシュボード更新イベントを発火', {
+        updatedCount: updatedCount,
+        period: `${periodStart.toISOString().split('T')[0]} ～ ${periodEnd.toISOString().split('T')[0]}`,
+        today: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString()
+      });
+      
+      // localStorageにシフト確定の情報を保存（ダッシュボードが後からマウントされた場合でも更新できるように）
+      const shiftConfirmInfo = {
+        timestamp: new Date().toISOString(),
+        updatedCount: updatedCount,
+        periodStart: periodStart.toISOString().split('T')[0],
+        periodEnd: periodEnd.toISOString().split('T')[0],
+        source: 'shiftConfirm'
+      };
+      localStorage.setItem('lastShiftConfirm', JSON.stringify(shiftConfirmInfo));
+      console.log('💾 [SHIFT CONFIRM] localStorageにシフト確定情報を保存', shiftConfirmInfo);
+      
+      // データベースの更新が確実に反映されるまで待機
+      setTimeout(() => {
+        try {
+          console.log('🔄 [SHIFT CONFIRM] dashboardRefreshイベントを発火', {
+            timestamp: new Date().toISOString(),
+            eventWillBeDispatched: true
+          });
+          const event = new CustomEvent('dashboardRefresh', {
+            detail: {
+              source: 'shiftConfirm',
+              updatedCount: updatedCount,
+              periodStart: periodStart.toISOString().split('T')[0],
+              periodEnd: periodEnd.toISOString().split('T')[0],
+              timestamp: new Date().toISOString()
+            }
+          });
+          window.dispatchEvent(event);
+          console.log('✅ [SHIFT CONFIRM] dashboardRefreshイベントを発火しました', {
+            eventType: event.type,
+            detail: event.detail
+          });
+          
+          // イベントが受信されなかった場合に備えて、少し遅れて再度発火
+          setTimeout(() => {
+            console.log('🔄 [SHIFT CONFIRM] dashboardRefreshイベントを再発火（念のため）');
+            window.dispatchEvent(new CustomEvent('dashboardRefresh', {
+              detail: shiftConfirmInfo
+            }));
+          }, 2000); // 2秒後に再発火
+        } catch (error) {
+          console.error('❌ [SHIFT CONFIRM] イベント発火エラー:', error);
+        }
+      }, 500); // 500ms待機してからイベント発火
       
       // データを完全に再取得
       const startDate = periodStart.toISOString().split('T')[0];
