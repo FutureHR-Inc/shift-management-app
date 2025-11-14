@@ -186,24 +186,24 @@ export default function DashboardPage() {
       }
 
       // シフトデータを取得
-      let shiftsData = [];
+      let shiftsData: DashboardShift[] = [];
       if (shiftsResponse.ok) {
         const shiftsResult = await shiftsResponse.json();
-        shiftsData = shiftsResult.data || [];
+        shiftsData = (shiftsResult.data || []) as DashboardShift[];
         // 確定済みシフトの日付を詳しく確認
         const confirmedShifts = shiftsData.filter((s: DashboardShift) => s.status === 'confirmed');
-        const confirmedShiftsDates = confirmedShifts.map(s => s.date).sort();
-        const uniqueDates = [...new Set(confirmedShiftsDates)];
+        const confirmedShiftsDates = confirmedShifts.map((s: DashboardShift) => s.date).sort();
+        const uniqueDates: string[] = [...new Set(confirmedShiftsDates)];
         
         console.log('📦 [DASHBOARD] シフトデータ取得:', {
           totalShifts: shiftsData.length,
           // 確定済みシフトの詳細
           confirmedShiftsCount: confirmedShifts.length,
           confirmedShiftsDates: uniqueDates.slice(0, 10), // 最初の10件の日付
-          confirmedShiftsByDate: uniqueDates.slice(0, 10).map(date => ({
+          confirmedShiftsByDate: uniqueDates.slice(0, 10).map((date: string) => ({
             date: date,
-            count: confirmedShifts.filter(s => s.date === date).length,
-            shifts: confirmedShifts.filter(s => s.date === date).slice(0, 3).map(s => ({
+            count: confirmedShifts.filter((s: DashboardShift) => s.date === date).length,
+            shifts: confirmedShifts.filter((s: DashboardShift) => s.date === date).slice(0, 3).map((s: DashboardShift) => ({
               id: s.id,
               date: s.date,
               status: s.status,
@@ -236,8 +236,8 @@ export default function DashboardPage() {
           })),
           // 日付の範囲を確認
           dateRange: shiftsData.length > 0 ? {
-            min: Math.min(...shiftsData.map((s: DashboardShift) => s.date)),
-            max: Math.max(...shiftsData.map((s: DashboardShift) => s.date))
+            min: shiftsData.map((s: DashboardShift) => s.date).sort()[0],
+            max: shiftsData.map((s: DashboardShift) => s.date).sort().reverse()[0]
           } : null
         });
       } else {
@@ -305,7 +305,7 @@ export default function DashboardPage() {
 
       console.log('📅 [DASHBOARD DEBUG] 固定シフト:', {
         todayFixedShiftsCount: todayFixedShifts.length,
-        todayFixedShifts: todayFixedShifts.map(fs => ({
+        todayFixedShifts: todayFixedShifts.map((fs: { user_id: string; store_id: string; date: string }) => ({
           user_id: fs.user_id,
           store_id: fs.store_id,
           date: fs.date
@@ -457,9 +457,9 @@ export default function DashboardPage() {
           return acc;
         }, {} as Record<string, number>),
         // ユニークなスタッフ数の確認
-        uniqueStaffFromRegular: new Set(todayRegularShifts.map(s => s.user_id)).size,
-        uniqueStaffFromFixed: new Set(todayFixedShifts.map(s => s.user_id)).size,
-        uniqueStaffTotal: new Set(allTodayShifts.map(s => s.user_id)).size,
+        uniqueStaffFromRegular: new Set(todayRegularShifts.map((s: DashboardShift) => s.user_id)).size,
+        uniqueStaffFromFixed: new Set(todayFixedShifts.map((fs: { user_id: string }) => fs.user_id)).size,
+        uniqueStaffTotal: new Set(allTodayShifts.map((s: DashboardShift | { user_id: string }) => s.user_id)).size,
         // デバッグ: 取得した全シフトデータの詳細
         allShiftsData: shiftsData.map((s: DashboardShift) => ({
           id: s.id,
@@ -574,7 +574,7 @@ export default function DashboardPage() {
             store_id: s.store_id
           })),
           // 確定済み通常シフトからこの店舗のシフトを確認
-          regularShiftsForStore: todayRegularShifts.filter(s => s.store_id === store.id).map(s => ({
+          regularShiftsForStore: todayRegularShifts.filter((s: DashboardShift) => s.store_id === store.id).map((s: DashboardShift) => ({
             id: s.id,
             user_id: s.user_id,
             date: s.date,
@@ -582,7 +582,7 @@ export default function DashboardPage() {
             store_id: s.store_id
           })),
           // 固定シフトからこの店舗のシフトを確認
-          fixedShiftsForStore: todayFixedShifts.filter(s => s.store_id === store.id).map(s => ({
+          fixedShiftsForStore: todayFixedShifts.filter((s: { store_id: string }) => s.store_id === store.id).map((s: { id: string; user_id: string; date: string; store_id: string }) => ({
             id: s.id,
             user_id: s.user_id,
             date: s.date,
@@ -690,11 +690,11 @@ export default function DashboardPage() {
         todayFixedShiftsCount: todayFixedShifts.length, // 固定シフト
         // 店舗別の内訳
         storeBreakdown: staffingData.map(s => {
-          const storeRegularShifts = todayRegularShifts.filter(shift => {
+          const storeRegularShifts = todayRegularShifts.filter((shift: DashboardShift) => {
             const store = storesData.find((st: DashboardStore) => st.name === s.store);
             return store && shift.store_id === store.id;
           });
-          const storeFixedShifts = todayFixedShifts.filter(shift => {
+          const storeFixedShifts = todayFixedShifts.filter((shift: { store_id: string }) => {
             const store = storesData.find((st: DashboardStore) => st.name === s.store);
             return store && shift.store_id === store.id;
           });
@@ -703,8 +703,8 @@ export default function DashboardPage() {
             scheduled: s.scheduled,
             regularShiftsCount: storeRegularShifts.length,
             fixedShiftsCount: storeFixedShifts.length,
-            uniqueStaffFromRegular: new Set(storeRegularShifts.map(s => s.user_id)).size,
-            uniqueStaffFromFixed: new Set(storeFixedShifts.map(s => s.user_id)).size
+            uniqueStaffFromRegular: new Set(storeRegularShifts.map((s: DashboardShift) => s.user_id)).size,
+            uniqueStaffFromFixed: new Set(storeFixedShifts.map((s: { user_id: string }) => s.user_id)).size
           };
         }),
         timestamp: new Date().toISOString()
