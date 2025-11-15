@@ -165,9 +165,22 @@ export async function POST(request: NextRequest) {
 
       const existingRequests = existingRequestsResponse.data || [];
 
-      // 完全に同一のリクエストを除外
+      // 既に提出済みの日付のシフト希望を完全に除外（同じ日付に複数のシフト希望があっても全て除外）
+      // converted_to_shift以外の全てのステータス（submitted, approved, rejected）をチェック
       const filteredRequests = requests.filter((newReq: any) => {
-        return !existingRequests.some((existing: any) => {
+        // 既に提出済みの日付のシフトは完全に除外
+        const hasSubmittedForDate = existingRequests.some((existing: any) => 
+          existing.date === newReq.date && 
+          existing.status !== 'converted_to_shift'
+        );
+        if (hasSubmittedForDate) {
+          console.log(`⚠️ [API] 日付 ${newReq.date} は既に提出済みのため除外します`);
+          return false;
+        }
+
+        // 完全に同一のリクエストを除外
+        // converted_to_shift以外の全てのステータスをチェック
+        const isExactMatch = existingRequests.some((existing: any) => {
           // 各フィールドを個別に比較（null値の正規化）
           const dateMatch = existing.date === newReq.date;
           const timeSlotMatch = (existing.time_slot_id || null) === (newReq.time_slot_id || null);
@@ -175,13 +188,18 @@ export async function POST(request: NextRequest) {
           const endTimeMatch = (existing.preferred_end_time || null) === (newReq.preferred_end_time || null);
           const priorityMatch = existing.priority === newReq.priority;
           const notesMatch = (existing.notes || '') === (newReq.notes || '');
-          const isSubmitted = existing.status === 'submitted';
+          const isNotConverted = existing.status !== 'converted_to_shift';
 
-          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch &&
-            endTimeMatch && priorityMatch && notesMatch && isSubmitted;
-
-          return isExactMatch;
+          return dateMatch && timeSlotMatch && startTimeMatch &&
+            endTimeMatch && priorityMatch && notesMatch && isNotConverted;
         });
+
+        if (isExactMatch) {
+          console.log(`⚠️ [API] 完全一致する既存のシフト希望があるため除外します: ${newReq.date}`);
+          return false;
+        }
+
+        return true;
       });
 
       if (filteredRequests.length === 0) {
