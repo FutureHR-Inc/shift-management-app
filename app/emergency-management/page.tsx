@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AuthenticatedLayout from '@/components/layout/AuthenticatedLayout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
-export default function EmergencyManagementPage() {
+function EmergencyManagementPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'browse' | 'create' | 'manage'>('browse');
   const [emergencyRequests, setEmergencyRequests] = useState<any[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
@@ -62,11 +63,23 @@ export default function EmergencyManagementPage() {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `データの取得に失敗しました (${response.status})`);
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          const text = await response.text();
+          throw new Error(`データの取得に失敗しました (${response.status}): ${text || '不明なエラー'}`);
+        }
+        throw new Error(errorData.error || errorData.details || `データの取得に失敗しました (${response.status})`);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('JSONパースエラー:', parseError);
+        throw new Error('サーバーからのレスポンスの解析に失敗しました');
+      }
       console.log('取得した代打募集データ:', {
         status: response.status,
         totalCount: data.data?.length || 0,
@@ -78,13 +91,37 @@ export default function EmergencyManagementPage() {
         } : null
       });
 
-      setEmergencyRequests(data.data || []);
+      // 日付順でソート
+      const sortedRequests = [...(data.data || [])].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      setEmergencyRequests(sortedRequests);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '予期せぬエラーが発生しました';
+      let errorMessage = '予期せぬエラーが発生しました';
+      let errorDetails: any = {};
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        errorDetails = {
+          name: err.name,
+          message: err.message,
+          stack: err.stack
+        };
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+        errorDetails = { message: err };
+      } else if (err && typeof err === 'object') {
+        errorDetails = err;
+        errorMessage = (err as any).message || (err as any).error || '予期せぬエラーが発生しました';
+      }
+      
       console.error('代打募集データ取得エラー:', {
-        error: err,
+        error: errorDetails,
         message: errorMessage,
-        userId: currentUser.id
+        userId: currentUser?.id,
+        errorType: typeof err,
+        errorString: String(err)
       });
       setError(errorMessage);
       setEmergencyRequests([]); // エラー時はリストをクリア
@@ -99,6 +136,31 @@ export default function EmergencyManagementPage() {
       fetchEmergencyRequests();
     }
   }, [currentUser]);
+
+  // URLパラメータからタブと選択された代打募集を読み取る
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const manageId = searchParams.get('manage');
+    
+    if (tab === 'manage' && manageId) {
+      // 募集管理タブを開く
+      setActiveTab('manage');
+      
+      // データが読み込まれたら、指定された代打募集を選択
+      if (emergencyRequests.length > 0) {
+        const request = emergencyRequests.find((req: any) => req.id === manageId);
+        if (request) {
+          console.log('🔍 [EMERGENCY MANAGEMENT] URLパラメータから代打募集を選択:', request);
+          setSelectedRequest(request);
+        } else {
+          console.warn('🔍 [EMERGENCY MANAGEMENT] 指定された代打募集が見つかりません:', manageId);
+        }
+      }
+    } else if (tab) {
+      // タブのみ指定されている場合
+      setActiveTab(tab as 'browse' | 'create' | 'manage');
+    }
+  }, [searchParams, emergencyRequests]);
 
   // 応募者を承認
   const handleApproveVolunteer = async (volunteerId: string) => {
@@ -118,20 +180,38 @@ export default function EmergencyManagementPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('承認処理に失敗しました');
-
       const result = await response.json();
       
+      if (!response.ok) {
+        // エラーメッセージを表示
+        const errorMessage = result.error || '承認処理に失敗しました';
+        alert(errorMessage);
+        throw new Error(errorMessage);
+      }
+      
       // シフト作成の成功メッセージを表示
-      alert('応募者を承認し、シフトを作成しました');
+      if (result.message) {
+        alert(result.message);
+      } else {
+        alert('応募者を承認し、シフトを作成しました');
+      }
       
       // データを再取得してから画面を更新
       await fetchEmergencyRequests();
-      setActiveTab('browse');
-      setSelectedRequest(null);
       
-      // シフト作成画面に遷移（作成されたシフトを確認できるように）
-      router.push('/shift/create');
+      // 更新されたデータから同じ代打募集を再取得して選択状態を維持
+      const updatedRequestsResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+      if (updatedRequestsResponse.ok) {
+        const updatedRequestsData = await updatedRequestsResponse.json();
+        const allRequests = updatedRequestsData.data || [];
+        const foundRequest = allRequests.find((req: any) => req.id === selectedRequest.id);
+        if (foundRequest) {
+          console.log('🔍 [EMERGENCY MANAGEMENT] 更新された代打募集データを設定:', foundRequest);
+          setSelectedRequest(foundRequest);
+        }
+      }
+      
+      // 募集管理画面に留まる（タブや選択状態を維持）
     } catch (err) {
       setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
     } finally {
@@ -159,6 +239,17 @@ export default function EmergencyManagementPage() {
       
       // データを再取得
       await fetchEmergencyRequests();
+      
+      // 更新されたデータから同じ代打募集を再取得して選択状態を維持
+      const updatedRequests = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`)
+        .then(res => res.json())
+        .then(data => data.data || []);
+      
+      const updatedRequest = updatedRequests.find((req: any) => req.id === selectedRequest.id);
+      if (updatedRequest) {
+        setSelectedRequest(updatedRequest);
+      }
+      
       alert('応募者を却下しました');
     } catch (err) {
       setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
@@ -414,19 +505,28 @@ export default function EmergencyManagementPage() {
                   {selectedRequest.emergency_volunteers?.length > 0 ? (
                 <div className="space-y-4">
                                             {selectedRequest.emergency_volunteers.map((volunteer: any) => (
-                        <div key={volunteer.id} className="border rounded-lg p-4">
+                        <div key={volunteer.id} className={`border rounded-lg p-4 ${
+                          volunteer.status === 'accepted' ? 'bg-green-50 border-green-200' :
+                          volunteer.status === 'rejected' ? 'bg-red-50 border-red-200' :
+                          'bg-white'
+                        }`}>
                           <div className="flex items-center justify-between">
-                        <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium">{volunteer.users?.name}</p>
+                        <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-medium text-lg">{volunteer.users?.name}</p>
                                 {volunteer.status === 'accepted' && (
-                                  <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                                    採用済み
+                                  <span className="px-3 py-1 text-sm font-semibold bg-green-500 text-white rounded-full">
+                                    ✓ 採用済み
                                   </span>
                                 )}
                                 {volunteer.status === 'rejected' && (
-                                  <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">
-                                    不採用
+                                  <span className="px-3 py-1 text-sm font-semibold bg-red-500 text-white rounded-full">
+                                    ✗ 不採用
+                                  </span>
+                                )}
+                                {!volunteer.status && (
+                                  <span className="px-3 py-1 text-sm font-medium bg-gray-200 text-gray-700 rounded-full">
+                                    審査中
                                   </span>
                                 )}
                               </div>
@@ -436,43 +536,60 @@ export default function EmergencyManagementPage() {
                           {volunteer.notes && (
                                 <p className="text-sm text-gray-600 mt-2">{volunteer.notes}</p>
                           )}
+                          {volunteer.status === 'accepted' && (
+                            <p className="text-sm text-green-700 font-medium mt-2">
+                              ✓ この応募者は採用され、シフトが作成されました
+                            </p>
+                          )}
+                          {volunteer.status === 'rejected' && (
+                            <p className="text-sm text-red-700 font-medium mt-2">
+                              ✗ この応募者は不採用となりました
+                            </p>
+                          )}
                         </div>
-                            {!volunteer.status && (
-                              <div className="flex gap-2">
-                                                      <Button
-                            onClick={() => {
-                                  if (confirm(selectedRequest.request_type === 'substitute' 
-                                    ? 'このスタッフを採用し、元のスタッフのシフトと入れ替えますか？'
-                                    : 'このスタッフを採用し、シフトを作成しますか？'
-                                  )) {
-                                    handleApproveVolunteer(volunteer.id);
-                                  }
-                                }}
-                                variant="primary"
-                                size="sm"
-                                disabled={loading}
-                              >
-                                {loading ? (
-                                  <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                    シフト作成中...
-                                  </>
-                                ) : (
-                                  '採用してシフト作成'
-                                )}
-                              </Button>
-                        <Button
-                          onClick={() => {
-                                  if (confirm('このスタッフの応募を不採用にしますか？')) {
-                                    handleRejectVolunteer(volunteer.id);
-                                  }
-                                }}
-                                variant="destructive"
-                                size="sm"
-                                disabled={loading}
-                              >
-                                不採用
-                        </Button>
+                            {/* 審査中（statusがnull、undefined、または'pending'）の場合のみボタンを表示 */}
+                            {(!volunteer.status || volunteer.status === 'pending') && (
+                              <div className="flex gap-2 ml-4">
+                                <Button
+                                  onClick={() => {
+                                    if (confirm(selectedRequest.request_type === 'substitute' 
+                                      ? 'このスタッフを採用し、元のスタッフのシフトと入れ替えますか？'
+                                      : 'このスタッフを採用し、シフトを作成しますか？'
+                                    )) {
+                                      handleApproveVolunteer(volunteer.id);
+                                    }
+                                  }}
+                                  variant="primary"
+                                  size="sm"
+                                  disabled={loading}
+                                >
+                                  {loading ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                      シフト作成中...
+                                    </>
+                                  ) : (
+                                    '採用してシフト作成'
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    if (confirm('このスタッフの応募を不採用にしますか？')) {
+                                      handleRejectVolunteer(volunteer.id);
+                                    }
+                                  }}
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={loading}
+                                >
+                                  不採用
+                                </Button>
+                              </div>
+                            )}
+                            {/* 採用済み・却下済みの場合はボタンを表示しない */}
+                            {(volunteer.status === 'accepted' || volunteer.status === 'rejected') && (
+                              <div className="ml-4">
+                                {/* ボタンは表示しない */}
                               </div>
                             )}
                       </div>
@@ -489,5 +606,23 @@ export default function EmergencyManagementPage() {
         )}
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+// Suspenseでラップしたエクスポートコンポーネント
+export default function EmergencyManagementPage() {
+  return (
+    <Suspense fallback={
+      <AuthenticatedLayout>
+        <div className="flex items-center justify-center min-h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-gray-600">読み込み中...</p>
+          </div>
+        </div>
+      </AuthenticatedLayout>
+    }>
+      <EmergencyManagementPageContent />
+    </Suspense>
   );
 } 

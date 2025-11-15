@@ -39,6 +39,7 @@ interface EmergencyVolunteer {
   user_id: string;
   responded_at: string;
   notes?: string;
+  status?: 'pending' | 'accepted' | 'rejected' | null;
   users: User;
 }
 
@@ -144,8 +145,17 @@ export default function EmergencyPage() {
           const otherRequests = emergencyData.data.filter((req: EmergencyRequest) => 
             req.status === 'open' && req.original_user_id !== currentUser.id
           );
-          setMyEmergencyRequests(myRequests);
-          setEmergencyRequests(otherRequests);
+          
+          // 日付順でソート
+          const sortedMyRequests = [...myRequests].sort((a, b) => 
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+          const sortedOtherRequests = [...otherRequests].sort((a, b) => 
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+          
+          setMyEmergencyRequests(sortedMyRequests);
+          setEmergencyRequests(sortedOtherRequests);
         }
 
         // スタッフの場合は確定済みシフトと固定シフトを取得
@@ -368,8 +378,16 @@ export default function EmergencyPage() {
           req.original_user_id !== currentUser!.id
         );
         
-        setMyEmergencyRequests(myRequests);
-        setEmergencyRequests(otherRequests);
+        // 日付順でソート
+        const sortedMyRequests = [...myRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const sortedOtherRequests = [...otherRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        
+        setMyEmergencyRequests(sortedMyRequests);
+        setEmergencyRequests(sortedOtherRequests);
 
         // 成功メッセージを表示
         alert('代打募集を削除しました');
@@ -412,21 +430,65 @@ export default function EmergencyPage() {
         throw new Error(error.error || '代打募集の作成に失敗しました');
       }
 
-      // 成功時にリセットしてデータを再取得
+      const result = await response.json();
+      console.log('🔍 [EMERGENCY] 代打募集作成成功:', result);
+
+      // 成功時にリセット
       setSelectedShift(null);
       setReason('');
       setActiveTab('browse');
       
-      // データを再取得
-      const fetchData = async () => {
-        const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser!.id}`);
-        if (emergencyResponse.ok) {
-          const emergencyData = await emergencyResponse.json();
-          const openRequests = emergencyData.data.filter((req: EmergencyRequest) => req.status === 'open');
-          setEmergencyRequests(openRequests);
+      // データを再取得（自分が作成した代打募集と他のスタッフの代打募集を分ける）
+      // awaitを使って確実にデータを取得してから状態を更新
+      const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser!.id}`);
+      if (emergencyResponse.ok) {
+        const emergencyData = await emergencyResponse.json();
+        console.log('🔍 [EMERGENCY] 再取得したデータ:', emergencyData.data);
+        
+        // 自分が作成した代打募集と他のスタッフの代打募集を分ける
+        const myRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.original_user_id === currentUser!.id && req.status === 'open'
+        );
+        const otherRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.status === 'open' && req.original_user_id !== currentUser!.id
+        );
+        
+        console.log('🔍 [EMERGENCY] 自分の代打募集:', myRequests);
+        console.log('🔍 [EMERGENCY] 他のスタッフの代打募集:', otherRequests);
+        
+        // 状態を即座に更新（日付順でソート）
+        const sortedMyRequests = [...myRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const sortedOtherRequests = [...otherRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        setMyEmergencyRequests(sortedMyRequests);
+        setEmergencyRequests(sortedOtherRequests);
+        
+        // 作成したシフトをmyShiftsから即座に除外（UIを即座に更新）
+        if (selectedShift) {
+          setMyShifts(prevShifts => {
+            const filtered = prevShifts.filter(shift => 
+              !(shift.date === selectedShift.date && 
+                shift.store_id === selectedShift.store_id &&
+                (shift.time_slot_id === selectedShift.time_slot_id || 
+                 (shift.time_slot_id === null && selectedShift.time_slot_id === null)))
+            );
+            console.log('🔍 [EMERGENCY] 作成したシフトをmyShiftsから除外:', {
+              before: prevShifts.length,
+              after: filtered.length,
+              removedShift: selectedShift
+            });
+            return filtered;
+          });
         }
-      };
-      fetchData();
+        
+        // 成功メッセージを表示
+        alert('代打募集を作成しました');
+      } else {
+        console.error('🔍 [EMERGENCY] データ再取得に失敗');
+      }
       
     } catch (error) {
       console.error('代打募集作成エラー:', error);
@@ -441,6 +503,49 @@ export default function EmergencyPage() {
     return request.emergency_volunteers?.some(volunteer => 
       volunteer.user_id === currentUser?.id
     );
+  };
+
+  // 応募済みで未承認かチェック（取り消し可能かどうか）
+  const canCancelApplication = (request: EmergencyRequest) => {
+    const myVolunteer = request.emergency_volunteers?.find(volunteer => 
+      volunteer.user_id === currentUser?.id
+    );
+    // statusがnull、undefined、または'pending'の場合は取り消し可能
+    // 'accepted'や'rejected'の場合は取り消し不可
+    return myVolunteer && (!myVolunteer.status || myVolunteer.status === 'pending');
+  };
+
+  // 応募取り消し処理
+  const handleCancelApplication = async (requestId: string) => {
+    if (!confirm('この応募を取り消してもよろしいですか？')) {
+      return;
+    }
+
+    if (!currentUser) {
+      setError('ユーザー情報が見つかりません。再ログインしてください。');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      const response = await fetch(`/api/emergency-volunteers?emergency_request_id=${requestId}&user_id=${currentUser.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '応募の取り消しに失敗しました');
+      }
+
+      alert('応募を取り消しました');
+      
+      // データを再取得
+      window.location.reload();
+    } catch (error) {
+      console.error('応募取り消しエラー:', error);
+      setError(error instanceof Error ? error.message : '応募の取り消しに失敗しました');
+    }
   };
 
   // 表示用の時間情報を取得
@@ -649,21 +754,27 @@ export default function EmergencyPage() {
             )}
 
             {/* 他のスタッフの代打募集一覧 */}
-            {emergencyRequests.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center py-12 text-gray-500">
-                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">代打募集がありません</h3>
-                    <p>現在、代打を募集しているシフトはありません。</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {emergencyRequests.map((request) => {
+            {/* 念のため、表示時に自分の代打募集を除外 */}
+            {(() => {
+              const filteredRequests = emergencyRequests.filter((req: EmergencyRequest) => 
+                req.original_user_id !== currentUser?.id
+              );
+              
+              return filteredRequests.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center py-12 text-gray-500">
+                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">代打募集がありません</h3>
+                      <p>現在、代打を募集しているシフトはありません。</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {filteredRequests.map((request) => {
                   const urgency = getUrgencyLevel(request.date);
                   const urgencyStyle = getUrgencyStyle(urgency);
                   const urgencyLabel = getUrgencyLabel(urgency);
@@ -736,11 +847,25 @@ export default function EmergencyPage() {
 
                           <div className="ml-6">
                             {alreadyApplied ? (
-                              <div className="text-center">
+                              <div className="text-center space-y-2">
                                 <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium">
                                   応募済み
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">結果をお待ちください</p>
+                                {canCancelApplication(request) ? (
+                                  <>
+                                    <p className="text-xs text-gray-500">結果をお待ちください</p>
+                                    <Button
+                                      onClick={() => handleCancelApplication(request.id)}
+                                      variant="secondary"
+                                      size="sm"
+                                      className="text-xs text-red-600 hover:bg-red-50 border-red-200"
+                                    >
+                                      応募を取り消す
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <p className="text-xs text-gray-500">結果をお待ちください</p>
+                                )}
                               </div>
                             ) : (
                               <div className="space-y-3">
@@ -785,7 +910,8 @@ export default function EmergencyPage() {
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
 
             {/* 注意事項 */}
             <Card>
