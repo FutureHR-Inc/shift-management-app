@@ -477,9 +477,14 @@ export default function DashboardPage() {
         }))
       });
       const pendingRequests = (requestsData as DashboardShiftRequest[])?.filter(req => req.status === 'submitted') || [];
-      const openEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => 
+      const filteredEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => 
         req.status === 'open' && req.original_user_id !== currentUser?.id
       ) || [];
+      
+      // 日付順でソート
+      const openEmergencies = [...filteredEmergencies].sort((a, b) => 
+        new Date(a.date || '').getTime() - new Date(b.date || '').getTime()
+      );
 
       // users と stores データをAPIレスポンスから取得
       let usersData = [];
@@ -954,7 +959,15 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {openEmergencies.slice(0, 3).map((emergency: DatabaseEmergencyRequest) => (
-                    <div key={emergency.id} className="border-l-4 border-orange-400 pl-3">
+                    <div 
+                      key={emergency.id} 
+                      className={`border-l-4 border-orange-400 pl-3 ${
+                        userRole === 'manager' 
+                          ? 'cursor-pointer hover:bg-gray-50 transition-colors rounded-r-lg p-2 -ml-2' 
+                          : ''
+                      }`}
+                      onClick={userRole === 'manager' ? () => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`) : undefined}
+                    >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                                                   <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -994,7 +1007,10 @@ export default function DashboardPage() {
                                   応募{emergency.emergency_volunteers?.length || 0}名
                                 </span>
                                 <Button
-                                  onClick={() => router.push(`/emergency-management?tab=manage&manage=${emergency.id}`)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/emergency-management?tab=manage&manage=${emergency.id}`);
+                                  }}
                                   size="sm"
                                   variant="secondary"
                                   className="text-xs whitespace-nowrap w-full sm:w-auto"
@@ -1005,7 +1021,10 @@ export default function DashboardPage() {
                             )}
                             {userRole === 'staff' && !emergency.emergency_volunteers?.some(v => v.user_id === currentUser?.id) && (
                               <Button
-                                onClick={() => handleApplyEmergency(emergency.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleApplyEmergency(emergency.id);
+                                }}
                                 size="sm"
                                 className="text-xs whitespace-nowrap w-full sm:w-auto"
                               >

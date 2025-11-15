@@ -213,8 +213,99 @@ export async function POST(request: NextRequest) {
       requests.splice(0, requests.length, ...filteredRequests);
     }
 
+    // 異なる店舗での重複チェック（各リクエストについて）
+    const validRequests = [];
+    const duplicateErrors = [];
+
+    for (const req of requests) {
+      try {
+        // 1. 異なる店舗での通常シフト重複チェック
+        const { data: existingShifts, error: shiftCheckError } = await supabase
+          .from('shifts')
+          .select('id, store_id, stores(id, name)')
+          .eq('user_id', user_id)
+          .eq('date', req.date)
+          .neq('store_id', store_id); // 異なる店舗
+
+        if (shiftCheckError) {
+          console.error('シフト重複チェックエラー:', shiftCheckError);
+          duplicateErrors.push(`${req.date}: 重複チェックに失敗しました`);
+          continue;
+        }
+
+        if (existingShifts && existingShifts.length > 0) {
+          const otherStoreNames = existingShifts
+            .map((shift: any) => {
+              const store = Array.isArray(shift.stores) ? shift.stores[0] : shift.stores;
+              return store?.name || '不明な店舗';
+            })
+            .join('、');
+          duplicateErrors.push(`${req.date}: 他の店舗（${otherStoreNames}）で同日のシフトが設定されています`);
+          continue;
+        }
+
+        // 2. 異なる店舗での固定シフト重複チェック
+        const dateObj = new Date(req.date);
+        const dayOfWeek = dateObj.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+        const timeSlotId = req.time_slot_id || null;
+
+        if (timeSlotId) {
+          const { data: existingFixedShifts, error: fixedShiftCheckError } = await supabase
+            .from('fixed_shifts')
+            .select('id, store_id, stores(id, name)')
+            .eq('user_id', user_id)
+            .eq('day_of_week', dayOfWeek)
+            .eq('time_slot_id', timeSlotId)
+            .eq('is_active', true)
+            .neq('store_id', store_id); // 異なる店舗
+
+          if (fixedShiftCheckError) {
+            console.error('固定シフト重複チェックエラー:', fixedShiftCheckError);
+            duplicateErrors.push(`${req.date}: 固定シフト重複チェックに失敗しました`);
+            continue;
+          }
+
+          if (existingFixedShifts && existingFixedShifts.length > 0) {
+            const otherStoreNames = existingFixedShifts
+              .map((fs: any) => {
+                const store = Array.isArray(fs.stores) ? fs.stores[0] : fs.stores;
+                return store?.name || '不明な店舗';
+              })
+              .join('、');
+            duplicateErrors.push(`${req.date}: 他の店舗（${otherStoreNames}）でこの曜日・時間帯の固定シフトが設定されています`);
+            continue;
+          }
+        }
+
+        // 重複がない場合は有効なリクエストとして追加
+        validRequests.push(req);
+      } catch (error) {
+        console.error(`リクエスト ${req.date} の重複チェックエラー:`, error);
+        duplicateErrors.push(`${req.date}: 重複チェック中にエラーが発生しました`);
+      }
+    }
+
+    // 重複エラーがある場合はエラーを返す
+    if (duplicateErrors.length > 0) {
+      return NextResponse.json(
+        { 
+          error: '異なる店舗での重複シフトが検出されました',
+          details: duplicateErrors
+        },
+        { status: 409 }
+      );
+    }
+
+    // 有効なリクエストがない場合
+    if (validRequests.length === 0) {
+      return NextResponse.json(
+        { error: '提出可能なシフト希望がありません' },
+        { status: 400 }
+      );
+    }
+
     // 新しい希望を一括挿入
-    const insertData = requests.map((req: any) => ({
+    const insertData = validRequests.map((req: any) => ({
       user_id,
       store_id,
       submission_period,

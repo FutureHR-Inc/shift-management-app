@@ -45,11 +45,20 @@ interface Shift {
 
 export default function MyShiftPage() {
   const [selectedWeek, setSelectedWeek] = useState(() => {
-    // 今週の月曜日を取得
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1);
-    return monday.toISOString().split('T')[0];
+    // 日本時間で今日の日付を取得
+    const now = new Date();
+    const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const todayStr = japanDateFormatter.format(now);
+    const [year, month, day] = todayStr.split('-').map(Number);
+    const today = new Date(year, month - 1, day);
+    
+    // 選択した日から7日間を表示するため、今日の日付を初期値とする
+    return todayStr;
   });
   
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -119,13 +128,22 @@ export default function MyShiftPage() {
       const unlimitedEnd = new Date(selectedDate);
       unlimitedEnd.setFullYear(selectedDate.getFullYear() + 1); // 1年後
       
-      // 通常シフト取得は選択週のみ
-      const selectedWeekStart = new Date(selectedWeek);
+      // 通常シフト取得は選択日から7日間
+      // 日本時間で日付を処理
+      const [year, month, day] = selectedWeek.split('-').map(Number);
+      const selectedWeekStart = new Date(year, month - 1, day);
       const selectedWeekEnd = new Date(selectedWeekStart);
       selectedWeekEnd.setDate(selectedWeekStart.getDate() + 6);
       
-      const weekStartString = selectedWeekStart.toISOString().split('T')[0];
-      const weekEndString = selectedWeekEnd.toISOString().split('T')[0];
+      // 日本時間で日付文字列を取得
+      const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const weekStartString = japanDateFormatter.format(selectedWeekStart);
+      const weekEndString = japanDateFormatter.format(selectedWeekEnd);
 
       // 通常シフトと固定シフトを並行取得（通常シフトは選択週のみ）
       const fixedShiftsUrl = `/api/fixed-shifts?user_id=${currentUser?.id}&is_active=true`;
@@ -166,7 +184,8 @@ export default function MyShiftPage() {
         for (let i = 0; i < 7; i++) {
           const currentDate = new Date(selectedWeekStart);
           currentDate.setDate(selectedWeekStart.getDate() + i);
-          const dateString = currentDate.toISOString().split('T')[0];
+          // 日本時間で日付文字列を取得
+          const dateString = japanDateFormatter.format(currentDate);
           const dayOfWeek = currentDate.getDay();
 
           console.log(`  - 日付: ${dateString} (${dayOfWeek}曜日)`);
@@ -225,9 +244,11 @@ export default function MyShiftPage() {
       }
     };
 
-  // 週の日付を生成
+  // 週の日付を生成（選択した日から7日間）
   const getWeekDates = (startDate: string) => {
-    const start = new Date(startDate);
+    // 日本時間で日付を処理
+    const [year, month, day] = startDate.split('-').map(Number);
+    const start = new Date(year, month - 1, day);
     const dates = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(start);
@@ -244,14 +265,25 @@ export default function MyShiftPage() {
     return myShifts.find(shift => shift.date === date);
   };
 
-  // 今週の総勤務時間を計算
+  // 選択した日から7日間の総勤務時間を計算（時間単位）
   const calculateWeeklyHours = () => {
     let totalHours = 0;
+    
+    // 日本時間で日付を取得するフォーマッター
+    const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    
     weekDates.forEach(date => {
-      const dateString = date.toISOString().split('T')[0];
+      // 日本時間で日付文字列を取得
+      const dateString = japanDateFormatter.format(date);
       const shift = getShiftForDate(dateString);
+      
       if (shift) {
-        let startTime, endTime, breakMinutes = 30; // デフォルト休憩時間
+        let startTime, endTime;
 
         // カスタム時間が設定されている場合
         if (shift.custom_start_time && shift.custom_end_time) {
@@ -262,7 +294,6 @@ export default function MyShiftPage() {
         else if (shift.shift_patterns) {
           startTime = shift.shift_patterns.start_time;
           endTime = shift.shift_patterns.end_time;
-          breakMinutes = shift.shift_patterns.break_time || 30;
         }
         // time_slotsがある場合
         else if (shift.time_slots) {
@@ -273,9 +304,9 @@ export default function MyShiftPage() {
         if (startTime && endTime) {
           const start = new Date(`2000-01-01T${startTime}`);
           const end = new Date(`2000-01-01T${endTime}`);
-        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-          const breakHours = breakMinutes / 60; // 分を時間に変換
-        totalHours += Math.max(0, hours - breakHours);
+          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          // 休憩時間は差し引かず、そのまま加算
+          totalHours += hours;
         }
       }
     });
@@ -361,12 +392,23 @@ export default function MyShiftPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
               {weekDates.map((date, index) => {
-                const dateString = date.toISOString().split('T')[0];
+                // 日本時間で日付文字列を取得
+                const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+                  timeZone: 'Asia/Tokyo',
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit'
+                });
+                const dateString = japanDateFormatter.format(date);
                 const shift = getShiftForDate(dateString);
                 const pattern = shift?.shift_patterns;
                 const timeSlot = shift?.time_slots;
                 const store = shift?.stores;
-                const isToday = dateString === new Date().toISOString().split('T')[0];
+                
+                // 日本時間で今日の日付を取得
+                const now = new Date();
+                const today = japanDateFormatter.format(now);
+                const isToday = dateString === today;
 
                 // 表示用の時間情報を取得
                 const getDisplayTime = () => {
@@ -472,7 +514,15 @@ export default function MyShiftPage() {
 
         {/* 今日のシフト詳細（今日の場合のみ） */}
         {(() => {
-          const today = new Date().toISOString().split('T')[0];
+          // 日本時間で今日の日付を取得
+          const now = new Date();
+          const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tokyo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          });
+          const today = japanDateFormatter.format(now);
           const todayShift = getShiftForDate(today);
           
           if (!todayShift) return null;

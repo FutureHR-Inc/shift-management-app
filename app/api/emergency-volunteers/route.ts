@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 応募者が同じ日に他のシフトを持っていないかチェック
+    // 応募者が同じ日に他のシフトを持っていないかチェック（通常シフト）
     console.log('シフト重複チェック開始:', { user_id, date: emergencyRequest.date });
     const { data: existingShifts } = await supabase
       .from('shifts')
@@ -136,6 +136,51 @@ export async function POST(request: NextRequest) {
         },
         { status: 409 }
       );
+    }
+
+    // 応募者が同じ日に固定シフトを持っていないかチェック
+    const dateObj = new Date(emergencyRequest.date);
+    const dayOfWeek = dateObj.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+    
+    // 代打募集の詳細情報を取得（time_slot_idが必要）
+    const { data: requestDetails } = await supabase
+      .from('emergency_requests')
+      .select('time_slot_id')
+      .eq('id', emergency_request_id)
+      .single();
+
+    if (requestDetails?.time_slot_id) {
+      console.log('固定シフト重複チェック開始:', { user_id, dayOfWeek, time_slot_id: requestDetails.time_slot_id });
+      const { data: existingFixedShifts } = await supabase
+        .from('fixed_shifts')
+        .select(`
+          id,
+          store_id,
+          stores(id, name)
+        `)
+        .eq('user_id', user_id)
+        .eq('day_of_week', dayOfWeek)
+        .eq('time_slot_id', requestDetails.time_slot_id)
+        .eq('is_active', true);
+
+      console.log('既存固定シフト検索結果:', existingFixedShifts);
+
+      if (existingFixedShifts && existingFixedShifts.length > 0) {
+        const existingFixedShift = existingFixedShifts[0];
+        const storeData = existingFixedShift.stores as { name?: string } | null;
+
+        console.log('固定シフト重複検出:', { existingFixedShift, storeData });
+
+        return NextResponse.json(
+          {
+            error: `この代打募集には応募できません。${storeData?.name || '不明な店舗'}でこの曜日・時間帯の固定シフトが設定されています`,
+            conflictingStore: storeData?.name || '不明な店舗',
+            conflictingStoreId: existingFixedShift.store_id,
+            conflictType: 'fixed_shift'
+          },
+          { status: 409 }
+        );
+      }
     }
 
     console.log('データ挿入開始:', { emergency_request_id, user_id, notes: notes || null });

@@ -26,8 +26,17 @@ interface Shift {
   store_id: string;
   time_slot_id: string;
   status: 'draft' | 'confirmed' | 'completed';
+  custom_start_time?: string | null;
+  custom_end_time?: string | null;
   users?: { name: string };
   stores?: { name: string };
+  shift_patterns?: {
+    id: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+    break_time?: number;
+  };
   time_slots?: {
     name: string;
     start_time: string;
@@ -62,6 +71,7 @@ interface EmergencyRequest {
   emergency_volunteers?: {
     user_id: string;
     responded_at: string;
+    status?: 'pending' | 'accepted' | 'rejected' | null;
   }[];
   original_user_id?: string; // 自分が作成した代打募集の場合に設定
 }
@@ -106,27 +116,94 @@ export default function StaffDashboardPage() {
         setLoading(true);
         setError(null);
 
-        const today = new Date().toISOString().split('T')[0];
+        // 日本時間で今日の日付を取得
+        const now = new Date();
+        const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+        const todayStr = japanDateFormatter.format(now);
 
         // 今日のシフトを取得
-        const todayShiftResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${today}&date_to=${today}&current_user_id=${currentUser.id}`);
+        const todayShiftResponse = await fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${todayStr}&date_to=${todayStr}&current_user_id=${currentUser.id}`);
         if (todayShiftResponse.ok) {
           const todayResult = await todayShiftResponse.json();
           setTodayShift(todayResult.data?.[0] || null);
         }
 
-        // 今週のシフトを取得
-        const startOfWeek = new Date();
-        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        // 今週のシフトを取得（日曜日から土曜日）
+        // 日本時間で現在の日付を取得してから週の範囲を計算
+        const todayDateStr = todayStr; // YYYY-MM-DD形式
+        const [year, month, day] = todayDateStr.split('-').map(Number);
+        
+        // 日本時間で今日のDateオブジェクトを作成
+        const todayJST = new Date(year, month - 1, day);
+        const dayOfWeek = todayJST.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+        
+        // 今週の日曜日を計算（日曜日始まり）
+        const sundayJST = new Date(todayJST);
+        sundayJST.setDate(todayJST.getDate() - dayOfWeek);
+        
+        // 今週の土曜日を計算（土曜日終わり）
+        const saturdayJST = new Date(sundayJST);
+        saturdayJST.setDate(sundayJST.getDate() + 6);
 
-        const weeklyShiftResponse = await fetch(
-          `/api/shifts?user_id=${currentUser.id}&date_from=${startOfWeek.toISOString().split('T')[0]}&date_to=${endOfWeek.toISOString().split('T')[0]}&current_user_id=${currentUser.id}`
-        );
+        // 日付文字列を取得（YYYY-MM-DD形式）
+        const startOfWeekStr = japanDateFormatter.format(sundayJST);
+        const endOfWeekStr = japanDateFormatter.format(saturdayJST);
+
+        // 通常シフトと固定シフトを並行取得
+        const [weeklyShiftResponse, fixedShiftsResponse] = await Promise.all([
+          fetch(`/api/shifts?user_id=${currentUser.id}&date_from=${startOfWeekStr}&date_to=${endOfWeekStr}&current_user_id=${currentUser.id}`),
+          fetch(`/api/fixed-shifts?user_id=${currentUser.id}&is_active=true`)
+        ]);
+
         if (weeklyShiftResponse.ok) {
           const weeklyResult = await weeklyShiftResponse.json();
-          setWeeklyShifts(weeklyResult.data || []);
+          const normalShifts = weeklyResult.data || [];
+
+          // 固定シフトから今週のシフトを生成
+          const generatedShifts: Shift[] = [];
+          if (fixedShiftsResponse.ok) {
+            const fixedShiftsResult = await fixedShiftsResponse.json();
+            const fixedShifts = fixedShiftsResult.data || [];
+
+            // 今週の各日を確認（7日間：日曜日から土曜日）
+            for (let i = 0; i < 7; i++) {
+              const currentDate = new Date(sundayJST);
+              currentDate.setDate(sundayJST.getDate() + i);
+              const dateString = japanDateFormatter.format(currentDate);
+              const dayOfWeek = currentDate.getDay();
+
+              // その日に通常シフトが既にあるかチェック
+              const hasNormalShift = normalShifts.some((shift: Shift) => shift.date === dateString);
+
+              if (!hasNormalShift) {
+                // その曜日の固定シフトがあるかチェック
+                const dayFixedShift = fixedShifts.find((fs: any) => fs.day_of_week === dayOfWeek);
+
+                if (dayFixedShift) {
+                  // 固定シフトから仮想シフトオブジェクトを作成
+                  generatedShifts.push({
+                    id: `fixed-${dayFixedShift.id}-${dateString}`,
+                    date: dateString,
+                    user_id: currentUser.id,
+                    store_id: dayFixedShift.store_id,
+                    time_slot_id: dayFixedShift.time_slot_id || '',
+                    status: 'confirmed',
+                    stores: dayFixedShift.stores,
+                    time_slots: dayFixedShift.time_slots,
+                    notes: '固定シフト'
+                  } as Shift);
+                }
+              }
+            }
+          }
+
+          // 通常シフトと固定シフトをマージ
+          setWeeklyShifts([...normalShifts, ...generatedShifts]);
         }
 
         // シフト希望提出履歴を取得
@@ -144,7 +221,13 @@ export default function StaffDashboardPage() {
           const filteredEmergencyRequests = (emergencyResult.data || []).filter((req: EmergencyRequest) =>
             req.original_user_id !== currentUser.id
           );
-          setEmergencyRequests(filteredEmergencyRequests);
+          
+          // 日付順でソート
+          const sortedEmergencyRequests = [...filteredEmergencyRequests].sort((a, b) => 
+            new Date(a.date || '').getTime() - new Date(b.date || '').getTime()
+          );
+          
+          setEmergencyRequests(sortedEmergencyRequests);
         }
 
       } catch (error) {
@@ -157,30 +240,71 @@ export default function StaffDashboardPage() {
     fetchDashboardData();
   }, [currentUser]);
 
-  // 週間勤務時間を計算（月曜から日曜）
+  // 週間勤務時間を計算（日曜日から土曜日）
   const calculateWeeklyHours = () => {
-    // 今週の月曜日と日曜日を取得
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1); // 1 = 月曜日
-    monday.setHours(0, 0, 0, 0);
+    // 日本時間で今日の日付を取得
+    const now = new Date();
+    const japanDateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const todayStr = japanDateFormatter.format(now);
+    const [year, month, day] = todayStr.split('-').map(Number);
+    
+    // 日本時間で今日のDateオブジェクトを作成
+    const todayJST = new Date(year, month - 1, day);
+    const dayOfWeek = todayJST.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+    
+    // 今週の日曜日を計算（日曜日始まり）
+    const sundayJST = new Date(todayJST);
+    sundayJST.setDate(todayJST.getDate() - dayOfWeek);
+    
+    // 今週の土曜日を計算（土曜日終わり）
+    const saturdayJST = new Date(sundayJST);
+    saturdayJST.setDate(sundayJST.getDate() + 6);
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-
-    // 今週のシフトのみをフィルタリング
+    // 日付文字列を取得（YYYY-MM-DD形式）
+    const sundayStr = japanDateFormatter.format(sundayJST);
+    const saturdayStr = japanDateFormatter.format(saturdayJST);
+    
+    // 今週のシフトのみをフィルタリング（日付文字列で比較）
     const thisWeekShifts = weeklyShifts.filter(shift => {
-      const shiftDate = new Date(shift.date);
-      return shiftDate >= monday && shiftDate <= sunday;
+      const shiftDateStr = shift.date;
+      return shiftDateStr >= sundayStr && shiftDateStr <= saturdayStr;
     });
 
-    // 確定シフトのみの時間を合計
+    // すべてのシフトの時間を合計（マイシフトと同じ計算方法）
     return thisWeekShifts.reduce((total, shift) => {
-      if (!shift.time_slots || shift.status !== 'confirmed') return total;
-      const start = new Date(`2000-01-01T${shift.time_slots.start_time}`);
-      const end = new Date(`2000-01-01T${shift.time_slots.end_time}`);
+      
+      let startTime: string | null = null;
+      let endTime: string | null = null;
+      
+      // カスタム時間が設定されている場合
+      if (shift.custom_start_time && shift.custom_end_time) {
+        startTime = shift.custom_start_time;
+        endTime = shift.custom_end_time;
+      }
+      // shift_patternsがある場合
+      else if (shift.shift_patterns) {
+        startTime = shift.shift_patterns.start_time;
+        endTime = shift.shift_patterns.end_time;
+      }
+      // time_slotsがある場合
+      else if (shift.time_slots) {
+        startTime = shift.time_slots.start_time;
+        endTime = shift.time_slots.end_time;
+      }
+      
+      if (!startTime || !endTime) return total;
+      
+      // 時間を計算（Dateオブジェクトを使用）
+      const start = new Date(`2000-01-01T${startTime}`);
+      const end = new Date(`2000-01-01T${endTime}`);
       const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      
+      // 休憩時間は差し引かず、そのまま加算
       return total + hours;
     }, 0);
   };
@@ -190,6 +314,49 @@ export default function StaffDashboardPage() {
     return request.emergency_volunteers?.some(volunteer =>
       volunteer.user_id === currentUser?.id
     );
+  };
+
+  // 応募済みで未承認かチェック（取り消し可能かどうか）
+  const canCancelApplication = (request: EmergencyRequest) => {
+    const myVolunteer = request.emergency_volunteers?.find(volunteer => 
+      volunteer.user_id === currentUser?.id
+    );
+    // statusがnull、undefined、または'pending'の場合は取り消し可能
+    // 'accepted'や'rejected'の場合は取り消し不可
+    return myVolunteer && (!myVolunteer.status || myVolunteer.status === 'pending');
+  };
+
+  // 応募取り消し処理
+  const handleCancelApplication = async (requestId: string) => {
+    if (!confirm('この応募を取り消してもよろしいですか？')) {
+      return;
+    }
+
+    if (!currentUser) {
+      setError('ユーザー情報が見つかりません。再ログインしてください。');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      const response = await fetch(`/api/emergency-volunteers?emergency_request_id=${requestId}&user_id=${currentUser.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '応募の取り消しに失敗しました');
+      }
+
+      alert('応募を取り消しました');
+      
+      // データを再取得
+      window.location.reload();
+    } catch (error) {
+      console.error('応募取り消しエラー:', error);
+      setError(error instanceof Error ? error.message : '応募の取り消しに失敗しました');
+    }
   };
 
   // 同じ日にシフトがあるかチェック
@@ -469,10 +636,22 @@ export default function StaffDashboardPage() {
                                 {urgencyLabel.text}
                               </span>
                             </div>
-                            <div className="ml-2 flex-shrink-0">
+                            <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
                               {alreadyApplied ? (
-                                <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                                  応募済み
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                                    応募済み
+                                  </div>
+                                  {canCancelApplication(request) && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleCancelApplication(request.id)}
+                                      variant="secondary"
+                                      className="text-xs px-2 py-1 h-auto min-h-[24px] text-red-600 hover:bg-red-50 border-red-200"
+                                    >
+                                      取消
+                                    </Button>
+                                  )}
                                 </div>
                               ) : hasShiftOnDate(request.date) ? (
                                 <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
