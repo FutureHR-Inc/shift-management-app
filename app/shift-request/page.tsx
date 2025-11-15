@@ -47,6 +47,8 @@ export default function ShiftRequestPage() {
   const [userStores, setUserStores] = useState<any[]>([]);
   const [selectedStore, setSelectedStore] = useState('');
   const [existingRequests, setExistingRequests] = useState<DatabaseShiftRequest[]>([]);
+  const [fixedShifts, setFixedShifts] = useState<any[]>([]);
+  const [confirmedShifts, setConfirmedShifts] = useState<any[]>([]); // 確定済みシフト
 
   // UI states
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
@@ -189,23 +191,82 @@ export default function ShiftRequestPage() {
         setError('時間帯情報の取得に失敗しました');
       }
 
+      // 固定シフトを取得
+      try {
+        const fixedShiftsResponse = await fetch(
+          `/api/fixed-shifts?user_id=${user.id}&store_id=${selectedStore}&is_active=true`
+        );
+        if (!fixedShiftsResponse.ok) {
+          throw new Error('固定シフトの取得に失敗しました');
+        }
+        const fixedShiftsResult = await fixedShiftsResponse.json();
+        setFixedShifts(fixedShiftsResult.data || []);
+      } catch (fetchError) {
+        console.error('Fixed shifts fetch error:', fetchError);
+        // 固定シフトの取得エラーは致命的ではないので、警告のみ表示
+        console.warn('固定シフトデータの取得に失敗しました');
+        setFixedShifts([]);
+      }
+
+      // 確定済みシフトを取得（選択期間の日付範囲で取得）
+      try {
+        const shiftsResponse = await fetch(
+          `/api/shifts?user_id=${user.id}&store_id=${selectedStore}&date_from=${selectedPeriod.startDate}&date_to=${selectedPeriod.endDate}&current_user_id=${user.id}`
+        );
+        if (!shiftsResponse.ok) {
+          throw new Error('確定済みシフトの取得に失敗しました');
+        }
+        const shiftsResult = await shiftsResponse.json();
+        const shiftsData = shiftsResult.data || [];
+        
+        console.log('🔍 [SHIFT REQUEST] 確定済みシフトデータ取得:', {
+          total: shiftsData.length,
+          data: shiftsData.map((shift: any) => ({
+            date: shift.date,
+            status: shift.status
+          }))
+        });
+        
+        setConfirmedShifts(shiftsData);
+      } catch (fetchError) {
+        console.error('Confirmed shifts fetch error:', fetchError);
+        // 確定済みシフトの取得エラーは致命的ではないので、警告のみ表示
+        console.warn('確定済みシフトデータの取得に失敗しました');
+        setConfirmedShifts([]);
+      }
+
       // 🔧 企業分離対応: 既存の提出データを取得
+      // 重要: submission_periodでフィルタリングせず、全ての期間の提出済みデータを取得して重複チェックに使用
       try {
         const existingResponse = await fetch(
-          `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&submission_period=${selectedPeriod.id}&current_user_id=${user.id}`
+          `/api/shift-requests?user_id=${user.id}&store_id=${selectedStore}&current_user_id=${user.id}`
         );
         if (!existingResponse.ok) {
           throw new Error('既存データの取得に失敗しました');
         }
         const existingResult = await existingResponse.json();
         const existingData = existingResult.data || [];
+        
+        console.log('🔍 [SHIFT REQUEST] 既存のシフト希望データ取得:', {
+          total: existingData.length,
+          data: existingData.map((req: DatabaseShiftRequest) => ({
+            date: req.date,
+            status: req.status,
+            submission_period: req.submission_period
+          }))
+        });
+        
         setExistingRequests(existingData);
 
-        // 既存データを日付データに反映
+        // 既存データを日付データに反映（現在の提出期間のデータのみ表示）
         const updatedDates = dateData.map(d => ({
           ...d,
           requests: existingData
-            .filter((req: DatabaseShiftRequest) => req.date === d.date && req.status !== 'converted_to_shift')
+            .filter((req: DatabaseShiftRequest) => 
+              req.date === d.date && 
+              req.status !== 'converted_to_shift' &&
+              req.submission_period === selectedPeriod.id
+            )
             .map((req: DatabaseShiftRequest) => ({
               date: req.date,
               timeSlotId: req.time_slot_id,
@@ -233,6 +294,25 @@ export default function ShiftRequestPage() {
   };
 
   const handleAddRequest = (date: string) => {
+    // 既に提出済みの日付や固定シフトがある日付、確定済みシフトがある日付には追加できない
+    if (hasConfirmedShift(date)) {
+      console.warn('⚠️ [SHIFT REQUEST] 確定済みシフトがある日付のため追加できません:', date);
+      setError(`${date}は既にシフトとして確定されているため、シフト希望として追加できません。`);
+      return;
+    }
+    
+    if (isDateSubmitted(date)) {
+      console.warn('⚠️ [SHIFT REQUEST] 既に提出済みの日付のため追加できません:', date);
+      setError(`${date}は既に提出済みのため、再度追加できません。`);
+      return;
+    }
+    
+    if (hasFixedShift(date)) {
+      console.warn('⚠️ [SHIFT REQUEST] 固定シフトが設定されている日付のため追加できません:', date);
+      setError(`${date}は固定シフトが設定されているため、シフト希望として追加できません。`);
+      return;
+    }
+
     const newRequest: ShiftRequestData = {
       date,
       timeSlotId: null,
@@ -327,17 +407,32 @@ export default function ShiftRequestPage() {
 
       // 既存の希望と比較して新規分のみを抽出
       const newRequests = allRequests.filter(newReq => {
-        // 既に提出済みの日付のシフトは除外
+        // 確定済みシフトがある日付のシフトは完全に除外
+        if (hasConfirmedShift(newReq.date)) {
+          console.log(`⚠️ 日付 ${newReq.date} は確定済みシフトがあるため除外します`);
+          return false;
+        }
+
+        // 固定シフトが設定されている日付のシフトは完全に除外
+        if (hasFixedShift(newReq.date)) {
+          console.log(`⚠️ 日付 ${newReq.date} は固定シフトが設定されているため除外します`);
+          return false;
+        }
+
+        // 既に提出済みの日付のシフトは完全に除外（同じ日付に複数のシフト希望があっても全て除外）
+        // converted_to_shift以外の全てのステータス（submitted, approved, rejected）をチェック
         const hasSubmittedForDate = existingRequests.some(existing => 
           existing.date === newReq.date && 
-          existing.status === 'submitted'
+          existing.status !== 'converted_to_shift'
         );
         if (hasSubmittedForDate) {
+          console.log(`⚠️ 日付 ${newReq.date} は既に提出済みのため除外します`);
           return false;
         }
 
         // 既存の希望と完全一致するものは除外
-        return !existingRequests.some(existing => {
+        // converted_to_shift以外の全てのステータスをチェック
+        const isExactMatch = existingRequests.some(existing => {
           // 各フィールドを個別に比較
           const dateMatch = existing.date === newReq.date;
           const timeSlotMatch = (existing.time_slot_id || null) === (newReq.time_slot_id || null);
@@ -345,18 +440,46 @@ export default function ShiftRequestPage() {
           const endTimeMatch = (existing.preferred_end_time || null) === (newReq.preferred_end_time || null);
           const priorityMatch = existing.priority === newReq.priority;
           const notesMatch = (existing.notes || '') === (newReq.notes || '');
-          const isSubmitted = existing.status === 'submitted';
+          const isNotConverted = existing.status !== 'converted_to_shift';
 
-          const isExactMatch = dateMatch && timeSlotMatch && startTimeMatch && 
-                              endTimeMatch && priorityMatch && notesMatch && isSubmitted;
-          
-          return isExactMatch;
+          return dateMatch && timeSlotMatch && startTimeMatch && 
+                 endTimeMatch && priorityMatch && notesMatch && isNotConverted;
         });
+        
+        if (isExactMatch) {
+          console.log(`⚠️ 完全一致する既存のシフト希望があるため除外します: ${newReq.date}`);
+          return false;
+        }
+        
+        return true;
       });
 
       // 新規追加分がない場合は確認
       if (newRequests.length === 0) {
-        setError('新しく追加されたシフト希望がありません。既存の希望は変更されません。');
+        const confirmedShiftDates = allRequests
+          .filter(req => hasConfirmedShift(req.date))
+          .map(req => req.date)
+          .filter((date, index, self) => self.indexOf(date) === index); // 重複除去
+        
+        const fixedShiftDates = allRequests
+          .filter(req => hasFixedShift(req.date) && !hasConfirmedShift(req.date))
+          .map(req => req.date)
+          .filter((date, index, self) => self.indexOf(date) === index); // 重複除去
+        
+        const submittedDates = allRequests
+          .filter(req => isDateSubmitted(req.date) && !hasFixedShift(req.date) && !hasConfirmedShift(req.date))
+          .map(req => req.date)
+          .filter((date, index, self) => self.indexOf(date) === index); // 重複除去
+        
+        if (confirmedShiftDates.length > 0) {
+          setError(`確定済みシフトがある日付が含まれています: ${confirmedShiftDates.join(', ')}。確定済みシフトの日付はシフト希望として提出できません。`);
+        } else if (fixedShiftDates.length > 0) {
+          setError(`固定シフトが設定されている日付が含まれています: ${fixedShiftDates.join(', ')}。固定シフトの日付はシフト希望として提出できません。`);
+        } else if (submittedDates.length > 0) {
+          setError(`既に提出済みの日付が含まれています: ${submittedDates.join(', ')}。提出済みの日付は再度提出できません。`);
+        } else {
+          setError('新しく追加されたシフト希望がありません。既存の希望は変更されません。');
+        }
         return;
       }
 
@@ -433,6 +556,64 @@ export default function ShiftRequestPage() {
     return dates.some(dateData =>
       dateData.requests.some(req => req.timeSlotId !== null)
     );
+  };
+
+  // 既に提出済みの日付かどうかを判定する関数
+  // 一度提出した日は、店長側でシフトとして作成されなくても、まだ未確認の状態でも再度選択できないようにする
+  // converted_to_shift以外の全てのステータス（submitted, approved, rejected）をチェック
+  // 重要: 全ての提出期間のデータをチェックして、同じ日付に既に提出済みのデータがあるか確認
+  // 確定済みシフト（shiftsテーブル）がある場合は除外（確定済みシフトの方が優先）
+  const isDateSubmitted = (date: string): boolean => {
+    // 確定済みシフトがある場合は、提出済みとして扱わない（確定済みシフトの方が優先）
+    if (hasConfirmedShift(date)) {
+      return false;
+    }
+    
+    const hasSubmitted = existingRequests.some(existing => 
+      existing.date === date && 
+      existing.status !== 'converted_to_shift'
+    );
+    
+    if (hasSubmitted) {
+      console.log('🔍 [SHIFT REQUEST] 提出済み日付を検出（未確定）:', {
+        date,
+        existingRequests: existingRequests.filter(req => 
+          req.date === date && 
+          req.status !== 'converted_to_shift'
+        ).map(req => ({
+          date: req.date,
+          status: req.status,
+          submission_period: req.submission_period
+        }))
+      });
+    }
+    
+    return hasSubmitted;
+  };
+
+  // 固定シフトが設定されている日付かどうかを判定する関数
+  const hasFixedShift = (date: string): boolean => {
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay(); // 0=日曜日, 1=月曜日, ..., 6=土曜日
+    
+    return fixedShifts.some(fixedShift => 
+      fixedShift.day_of_week === dayOfWeek && 
+      fixedShift.is_active === true
+    );
+  };
+
+  // 確定済みシフトがある日付かどうかを判定する関数
+  const hasConfirmedShift = (date: string): boolean => {
+    const hasConfirmed = confirmedShifts.some(shift => shift.date === date);
+    
+    if (hasConfirmed) {
+      console.log('🔍 [SHIFT REQUEST] 確定済みシフトを検出:', {
+        date,
+        shifts: confirmedShifts.filter(s => s.date === date)
+      });
+    }
+    
+    return hasConfirmed;
   };
 
   if (loading) {
@@ -566,106 +747,174 @@ export default function ShiftRequestPage() {
                 <div key={dateData.date} className="border border-gray-200 rounded-lg overflow-hidden">
                   {/* 日付ヘッダー */}
                   <div
-                    className="p-3 bg-gray-50 flex justify-between items-center cursor-pointer"
+                    className={`p-3 flex justify-between items-center cursor-pointer ${
+                      hasConfirmedShift(dateData.date)
+                        ? 'bg-orange-50 border-l-4 border-orange-500' 
+                        : isDateSubmitted(dateData.date) 
+                        ? 'bg-green-50 border-l-4 border-green-500' 
+                        : hasFixedShift(dateData.date)
+                        ? 'bg-purple-50 border-l-4 border-purple-500'
+                        : 'bg-gray-50'
+                    }`}
                     onClick={() => setExpandedDate(expandedDate === dateData.date ? null : dateData.date)}
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-medium">
                         {new Date(dateData.date).getDate()}日 ({dateData.dayOfWeek})
                       </span>
-                      {dateData.requests.length > 0 && (
+                      {hasConfirmedShift(dateData.date) && (
+                        <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                          ✓ 確定済み
+                        </span>
+                      )}
+                      {isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                        <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                          ✓ 提出済み
+                        </span>
+                      )}
+                      {hasFixedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                        <span className="bg-purple-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                          🔒 固定シフト
+                        </span>
+                      )}
+                      {dateData.requests.length > 0 && !hasConfirmedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasFixedShift(dateData.date) && (
                         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                           {dateData.requests.length}件
                         </span>
                       )}
+                      {dateData.requests.length > 0 && isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                          {dateData.requests.length}件
+                        </span>
+                      )}
+                      {dateData.requests.length > 0 && hasFixedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                        <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
+                          {dateData.requests.length}件
+                        </span>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddRequest(dateData.date);
-                      }}
-                      className="text-xs py-1 px-2"
-                    >
-                      + 追加
-                    </Button>
+                    {!hasConfirmedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasFixedShift(dateData.date) && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddRequest(dateData.date);
+                        }}
+                        className="text-xs py-1 px-2"
+                      >
+                        + 追加
+                      </Button>
+                    )}
                   </div>
 
                   {/* 展開されたコンテンツ */}
                   {(expandedDate === dateData.date || dateData.requests.length > 0) && (
                     <div className="p-3 space-y-3">
-                      {dateData.requests.map((request, index) => (
-                        <div key={index} className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
-                          {/* 時間帯選択 */}
-                          <div>
-                            <label className="block text-sm font-medium mb-2">時間帯</label>
-                            <select
-                              value={request.timeSlotId || ''}
-                              onChange={(e) => handleUpdateRequest(dateData.date, index, { 
-                                timeSlotId: e.target.value || null 
-                              })}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">時間帯を選択</option>
-                              {timeSlots.map(slot => (
-                                <option key={slot.id} value={slot.id}>
-                                  {slot.name} ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* 優先度選択 */}
-                          <div>
-                            <label className="block text-sm font-medium mb-2">優先度</label>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[1, 2, 3].map(priority => (
-                                <button
-                                  key={priority}
-                                  type="button"
-                                  onClick={() => handleUpdateRequest(dateData.date, index, { 
-                                    priority: priority as 1 | 2 | 3 
-                                  })}
-                                  className={`p-2 text-sm rounded-lg border transition-all ${
-                                    request.priority === priority
-                                      ? getPriorityColor(priority)
-                                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                                  }`}
-                                >
-                                  {getPriorityLabel(priority)}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* メモ */}
-                          <div>
-                            <label className="block text-sm font-medium mb-2">メモ（任意）</label>
-                            <textarea
-                              value={request.notes}
-                              onChange={(e) => handleUpdateRequest(dateData.date, index, { 
-                                notes: e.target.value 
-                              })}
-                              placeholder="時間調整の希望など..."
-                              rows={2}
-                              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                            />
-                          </div>
-
-                          {/* 削除ボタン */}
-                          <div className="flex justify-end">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              onClick={() => handleRemoveRequest(dateData.date, index)}
-                              className="text-red-600 hover:bg-red-50 text-sm py-1 px-2"
-                            >
-                              削除
-                            </Button>
+                      {/* 提出済みまたは確定済みの場合の警告メッセージ */}
+                      {(isDateSubmitted(dateData.date) || hasConfirmedShift(dateData.date)) && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                          <div className="flex items-center space-x-2">
+                            <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <p className="text-sm text-yellow-800">
+                              {hasConfirmedShift(dateData.date) 
+                                ? 'この日付は既にシフトとして確定されています。編集・削除はできません。'
+                                : 'この日付は既に提出済みです。編集・削除はできません。'}
+                            </p>
                           </div>
                         </div>
-                      ))}
+                      )}
+                      
+                      {dateData.requests.map((request, index) => {
+                        const isReadOnly = isDateSubmitted(dateData.date) || hasConfirmedShift(dateData.date);
+                        
+                        return (
+                          <div key={index} className={`bg-white border rounded-lg p-3 space-y-3 ${
+                            isReadOnly ? 'border-gray-200 opacity-75' : 'border-gray-200'
+                          }`}>
+                            {/* 時間帯選択 */}
+                            <div>
+                              <label className="block text-sm font-medium mb-2">時間帯</label>
+                              <select
+                                value={request.timeSlotId || ''}
+                                onChange={(e) => handleUpdateRequest(dateData.date, index, { 
+                                  timeSlotId: e.target.value || null 
+                                })}
+                                disabled={isReadOnly}
+                                className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                                  isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                              >
+                                <option value="">時間帯を選択</option>
+                                {timeSlots.map(slot => (
+                                  <option key={slot.id} value={slot.id}>
+                                    {slot.name} ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 優先度選択 */}
+                            <div>
+                              <label className="block text-sm font-medium mb-2">優先度</label>
+                              <div className="grid grid-cols-3 gap-2">
+                                {[1, 2, 3].map(priority => (
+                                  <button
+                                    key={priority}
+                                    type="button"
+                                    onClick={() => !isReadOnly && handleUpdateRequest(dateData.date, index, { 
+                                      priority: priority as 1 | 2 | 3 
+                                    })}
+                                    disabled={isReadOnly}
+                                    className={`p-2 text-sm rounded-lg border transition-all ${
+                                      isReadOnly 
+                                        ? 'bg-gray-100 cursor-not-allowed opacity-50'
+                                        : request.priority === priority
+                                        ? getPriorityColor(priority)
+                                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    {getPriorityLabel(priority)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* メモ */}
+                            <div>
+                              <label className="block text-sm font-medium mb-2">メモ（任意）</label>
+                              <textarea
+                                value={request.notes}
+                                onChange={(e) => !isReadOnly && handleUpdateRequest(dateData.date, index, { 
+                                  notes: e.target.value 
+                                })}
+                                placeholder="時間調整の希望など..."
+                                rows={2}
+                                disabled={isReadOnly}
+                                className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none ${
+                                  isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                              />
+                            </div>
+
+                            {/* 削除ボタン - 提出済みまたは確定済みの場合は非表示 */}
+                            {!isReadOnly && (
+                              <div className="flex justify-end">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => handleRemoveRequest(dateData.date, index)}
+                                  className="text-red-600 hover:bg-red-50 text-sm py-1 px-2"
+                                >
+                                  削除
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
