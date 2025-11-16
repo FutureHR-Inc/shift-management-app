@@ -782,11 +782,12 @@ export default function EmergencyPage() {
                   
                   return (
                     <Card key={request.id} className={urgencyStyle}>
-                      <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-lg font-semibold text-gray-900">
+                      <CardContent className="pt-4 md:pt-6">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            {/* 日付と緊急度バッジ - スマホでは縦並び、デスクトップでは横並び */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3">
+                              <h3 className="text-base sm:text-lg font-semibold text-gray-900 leading-tight">
                                 {new Date(request.date).toLocaleDateString('ja-JP', {
                                   year: 'numeric',
                                   month: 'long',
@@ -794,45 +795,49 @@ export default function EmergencyPage() {
                                   weekday: 'long'
                                 })}
                               </h3>
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${urgencyLabel.color}`}>
+                              <span className={`px-3 py-1 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap self-start sm:self-auto ${urgencyLabel.color}`}>
                                 {urgencyLabel.text}
                               </span>
                             </div>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            {/* シフト情報と店舗 - スマホでは縦並び、デスクトップでは横並び */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-1">シフト情報</h4>
-                                <p className="text-gray-900">
+                                <h4 className="font-medium text-gray-700 mb-1 text-sm sm:text-base">シフト情報</h4>
+                                <p className="text-gray-900 text-sm sm:text-base">
                                   {request.time_slots?.name || 'シフト'}
                                 </p>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-xs sm:text-sm text-gray-600">
                                   {request.time_slots?.start_time} - {request.time_slots?.end_time}
                                 </p>
                               </div>
                               <div>
-                                <h4 className="font-medium text-gray-700 mb-1">店舗</h4>
-                                <p className="text-gray-900">{request.stores?.name}</p>
+                                <h4 className="font-medium text-gray-700 mb-1 text-sm sm:text-base">店舗</h4>
+                                <p className="text-gray-900 text-sm sm:text-base">{request.stores?.name}</p>
                               </div>
                             </div>
 
-                            <div className="mb-4">
-                              <h4 className="font-medium text-gray-700 mb-1">元のスタッフ</h4>
-                              <p className="text-gray-900">{request.original_user?.name}</p>
+                            {/* 元のスタッフと理由 - コンパクトに表示 */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1 text-sm sm:text-base">元のスタッフ</h4>
+                                <p className="text-gray-900 text-sm sm:text-base">{request.original_user?.name}</p>
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-gray-700 mb-1 text-sm sm:text-base">理由</h4>
+                                <p className="text-gray-600 text-sm sm:text-base break-words">{request.reason}</p>
+                              </div>
                             </div>
 
-                            <div className="mb-4">
-                              <h4 className="font-medium text-gray-700 mb-1">理由</h4>
-                              <p className="text-gray-600">{request.reason}</p>
-                            </div>
-
+                            {/* 応募者情報 */}
                             {request.emergency_volunteers && request.emergency_volunteers.length > 0 && (
-                              <div className="mb-4">
-                                <h4 className="font-medium text-gray-700 mb-2">応募者（{request.emergency_volunteers.length}名）</h4>
+                              <div className="mb-3 sm:mb-4">
+                                <h4 className="font-medium text-gray-700 mb-2 text-sm sm:text-base">応募者（{request.emergency_volunteers.length}名）</h4>
                                 <div className="flex flex-wrap gap-2">
                                   {request.emergency_volunteers.map((volunteer) => (
                                     <span 
                                       key={volunteer.id}
-                                      className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                                      className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs sm:text-sm"
                                     >
                                       {volunteer.users.name}
                                       {volunteer.user_id === currentUser?.id && (
@@ -845,10 +850,11 @@ export default function EmergencyPage() {
                             )}
                           </div>
 
-                          <div className="ml-6">
+                          {/* 応募フォーム - スマホでは下に配置、デスクトップでは右側 */}
+                          <div className="md:ml-6 md:min-w-[280px] md:flex-shrink-0">
                             {alreadyApplied ? (
                               <div className="text-center space-y-2">
-                                <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium">
+                                <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-medium text-sm sm:text-base">
                                   応募済み
                                 </div>
                                 {canCancelApplication(request) ? (
@@ -858,7 +864,7 @@ export default function EmergencyPage() {
                                       onClick={() => handleCancelApplication(request.id)}
                                       variant="secondary"
                                       size="sm"
-                                      className="text-xs text-red-600 hover:bg-red-50 border-red-200"
+                                      className="text-xs text-red-600 hover:bg-red-50 border-red-200 w-full sm:w-auto"
                                     >
                                       応募を取り消す
                                     </Button>
