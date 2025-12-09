@@ -340,8 +340,9 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
           size="sm"
           onClick={() => setIsAddingNew(!isAddingNew)}
           disabled={saving}
+          className="whitespace-nowrap"
         >
-          {isAddingNew ? 'キャンセル' : '+ 新規追加'}
+          {isAddingNew ? 'キャンセル' : '+ 新規'}
         </Button>
       </div>
 
@@ -414,6 +415,7 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
               size="sm"
               onClick={() => setIsAddingNew(false)}
               disabled={saving}
+              className="whitespace-nowrap"
             >
               キャンセル
             </Button>
@@ -422,6 +424,7 @@ export const FixedShiftManager: React.FC<FixedShiftManagerProps> = ({
               size="sm"
               onClick={handleAddFixedShift}
               disabled={saving || !newShiftForm.store_id || !newShiftForm.time_slot_id}
+              className="whitespace-nowrap"
             >
               {saving ? '追加中...' : '追加'}
             </Button>

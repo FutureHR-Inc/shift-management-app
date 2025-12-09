@@ -157,7 +157,7 @@ function TimeSlotModal({ isOpen, onClose, onSave, editingSlot, existingSlots }: 
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 開始時間 *
@@ -210,12 +210,14 @@ function TimeSlotModal({ isOpen, onClose, onSave, editingSlot, existingSlots }: 
               variant="secondary"
               onClick={onClose}
               disabled={saving}
+              className="whitespace-nowrap"
             >
               キャンセル
             </Button>
             <Button
               type="submit"
               disabled={saving}
+              className="whitespace-nowrap"
             >
               {saving ? (
                 <>
