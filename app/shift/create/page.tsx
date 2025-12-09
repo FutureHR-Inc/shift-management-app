@@ -1745,6 +1745,7 @@ function ShiftCreatePageInner() {
   };
 
   // シフトの実際の勤務時間を取得（カスタム時間を考慮）
+  // 22時以降は深夜時間として分けて計算
   const getActualWorkTime = (shift: Shift, timeSlot: TimeSlot) => {
     // カスタム時間が設定されている場合はそれを使用
     const startTime = shift.customStartTime || timeSlot.start_time;
@@ -1761,16 +1762,85 @@ function ShiftCreatePageInner() {
       let endMinutes = end[0] * 60 + end[1];
       
       // 日をまたぐ場合の処理（終了時間が開始時間より小さい場合）
-      if (endMinutes <= startMinutes) {
+      const crossesMidnight = endMinutes <= startMinutes;
+      if (crossesMidnight) {
         endMinutes += 24 * 60; // 24時間（1440分）を加算
       }
       
       const workHours = Math.max(0, (endMinutes - startMinutes) / 60);
       
-      return { startTime, endTime, workHours };
+      // 22時（22:00 = 1320分）以降の深夜時間を計算
+      const nightTimeStart = 22 * 60; // 22:00を分で表現
+      const dayMinutes = 24 * 60; // 1日の分数（1440分）
+      let regularHours = 0;
+      let nightHours = 0;
+      
+      if (workHours > 0) {
+        if (crossesMidnight) {
+          // 日をまたぐ場合
+          const actualEndMinutes = endMinutes % dayMinutes; // 0時からの分（1440分で割った余り）
+          
+          // 開始時間が22時以降の場合
+          if (startMinutes >= nightTimeStart) {
+            // 開始時間から24時（1440分）までが深夜時間
+            nightHours += (dayMinutes - startMinutes) / 60;
+            // 0時から終了時間まで
+            if (actualEndMinutes >= nightTimeStart) {
+              // 0時から22時までが通常時間、22時から終了時間までが深夜時間
+              regularHours += nightTimeStart / 60;
+              nightHours += (actualEndMinutes - nightTimeStart) / 60;
+            } else {
+              // 0時から終了時間までが通常時間
+              regularHours += actualEndMinutes / 60;
+            }
+          } else {
+            // 開始時間が22時前の場合
+            // 開始時間から22時までが通常時間
+            regularHours += (nightTimeStart - startMinutes) / 60;
+            // 22時から24時までが深夜時間
+            nightHours += (dayMinutes - nightTimeStart) / 60;
+            // 0時から終了時間まで
+            if (actualEndMinutes >= nightTimeStart) {
+              // 0時から22時までが通常時間、22時から終了時間までが深夜時間
+              regularHours += nightTimeStart / 60;
+              nightHours += (actualEndMinutes - nightTimeStart) / 60;
+            } else {
+              // 0時から終了時間までが通常時間
+              regularHours += actualEndMinutes / 60;
+            }
+          }
+        } else {
+          // 日をまたがない場合
+          // 開始時間が22時以降の場合
+          if (startMinutes >= nightTimeStart) {
+            // 全て深夜時間
+            nightHours = workHours;
+          } 
+          // 終了時間が22時以降で、開始時間が22時前の場合
+          else if (endMinutes > nightTimeStart) {
+            // 22時までの通常時間
+            regularHours = (nightTimeStart - startMinutes) / 60;
+            // 22時以降の深夜時間
+            nightHours = (endMinutes - nightTimeStart) / 60;
+          } 
+          // 22時をまたがない場合
+          else {
+            // 全て通常時間
+            regularHours = workHours;
+          }
+        }
+      }
+      
+      return { 
+        startTime, 
+        endTime, 
+        workHours,
+        regularHours: Math.max(0, regularHours),
+        nightHours: Math.max(0, nightHours)
+      };
     }
     
-    return { startTime, endTime, workHours: 0 };
+    return { startTime, endTime, workHours: 0, regularHours: 0, nightHours: 0 };
   };
 
   // 週の統計計算
@@ -1785,7 +1855,10 @@ function ShiftCreatePageInner() {
         fixedShiftHours: 0,
         fixedShiftWage: 0,
         regularShiftHours: 0,
-        regularShiftWage: 0
+        regularShiftWage: 0,
+        nightHours: 0,
+        nightWage: 0,
+        nightPremium: 0 // 深夜帯増額分
       };
 
       // 必要なデータが揃っているかチェック
@@ -1840,6 +1913,9 @@ function ShiftCreatePageInner() {
 
       let totalHours = 0;
       let totalWage = 0;
+      let nightHours = 0;
+      let nightWage = 0;
+      let nightPremium = 0; // 深夜帯増額分（時給25%UPの増加分）
       const staffCount = new Set();
 
       // 通常シフトの統計計算
@@ -1850,11 +1926,24 @@ function ShiftCreatePageInner() {
           const user = users.find(u => u.id === shift.userId);
           
             if (timeSlot && user && typeof getActualWorkTime === 'function' && typeof getHourlyWage === 'function') {
-              const { workHours } = getActualWorkTime(shift, timeSlot);
+              const { workHours, regularHours, nightHours: shiftNightHours } = getActualWorkTime(shift, timeSlot);
+              const hourlyWage = getHourlyWage(user);
                 
               if (workHours > 0 && !isNaN(workHours)) {
                 totalHours += workHours;
-                totalWage += workHours * getHourlyWage(user);
+                
+                // 通常時間の給与
+                const regularWage = regularHours * hourlyWage;
+                // 深夜時間の給与（時給25%UP）
+                const nightWageForShift = shiftNightHours * hourlyWage * 1.25;
+                // 深夜帯増額分（通常時給との差額）
+                const nightPremiumForShift = shiftNightHours * hourlyWage * 0.25;
+                
+                totalWage += regularWage + nightWageForShift;
+                nightHours += shiftNightHours;
+                nightWage += nightWageForShift;
+                nightPremium += nightPremiumForShift;
+                
                 staffCount.add(shift.userId);
               }
             }
@@ -1869,6 +1958,9 @@ function ShiftCreatePageInner() {
       // 固定シフトの統計計算
       let fixedShiftHours = 0;
       let fixedShiftWage = 0;
+      let fixedShiftNightHours = 0;
+      let fixedShiftNightWage = 0;
+      let fixedShiftNightPremium = 0;
 
       try {
         if (fixedShifts && Array.isArray(fixedShifts) && fixedShifts.length > 0) {
@@ -1918,11 +2010,24 @@ function ShiftCreatePageInner() {
                         notes: '固定シフト'
                       };
                       
-                      const { workHours } = getActualWorkTime(pseudoShift, timeSlot);
+                      const { workHours, regularHours, nightHours: shiftNightHours } = getActualWorkTime(pseudoShift, timeSlot);
+                      const hourlyWage = getHourlyWage(user);
                       
                       if (workHours > 0 && !isNaN(workHours)) {
                         fixedShiftHours += workHours;
-                        fixedShiftWage += workHours * getHourlyWage(user);
+                        
+                        // 通常時間の給与
+                        const regularWage = regularHours * hourlyWage;
+                        // 深夜時間の給与（時給25%UP）
+                        const nightWageForShift = shiftNightHours * hourlyWage * 1.25;
+                        // 深夜帯増額分（通常時給との差額）
+                        const nightPremiumForShift = shiftNightHours * hourlyWage * 0.25;
+                        
+                        fixedShiftWage += regularWage + nightWageForShift;
+                        fixedShiftNightHours += shiftNightHours;
+                        fixedShiftNightWage += nightWageForShift;
+                        fixedShiftNightPremium += nightPremiumForShift;
+                        
                         staffCount.add(fixedShift.user_id);
         }
                     }
@@ -1943,6 +2048,9 @@ function ShiftCreatePageInner() {
       // 最終結果の計算と検証
       const combinedTotalHours = (totalHours || 0) + (fixedShiftHours || 0);
       const combinedTotalWage = (totalWage || 0) + (fixedShiftWage || 0);
+      const combinedNightHours = (nightHours || 0) + (fixedShiftNightHours || 0);
+      const combinedNightWage = (nightWage || 0) + (fixedShiftNightWage || 0);
+      const combinedNightPremium = (nightPremium || 0) + (fixedShiftNightPremium || 0);
       const uniqueStaffCount = staffCount.size || 0;
 
       return {
@@ -1953,7 +2061,10 @@ function ShiftCreatePageInner() {
         fixedShiftHours: Math.round((fixedShiftHours || 0) * 10) / 10,
         fixedShiftWage: Math.round(fixedShiftWage || 0),
         regularShiftHours: Math.round((totalHours || 0) * 10) / 10,
-        regularShiftWage: Math.round(totalWage || 0)
+        regularShiftWage: Math.round(totalWage || 0),
+        nightHours: Math.round((combinedNightHours || 0) * 10) / 10,
+        nightWage: Math.round(combinedNightWage || 0),
+        nightPremium: Math.round(combinedNightPremium || 0)
       };
 
     } catch (error) {
@@ -1966,7 +2077,10 @@ function ShiftCreatePageInner() {
         fixedShiftHours: 0,
         fixedShiftWage: 0,
         regularShiftHours: 0,
-        regularShiftWage: 0
+        regularShiftWage: 0,
+        nightHours: 0,
+        nightWage: 0,
+        nightPremium: 0
       };
     }
   }, [shifts, selectedStore, timeSlots, users, fixedShifts, selectedWeek, viewMode]);
@@ -2518,6 +2632,12 @@ function ShiftCreatePageInner() {
               {(weeklyStats.fixedShiftWage || 0) > 0 && (
                 <div className="text-xs text-purple-600 mt-1">
                   📌 固定: ¥{(weeklyStats.fixedShiftWage || 0).toLocaleString()}
+                </div>
+              )}
+              {/* 深夜帯増額分を表示 */}
+              {(weeklyStats.nightPremium || 0) > 0 && (
+                <div className="text-xs text-blue-600 mt-1">
+                  🌙 深夜増額: ¥{(weeklyStats.nightPremium || 0).toLocaleString()}
                 </div>
               )}
             </CardContent>
