@@ -1,10 +1,19 @@
 import { Resend } from 'resend';
 
-if (!process.env.RESEND_API_KEY) {
-  throw new Error('RESEND_API_KEY is not defined in environment variables');
-}
+// 環境変数のチェックは実行時に行う（ビルド時にはチェックしない）
+let resend: Resend | null = null;
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient(): Resend {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not defined in environment variables');
+  }
+  
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  
+  return resend;
+}
 
 export interface EmailOptions {
   to: string | string[];
@@ -35,7 +44,8 @@ export async function sendEmail({
       subject
     });
 
-    const { data, error } = await resend.emails.send({
+    const client = getResendClient();
+    const { data, error } = await client.emails.send({
       from,
       to: Array.isArray(to) ? to : [to],
       subject,
