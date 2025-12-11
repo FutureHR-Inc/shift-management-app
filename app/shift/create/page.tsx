@@ -186,6 +186,11 @@ function ShiftCreatePageInner() {
     showCustomTime: false
   });
 
+  // 確定シフト閲覧モーダル用のstate
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [viewModalViewMode, setViewModalViewMode] = useState<'week' | 'half-month' | 'month'>('month');
+  const [viewModalSelectedWeek, setViewModalSelectedWeek] = useState(() => getAppropriateStartDate('month'));
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -888,6 +893,93 @@ function ShiftCreatePageInner() {
       return [];
     }
   };
+
+  // 確定済みシフトのみを取得する関数（閲覧モーダル用）
+  const getConfirmedShiftsForSlot = (date: string, timeSlot: string) => {
+    try {
+      if (!shifts || !selectedStore || !timeSlots) {
+        return [];
+      }
+
+      // 確定済みの通常シフトのみを取得
+      const confirmedRegularShifts = shifts.filter(shift => {
+        if (shift.date !== date || shift.storeId !== selectedStore) return false;
+        if (shift.status !== 'confirmed') return false; // 確定済みのみ
+        
+        const pattern = timeSlots.find(ts => ts.id === timeSlot);
+        if (!pattern || !pattern.start_time || !pattern.end_time) return false;
+
+        return shift.timeSlotId === timeSlot;
+      });
+
+      // 固定シフトをチェックして追加
+      const [yearStr, monthStr, dayStr] = date.split('-');
+      const dayOfWeek = new Date(Date.UTC(parseInt(yearStr), parseInt(monthStr) - 1, parseInt(dayStr))).getUTCDay();
+      
+      const fixedShiftsForSlot = fixedShifts.filter(fixedShift => 
+        fixedShift.day_of_week === dayOfWeek &&
+        fixedShift.time_slot_id === timeSlot &&
+        fixedShift.store_id === selectedStore &&
+        fixedShift.is_active
+      );
+
+      // 固定シフトユーザーが既に通常の確定シフトに入っているかチェック
+      const existingUserIds = confirmedRegularShifts.map(shift => shift.userId);
+      
+      // 固定シフトをshiftオブジェクトとして変換
+      const fixedShiftsAsShifts = fixedShiftsForSlot
+        .filter(fixedShift => !existingUserIds.includes(fixedShift.user_id))
+        .map(fixedShift => ({
+          id: `fixed-${fixedShift.id}`,
+          userId: fixedShift.user_id,
+          storeId: fixedShift.store_id,
+          date: date,
+          timeSlotId: fixedShift.time_slot_id,
+          status: 'confirmed' as const,
+          customStartTime: undefined,
+          customEndTime: undefined,
+          notes: '固定シフト',
+          isFixedShift: true,
+          fixedShiftData: fixedShift
+        }));
+
+      // シフトを種類と日時でソート
+      const allShifts = [...confirmedRegularShifts, ...fixedShiftsAsShifts].sort((a, b) => {
+        const getTypeOrder = (shift: any) => {
+          if (shift.isFixedShift) return 0;
+          if (shift.status === 'confirmed') return 1;
+          return 2;
+        };
+        
+        const typeOrderA = getTypeOrder(a);
+        const typeOrderB = getTypeOrder(b);
+        
+        if (typeOrderA !== typeOrderB) {
+          return typeOrderA - typeOrderB;
+        }
+        
+        const timeSlotA = timeSlots.find(ts => ts.id === a.timeSlotId);
+        const timeSlotB = timeSlots.find(ts => ts.id === b.timeSlotId);
+        
+        if (timeSlotA && timeSlotB) {
+          return timeSlotA.start_time.localeCompare(timeSlotB.start_time);
+        }
+        
+        return 0;
+      });
+
+      return allShifts;
+    } catch (error) {
+      console.error('Error in getConfirmedShiftsForSlot:', error);
+      return [];
+    }
+  };
+
+  // 閲覧モーダル用の表示日付を計算（既存のgetDisplayDatesと同じロジックを使用）
+  const getViewModalDisplayDates = useMemo(() => {
+    if (!viewModalSelectedWeek) return [];
+    return getDisplayDates(viewModalSelectedWeek, viewModalViewMode);
+  }, [viewModalSelectedWeek, viewModalViewMode]);
 
   // セルクリックでモーダル開く
   const handleCellClick = async (date: string, timeSlot: string, dayIndex: number) => {
@@ -2938,7 +3030,25 @@ function ShiftCreatePageInner() {
         {/* シフト表 */}
         <Card>
           <CardHeader>
-            <CardTitle>{selectedStoreData?.name} - シフト表</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>{selectedStoreData?.name} - シフト表</CardTitle>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setViewModalSelectedWeek(selectedWeek);
+                  setViewModalViewMode(viewMode);
+                  setIsViewModalOpen(true);
+                }}
+                className="text-xs sm:text-sm"
+              >
+                <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                確定シフト閲覧
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
               {timeSlots.length === 0 ? (
@@ -3722,6 +3832,255 @@ function ShiftCreatePageInner() {
                     <p className="text-sm sm:text-base">まだ応募者がいません</p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 確定シフト閲覧モーダル */}
+        {isViewModalOpen && (
+          <div
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
+            onClick={() => setIsViewModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-[95vw] w-full max-h-[90vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* モーダルヘッダー */}
+              <div className="p-4 sm:p-6 border-b border-blue-200 bg-gradient-to-br from-blue-100 via-indigo-50 to-blue-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900">確定シフト閲覧</h2>
+                    <p className="text-sm text-gray-600 mt-1">確定済みシフトのみを表示（編集不可）</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsViewModalOpen(false)}
+                    className="flex-shrink-0"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </div>
+
+                {/* 表示期間切り替え */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <div className="flex bg-white/80 backdrop-blur-sm border border-blue-200 p-1 rounded-lg shadow-sm">
+                    <button
+                      onClick={() => {
+                        setViewModalViewMode('week');
+                        setViewModalSelectedWeek(getAppropriateStartDate('week'));
+                      }}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        viewModalViewMode === 'week'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      週表示
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewModalViewMode('half-month');
+                        setViewModalSelectedWeek(getAppropriateStartDate('half-month'));
+                      }}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        viewModalViewMode === 'half-month'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      半月表示
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewModalViewMode('month');
+                        setViewModalSelectedWeek(getAppropriateStartDate('month'));
+                      }}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                        viewModalViewMode === 'month'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-700 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      月表示
+                    </button>
+                  </div>
+
+                  {/* 週選択（週表示・半月表示の場合） */}
+                  {(viewModalViewMode === 'week' || viewModalViewMode === 'half-month') && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const current = new Date(viewModalSelectedWeek);
+                          const offset = viewModalViewMode === 'week' ? -7 : -14;
+                          current.setDate(current.getDate() + offset);
+                          setViewModalSelectedWeek(formatDateString(current.getFullYear(), current.getMonth(), current.getDate()));
+                        }}
+                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <input
+                        type="date"
+                        value={viewModalSelectedWeek}
+                        onChange={(e) => setViewModalSelectedWeek(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      <button
+                        onClick={() => {
+                          const current = new Date(viewModalSelectedWeek);
+                          const offset = viewModalViewMode === 'week' ? 7 : 14;
+                          current.setDate(current.getDate() + offset);
+                          setViewModalSelectedWeek(formatDateString(current.getFullYear(), current.getMonth(), current.getDate()));
+                        }}
+                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 月選択（月表示の場合） */}
+                  {viewModalViewMode === 'month' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const current = new Date(viewModalSelectedWeek);
+                          current.setMonth(current.getMonth() - 1);
+                          setViewModalSelectedWeek(formatDateString(current.getFullYear(), current.getMonth(), 1));
+                        }}
+                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <input
+                        type="month"
+                        value={`${new Date(viewModalSelectedWeek).getFullYear()}-${String(new Date(viewModalSelectedWeek).getMonth() + 1).padStart(2, '0')}`}
+                        onChange={(e) => {
+                          const [year, month] = e.target.value.split('-');
+                          setViewModalSelectedWeek(formatDateString(parseInt(year), parseInt(month) - 1, 1));
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      <button
+                        onClick={() => {
+                          const current = new Date(viewModalSelectedWeek);
+                          current.setMonth(current.getMonth() + 1);
+                          setViewModalSelectedWeek(formatDateString(current.getFullYear(), current.getMonth(), 1));
+                        }}
+                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* モーダルコンテンツ */}
+              <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-4 sm:p-6">
+                {selectedStore && timeSlots.length > 0 ? (
+                  <>
+                    {/* PC・スマホ別シフト表（編集不可モード） */}
+                    <DesktopShiftTable
+                      selectedStore={selectedStore}
+                      selectedWeek={viewModalSelectedWeek}
+                      viewMode={viewModalViewMode}
+                      displayDates={getViewModalDisplayDates}
+                      getRequiredStaff={getRequiredStaff}
+                      getShiftForSlot={getConfirmedShiftsForSlot}
+                      getEmergencyRequestForShift={getEmergencyRequestForShift}
+                      handleCellClick={() => {}} // クリック無効化
+                      handleDeleteShift={() => {}} // 削除無効化
+                      setContextMenu={() => {}} // コンテキストメニュー無効化
+                      setEmergencyModal={() => {}} // 代打モーダル無効化
+                      setEmergencyManagement={() => {}} // 代打管理無効化
+                      currentUser={currentUser}
+                      shifts={shifts.filter(s => s.status === 'confirmed')} // 確定済みシフトのみ
+                      users={users}
+                      timeSlots={timeSlots}
+                      readOnly={true} // 閲覧専用モード
+                    />
+                    
+                    <MobileShiftTable
+                      selectedStore={selectedStore}
+                      selectedWeek={viewModalSelectedWeek}
+                      viewMode={viewModalViewMode}
+                      displayDates={getViewModalDisplayDates}
+                      getRequiredStaff={getRequiredStaff}
+                      getShiftForSlot={getConfirmedShiftsForSlot}
+                      getEmergencyRequestForShift={getEmergencyRequestForShift}
+                      handleCellClick={() => {}} // クリック無効化
+                      handleDeleteShift={() => {}} // 削除無効化
+                      setContextMenu={() => {}} // コンテキストメニュー無効化
+                      setEmergencyModal={() => {}} // 代打モーダル無効化
+                      setEmergencyManagement={() => {}} // 代打管理無効化
+                      currentUser={currentUser}
+                      shifts={shifts.filter(s => s.status === 'confirmed')} // 確定済みシフトのみ
+                      users={users}
+                      timeSlots={timeSlots}
+                      readOnly={true} // 閲覧専用モード
+                    />
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <p>店舗または時間帯が設定されていません</p>
+                  </div>
+                )}
+              </div>
+
+              {/* ステータス表示（凡例） */}
+              <div className="border-t border-blue-200 bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 p-4 sm:p-6">
+                <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-3 sm:mb-4">ステータス表示</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+                  {/* 固定シフト */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg">📌</div>
+                    <span className="text-xs sm:text-sm text-gray-700">固定シフト (自動配置)</span>
+                  </div>
+
+                  {/* 下書きシフト */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg">📝</div>
+                    <span className="text-xs sm:text-sm text-gray-700">下書きシフト (編集可)</span>
+                  </div>
+
+                  {/* カスタム時間設定 */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg">⏰</div>
+                    <span className="text-xs sm:text-sm text-gray-700">カスタム時間設定</span>
+                  </div>
+
+                  {/* 確定済みシフト */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg">✅</div>
+                    <span className="text-xs sm:text-sm text-gray-700">確定済みシフト (編集不可)</span>
+                  </div>
+
+                  {/* 代打募集中 */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg">🆘</div>
+                    <span className="text-xs sm:text-sm text-gray-700">代打募集中</span>
+                  </div>
+
+                  {/* 空きスロット */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-shrink-0 text-base sm:text-lg text-gray-600">+</div>
+                    <span className="text-xs sm:text-sm text-gray-700">空きスロット</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
