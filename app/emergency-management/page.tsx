@@ -16,6 +16,44 @@ function EmergencyManagementPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // 新規応募の判定関数
+  const hasNewVolunteers = (request: any): { hasNew: boolean; count: number } => {
+    const volunteers = request.emergency_volunteers || [];
+    if (volunteers.length === 0) {
+      return { hasNew: false, count: 0 };
+    }
+
+    // 既読情報を取得
+    const viewedData = localStorage.getItem('emergency_request_viewed');
+    const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
+    const lastViewed = viewedMap[request.id];
+
+    if (!lastViewed) {
+      // 未確認の場合は全て新規応募として扱う
+      return { hasNew: true, count: volunteers.length };
+    }
+
+    // 最後に確認した時刻より後に応募があったものをカウント
+    const lastViewedTime = new Date(lastViewed).getTime();
+    const newVolunteers = volunteers.filter((vol: any) => {
+      const volunteerTime = new Date(vol.responded_at).getTime();
+      return volunteerTime > lastViewedTime;
+    });
+
+    return { hasNew: newVolunteers.length > 0, count: newVolunteers.length };
+  };
+
+  // 募集詳細を開いたときに既読として記録
+  const markAsViewed = (requestId: string) => {
+    const viewedData = localStorage.getItem('emergency_request_viewed');
+    const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
+    viewedMap[requestId] = new Date().toISOString();
+    localStorage.setItem('emergency_request_viewed', JSON.stringify(viewedMap));
+    
+    // ヘッダーの通知を更新
+    window.dispatchEvent(new CustomEvent('updateEmergencyNotifications'));
+  };
+
   // ローカルストレージからユーザー情報を取得
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -162,6 +200,7 @@ function EmergencyManagementPageContent() {
     }
   }, [searchParams, emergencyRequests]);
 
+
   // 応募者を承認
   const handleApproveVolunteer = async (volunteerId: string) => {
     try {
@@ -208,8 +247,13 @@ function EmergencyManagementPageContent() {
         if (foundRequest) {
           console.log('🔍 [EMERGENCY MANAGEMENT] 更新された代打募集データを設定:', foundRequest);
           setSelectedRequest(foundRequest);
+          // 承認時に既読として記録
+          markAsViewed(selectedRequest.id);
         }
       }
+      
+      // ヘッダーの通知を更新
+      window.dispatchEvent(new CustomEvent('updateEmergencyNotifications'));
       
       // 募集管理画面に留まる（タブや選択状態を維持）
     } catch (err) {
@@ -248,7 +292,11 @@ function EmergencyManagementPageContent() {
       const updatedRequest = updatedRequests.find((req: any) => req.id === selectedRequest.id);
       if (updatedRequest) {
         setSelectedRequest(updatedRequest);
+        markAsViewed(selectedRequest.id);
       }
+      
+      // ヘッダーの通知を更新
+      window.dispatchEvent(new CustomEvent('updateEmergencyNotifications'));
       
       alert('応募者を却下しました');
     } catch (err) {
@@ -339,8 +387,13 @@ function EmergencyManagementPageContent() {
                           </td>
                         </tr>
                       ) : emergencyRequests?.length > 0 ? (
-                        emergencyRequests.map((request) => (
-                          <tr key={request.id} className="hover:bg-gray-50">
+                        emergencyRequests.map((request) => {
+                          const newVolunteers = hasNewVolunteers(request);
+                          return (
+                          <tr 
+                            key={request.id} 
+                            className={`hover:bg-gray-50 ${newVolunteers.hasNew ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}
+                          >
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {new Date(request.date).toLocaleDateString('ja-JP')}
                             </td>
@@ -393,7 +446,8 @@ function EmergencyManagementPageContent() {
                               </Button>
                             </td>
                                   </tr>
-                        ))
+                          );
+                        })
                       ) : (
                         <tr>
                           <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
@@ -501,40 +555,68 @@ function EmergencyManagementPageContent() {
 
                 {/* 応募者一覧 */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 mb-4">応募者一覧</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-gray-900">応募者一覧</h3>
+                    {(() => {
+                      const newVolunteers = hasNewVolunteers(selectedRequest);
+                      if (newVolunteers.hasNew) {
+                        return (
+                          <span className="inline-flex items-center justify-center min-w-[24px] h-[24px] px-2 bg-red-500 text-white text-xs font-bold rounded-full">
+                            新規 {newVolunteers.count}件
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                   {selectedRequest.emergency_volunteers?.length > 0 ? (
                 <div className="space-y-4">
-                                            {selectedRequest.emergency_volunteers.map((volunteer: any) => (
+                                            {selectedRequest.emergency_volunteers.map((volunteer: any) => {
+                        // 新規応募かどうかを判定
+                        const viewedData = localStorage.getItem('emergency_request_viewed');
+                        const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
+                        const lastViewed = viewedMap[selectedRequest.id];
+                        const isNew = !lastViewed || new Date(volunteer.responded_at).getTime() > new Date(lastViewed).getTime();
+                        
+                        return (
                         <div key={volunteer.id} className={`border rounded-lg p-4 ${
                           volunteer.status === 'accepted' ? 'bg-green-50 border-green-200' :
                           volunteer.status === 'rejected' ? 'bg-red-50 border-red-200' :
+                          isNew ? 'bg-yellow-50 border-yellow-300 border-2' :
                           'bg-white'
                         }`}>
-                          <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <p className="font-medium text-lg">{volunteer.users?.name}</p>
                                 {volunteer.status === 'accepted' && (
-                                  <span className="px-3 py-1 text-sm font-semibold bg-green-500 text-white rounded-full">
+                                  <span className="px-3 py-1 text-sm font-semibold bg-green-500 text-white rounded-full whitespace-nowrap">
                                     ✓ 採用済み
                                   </span>
                                 )}
                                 {volunteer.status === 'rejected' && (
-                                  <span className="px-3 py-1 text-sm font-semibold bg-red-500 text-white rounded-full">
+                                  <span className="px-3 py-1 text-sm font-semibold bg-red-500 text-white rounded-full whitespace-nowrap">
                                     ✗ 不採用
                                   </span>
                                 )}
                                 {!volunteer.status && (
-                                  <span className="px-3 py-1 text-sm font-medium bg-gray-200 text-gray-700 rounded-full">
-                                    審査中
-                                  </span>
+                                  <>
+                                    <span className="px-3 py-1 text-sm font-medium bg-gray-200 text-gray-700 rounded-full whitespace-nowrap">
+                                      審査中
+                                    </span>
+                                    {isNew && (
+                                      <span className="px-2 py-1 text-xs font-bold bg-red-500 text-white rounded-full whitespace-nowrap">
+                                        新規
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                           <p className="text-sm text-gray-500">
                                 応募日時: {new Date(volunteer.responded_at).toLocaleString('ja-JP')}
                           </p>
                           {volunteer.notes && (
-                                <p className="text-sm text-gray-600 mt-2">{volunteer.notes}</p>
+                                <p className="text-sm text-gray-600 mt-2 break-words">{volunteer.notes}</p>
                           )}
                           {volunteer.status === 'accepted' && (
                             <p className="text-sm text-green-700 font-medium mt-2">
@@ -549,7 +631,7 @@ function EmergencyManagementPageContent() {
                         </div>
                             {/* 審査中（statusがnull、undefined、または'pending'）の場合のみボタンを表示 */}
                             {(!volunteer.status || volunteer.status === 'pending') && (
-                              <div className="flex gap-2 ml-4">
+                              <div className="flex flex-row gap-2 sm:flex-shrink-0 w-full sm:w-auto">
                                 <Button
                                   onClick={() => {
                                     if (confirm(selectedRequest.request_type === 'substitute' 
@@ -562,6 +644,7 @@ function EmergencyManagementPageContent() {
                                   variant="primary"
                                   size="sm"
                                   disabled={loading}
+                                  className="flex-1 sm:flex-none whitespace-nowrap"
                                 >
                                   {loading ? (
                                     <>
@@ -581,6 +664,7 @@ function EmergencyManagementPageContent() {
                                   variant="destructive"
                                   size="sm"
                                   disabled={loading}
+                                  className="flex-1 sm:flex-none whitespace-nowrap"
                                 >
                                   不採用
                                 </Button>
@@ -588,13 +672,14 @@ function EmergencyManagementPageContent() {
                             )}
                             {/* 採用済み・却下済みの場合はボタンを表示しない */}
                             {(volunteer.status === 'accepted' || volunteer.status === 'rejected') && (
-                              <div className="ml-4">
+                              <div className="sm:flex-shrink-0">
                                 {/* ボタンは表示しない */}
                               </div>
                             )}
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
                   ) : (
                     <p className="text-sm text-gray-500">まだ応募者がいません</p>
