@@ -20,6 +20,7 @@ interface DesktopShiftTableProps {
   shifts: Shift[];
   users: User[];
   timeSlots: TimeSlot[];
+  readOnly?: boolean; // 閲覧専用モード
 }
 
 export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
@@ -38,7 +39,8 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   currentUser,
   shifts,
   users,
-  timeSlots
+  timeSlots,
+  readOnly = false
 }) => {
   // getShiftForSlot関数（親の関数を優先使用、固定シフト対応）
   const getShiftForSlot = (date: string, timeSlotId: string) => {
@@ -130,8 +132,8 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                     return (
                       <td key={dayIndex} className="p-1 sm:p-2 lg:p-1 align-top">
                         <div
-                          className={`min-h-16 border-2 rounded-lg sm:rounded-xl lg:rounded-lg p-1 sm:p-2 lg:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation h-auto overflow-hidden ${cellStyle}`}
-                          onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
+                          className={`min-h-16 border-2 rounded-lg sm:rounded-xl lg:rounded-lg p-1 sm:p-2 lg:p-2 ${readOnly ? 'cursor-default' : 'cursor-pointer hover:shadow-md'} transition-all touch-manipulation h-auto overflow-hidden ${cellStyle}`}
+                          onClick={readOnly ? undefined : () => handleCellClick(dateString, timeSlot.id, date.getDay())}
                         >
                           {/* 必要人数表示 */}
                           <div className="flex items-center justify-between mb-1 sm:mb-2 lg:mb-1">
@@ -139,7 +141,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                               <span className="text-xs sm:text-sm lg:text-xs font-medium text-gray-600">
                                 {current}/{required}人
                               </span>
-                              {current < required ? (
+                              {!readOnly && current < required ? (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -260,10 +262,16 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                           ? 'bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200'
                                           : 'bg-white border-gray-200 text-gray-700'
                                         } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''} ${
-                                          isConfirmed ? 'cursor-pointer' : ''
+                                          isConfirmed && !readOnly ? 'cursor-pointer' : ''
                                         }`}
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        
+                                        // 閲覧モードでは何もしない
+                                        if (readOnly) {
+                                          return;
+                                        }
+                                        
                                         console.log('🔍 シフトクリック:', {
                                           shiftId: shift.id,
                                           status: shift.status,
@@ -535,21 +543,29 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                               })
                             )}
 
-                            {/* 常に表示されるスタッフ追加ボタン */}
-                            <div
-                              className="flex items-center justify-center p-1.5 sm:p-2 lg:p-1.5 border-2 border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCellClick(dateString, timeSlot.id, date.getDay());
-                              }}
-                            >
-                              <div className="text-center text-gray-500 hover:text-blue-600">
-                                <div className="text-sm lg:text-xs mb-1">+</div>
-                                <div className="text-xs lg:text-xs">
-                                  スタッフ追加
+                            {/* スタッフ追加ボタン（閲覧モードでは非表示、シフトがない場合のみ「シフトなし」を表示） */}
+                            {readOnly ? (
+                              dayShifts && dayShifts.length === 0 ? (
+                                <div className="flex items-center justify-center p-1.5 sm:p-2 lg:p-1.5 text-gray-400 text-xs lg:text-xs">
+                                  シフトなし
+                                </div>
+                              ) : null
+                            ) : (
+                              <div
+                                className="flex items-center justify-center p-1.5 sm:p-2 lg:p-1.5 border-2 border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCellClick(dateString, timeSlot.id, date.getDay());
+                                }}
+                              >
+                                <div className="text-center text-gray-500 hover:text-blue-600">
+                                  <div className="text-sm lg:text-xs mb-1">+</div>
+                                  <div className="text-xs lg:text-xs">
+                                    スタッフ追加
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </td>

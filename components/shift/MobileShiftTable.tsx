@@ -20,6 +20,7 @@ interface MobileShiftTableProps {
   shifts: Shift[];
   users: User[];
   timeSlots: TimeSlot[];
+  readOnly?: boolean; // 閲覧専用モード
 }
 
 export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
@@ -38,7 +39,8 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
   currentUser,
   shifts,
   users,
-  timeSlots
+  timeSlots,
+  readOnly = false
 }) => {
   // getShiftForSlot関数（親の関数を優先使用、固定シフト対応）
   const getShiftForSlot = (date: string, timeSlotId: string) => {
@@ -111,15 +113,15 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                     return (
                       <td key={dayIndex} className="p-1 sm:p-2 align-top">
                         <div
-                          className={`min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 cursor-pointer hover:shadow-md transition-all touch-manipulation h-auto ${cellStyle}`}
-                          onClick={() => handleCellClick(dateString, timeSlot.id, date.getDay())}
+                          className={`min-h-20 sm:min-h-28 border-2 rounded-lg sm:rounded-xl p-1 sm:p-2 ${readOnly ? 'cursor-default' : 'cursor-pointer hover:shadow-md'} transition-all touch-manipulation h-auto ${cellStyle}`}
+                          onClick={readOnly ? undefined : () => handleCellClick(dateString, timeSlot.id, date.getDay())}
                         >
                           {/* 必要人数表示 */}
                           <div className="flex items-center justify-between mb-1 sm:mb-2 min-h-[24px] sm:min-h-[28px]">
                             <span className="text-xs sm:text-sm font-medium text-gray-600 whitespace-nowrap">
                               {current}/{required}人
                             </span>
-                            {current < required ? (
+                            {!readOnly && current < required ? (
                               <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -198,6 +200,12 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                         } ${isEmergencyRequested ? 'ring-2 ring-red-300' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        
+                                        // 閲覧モードでは何もしない
+                                        if (readOnly) {
+                                          return;
+                                        }
+                                        
                                         if (isFixedShift) {
                                           return;
                                         }
@@ -312,21 +320,29 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                               })
                             )}
 
-                            {/* 常に表示されるスタッフ追加ボタン */}
-                            <div
-                              className="flex items-center justify-center p-1.5 sm:p-2 border-2 border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCellClick(dateString, timeSlot.id, date.getDay());
-                              }}
-                            >
-                              <div className="text-center text-gray-500 hover:text-blue-600">
-                                <div className="text-lg sm:text-xl mb-1">+</div>
-                                <div className="text-xs sm:text-sm">
-                                  <span className="sm:inline">タップして</span>追加
+                            {/* スタッフ追加ボタン（閲覧モードでは非表示、シフトがない場合のみ「シフトなし」を表示） */}
+                            {readOnly ? (
+                              dayShifts && dayShifts.length === 0 ? (
+                                <div className="flex items-center justify-center p-1.5 sm:p-2 text-gray-400 text-xs sm:text-sm">
+                                  シフトなし
+                                </div>
+                              ) : null
+                            ) : (
+                              <div
+                                className="flex items-center justify-center p-1.5 sm:p-2 border-2 border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCellClick(dateString, timeSlot.id, date.getDay());
+                                }}
+                              >
+                                <div className="text-center text-gray-500 hover:text-blue-600">
+                                  <div className="text-lg sm:text-xl mb-1">+</div>
+                                  <div className="text-xs sm:text-sm">
+                                    <span className="sm:inline">タップして</span>追加
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </td>
