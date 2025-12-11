@@ -52,7 +52,7 @@ const Navigation = () => {
 
     const fetchNotifications = async () => {
       try {
-        // 管理者の場合のみシフト希望数を取得
+        // 管理者の場合のみシフト希望数と新規応募数を取得
         if (currentUser.role === 'manager') {
           // 未処理のシフト希望数を取得
           const shiftRequestsResponse = await fetch('/api/shift-requests?status=submitted');
@@ -67,13 +67,80 @@ const Navigation = () => {
             shiftRequestsCount = unprocessedRequests.length;
           }
 
+          // 新規応募数を取得
+          let emergencyRequestsCount = 0;
+          try {
+            const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+            if (emergencyResponse.ok) {
+              const emergencyData = await emergencyResponse.json();
+              const requests = emergencyData.data || [];
+              
+              // 既読情報を取得
+              const viewedData = localStorage.getItem('emergency_request_viewed');
+              const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
+              
+              // 新規応募がある募集をカウント
+              emergencyRequestsCount = requests.filter((request: any) => {
+                const volunteers = request.emergency_volunteers || [];
+                if (volunteers.length === 0) return false;
+                
+                // 最後に確認した時刻を取得
+                const lastViewed = viewedMap[request.id];
+                if (!lastViewed) {
+                  // 未確認の場合は新規応募があればカウント
+                  return true;
+                }
+                
+                // 最後に確認した時刻より後に応募があったかチェック
+                const lastViewedTime = new Date(lastViewed).getTime();
+                const hasNewVolunteers = volunteers.some((vol: any) => {
+                  const volunteerTime = new Date(vol.responded_at).getTime();
+                  return volunteerTime > lastViewedTime;
+                });
+                
+                return hasNewVolunteers;
+              }).length;
+            }
+          } catch (error) {
+            console.error('新規応募数の取得に失敗:', error);
+          }
+
           setNotifications({
-            emergencyRequestsCount: 0,
+            emergencyRequestsCount: emergencyRequestsCount,
             shiftRequestsCount: shiftRequestsCount,
             confirmedShiftsCount: 0
           });
+        } else if (currentUser.role === 'staff') {
+          // スタッフの場合は新規代打募集数を取得（自分が応募していないもの）
+          let emergencyRequestsCount = 0;
+          try {
+            const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+            if (emergencyResponse.ok) {
+              const emergencyData = await emergencyResponse.json();
+              const requests = emergencyData.data || [];
+              
+              // 自分が応募していない、かつ自分が作成していない代打募集をカウント
+              emergencyRequestsCount = requests.filter((req: any) => {
+                // 自分が作成したものは除外
+                if (req.original_user_id === currentUser.id) return false;
+                // ステータスがopenでないものは除外
+                if (req.status !== 'open') return false;
+                // 自分が既に応募しているものは除外
+                const hasApplied = req.emergency_volunteers?.some((vol: any) => vol.user_id === currentUser.id);
+                return !hasApplied;
+              }).length;
+            }
+          } catch (error) {
+            console.error('新規代打募集数の取得に失敗:', error);
+          }
+
+          setNotifications({
+            emergencyRequestsCount: emergencyRequestsCount,
+            shiftRequestsCount: 0,
+            confirmedShiftsCount: 0
+          });
         } else {
-          // スタッフの場合は全て0
+          // その他の場合は全て0
           setNotifications({
             emergencyRequestsCount: 0,
             shiftRequestsCount: 0,
@@ -103,11 +170,14 @@ const Navigation = () => {
     
     window.addEventListener('updateShiftRequestNotifications', handleUpdateNotifications);
     window.addEventListener('updateShiftConfirmations', handleUpdateNotifications);
+    window.addEventListener('updateEmergencyNotifications', handleUpdateNotifications);
+    window.addEventListener('updateEmergencyRequests', handleUpdateNotifications);
     
     return () => {
       clearInterval(interval);
       window.removeEventListener('updateShiftRequestNotifications', handleUpdateNotifications);
       window.removeEventListener('updateShiftConfirmations', handleUpdateNotifications);
+      window.removeEventListener('updateEmergencyNotifications', handleUpdateNotifications);
     };
   }, [currentUser]);
 
@@ -276,6 +346,14 @@ const Navigation = () => {
                   {item.href === '/shift-requests' && (
                     <NotificationBadge count={notifications.shiftRequestsCount} />
                   )}
+                  {/* 代打募集管理に新規応募バッジ表示（店長のみ） */}
+                  {item.href === '/emergency-management' && currentUser?.role === 'manager' && (
+                    <NotificationBadge count={notifications.emergencyRequestsCount} />
+                  )}
+                  {/* 代打募集に新規募集バッジ表示（スタッフのみ） */}
+                  {item.href === '/emergency' && currentUser?.role === 'staff' && (
+                    <NotificationBadge count={notifications.emergencyRequestsCount} />
+                  )}
                 </div>
                 <span className="hidden lg:inline">{item.label}</span>
               </Link>
@@ -358,6 +436,14 @@ const Navigation = () => {
                   {/* シフト希望確認にバッジ表示 */}
                   {item.href === '/shift-requests' && (
                     <NotificationBadge count={notifications.shiftRequestsCount} />
+                  )}
+                  {/* 代打募集管理に新規応募バッジ表示（店長のみ） */}
+                  {item.href === '/emergency-management' && currentUser?.role === 'manager' && (
+                    <NotificationBadge count={notifications.emergencyRequestsCount} />
+                  )}
+                  {/* 代打募集に新規募集バッジ表示（スタッフのみ） */}
+                  {item.href === '/emergency' && currentUser?.role === 'staff' && (
+                    <NotificationBadge count={notifications.emergencyRequestsCount} />
                   )}
                 </div>
                 <span className="flex-1">{item.label}</span>

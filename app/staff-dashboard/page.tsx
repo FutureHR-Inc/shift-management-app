@@ -316,6 +316,14 @@ export default function StaffDashboardPage() {
     );
   };
 
+  // 自分の応募ステータスを取得
+  const getMyApplicationStatus = (request: EmergencyRequest) => {
+    const myVolunteer = request.emergency_volunteers?.find(volunteer => 
+      volunteer.user_id === currentUser?.id
+    );
+    return myVolunteer?.status || 'pending';
+  };
+
   // 応募済みで未承認かチェック（取り消し可能かどうか）
   const canCancelApplication = (request: EmergencyRequest) => {
     const myVolunteer = request.emergency_volunteers?.find(volunteer => 
@@ -637,23 +645,36 @@ export default function StaffDashboardPage() {
                               </span>
                             </div>
                             <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
-                              {alreadyApplied ? (
-                                <div className="flex flex-col items-end gap-1">
-                                  <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                                    応募済み
+                              {alreadyApplied ? (() => {
+                                const applicationStatus = getMyApplicationStatus(request);
+                                return (
+                                  <div className="flex flex-col items-end gap-1">
+                                    {applicationStatus === 'accepted' ? (
+                                      <div className="text-xs text-white bg-green-500 px-2 py-1 rounded-full font-semibold">
+                                        ✓ 採用
+                                      </div>
+                                    ) : applicationStatus === 'rejected' ? (
+                                      <div className="text-xs text-white bg-red-500 px-2 py-1 rounded-full font-semibold">
+                                        ✗ 不採用
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                                        応募済み
+                                      </div>
+                                    )}
+                                    {canCancelApplication(request) && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleCancelApplication(request.id)}
+                                        variant="secondary"
+                                        className="text-xs px-2 py-1 h-auto min-h-[24px] text-red-600 hover:bg-red-50 border-red-200"
+                                      >
+                                        取消
+                                      </Button>
+                                    )}
                                   </div>
-                                  {canCancelApplication(request) && (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleCancelApplication(request.id)}
-                                      variant="secondary"
-                                      className="text-xs px-2 py-1 h-auto min-h-[24px] text-red-600 hover:bg-red-50 border-red-200"
-                                    >
-                                      取消
-                                    </Button>
-                                  )}
-                                </div>
-                              ) : hasShiftOnDate(request.date) ? (
+                                );
+                              })() : hasShiftOnDate(request.date) ? (
                                 <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                                   シフト有り
                                 </div>

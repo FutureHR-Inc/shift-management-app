@@ -97,8 +97,24 @@ export default function EmergencyPage() {
   const [applicationNote, setApplicationNote] = useState<string>(''); // 応募メモ用state
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [unappliedRequestCount, setUnappliedRequestCount] = useState<number>(0); // 応募していない代打募集の件数
   
   const router = useRouter();
+
+  // 応募していない代打募集の件数を計算
+  const calculateUnappliedCount = useCallback((requests: EmergencyRequest[]) => {
+    if (!currentUser) return 0;
+    
+    return requests.filter((req: EmergencyRequest) => {
+      // 自分が作成したものは除外
+      if (req.original_user_id === currentUser.id) return false;
+      // ステータスがopenでないものは除外
+      if (req.status !== 'open') return false;
+      // 自分が既に応募しているものは除外
+      const hasApplied = req.emergency_volunteers?.some(volunteer => volunteer.user_id === currentUser.id);
+      return !hasApplied;
+    }).length;
+  }, [currentUser]);
 
   useEffect(() => {
     const user = localStorage.getItem('currentUser');
@@ -156,6 +172,10 @@ export default function EmergencyPage() {
           
           setMyEmergencyRequests(sortedMyRequests);
           setEmergencyRequests(sortedOtherRequests);
+          
+          // 応募していない代打募集の件数を更新
+          const unappliedCount = calculateUnappliedCount(sortedOtherRequests);
+          setUnappliedRequestCount(unappliedCount);
         }
 
         // スタッフの場合は確定済みシフトと固定シフトを取得
@@ -327,7 +347,33 @@ export default function EmergencyPage() {
       setApplicationNote('');
       
       // データを再取得
-      window.location.reload();
+      const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+      if (emergencyResponse.ok) {
+        const emergencyData = await emergencyResponse.json();
+        const myRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.original_user_id === currentUser.id && req.status === 'open'
+        );
+        const otherRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.status === 'open' && req.original_user_id !== currentUser.id
+        );
+        
+        const sortedMyRequests = [...myRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const sortedOtherRequests = [...otherRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        
+        setMyEmergencyRequests(sortedMyRequests);
+        setEmergencyRequests(sortedOtherRequests);
+        
+        // 応募していない代打募集の件数を更新
+        const unappliedCount = calculateUnappliedCount(sortedOtherRequests);
+        setUnappliedRequestCount(unappliedCount);
+      }
+      
+      // ヘッダーの通知を更新
+      window.dispatchEvent(new CustomEvent('updateEmergencyRequests'));
 
     } catch (error) {
       console.error('=== 応募処理エラー ===');
@@ -388,6 +434,10 @@ export default function EmergencyPage() {
         
         setMyEmergencyRequests(sortedMyRequests);
         setEmergencyRequests(sortedOtherRequests);
+        
+        // 応募していない代打募集の件数を更新
+        const unappliedCount = calculateUnappliedCount(sortedOtherRequests);
+        setUnappliedRequestCount(unappliedCount);
 
         // 成功メッセージを表示
         alert('代打募集を削除しました');
@@ -466,6 +516,10 @@ export default function EmergencyPage() {
         setMyEmergencyRequests(sortedMyRequests);
         setEmergencyRequests(sortedOtherRequests);
         
+        // 応募していない代打募集の件数を更新
+        const unappliedCount = calculateUnappliedCount(sortedOtherRequests);
+        setUnappliedRequestCount(unappliedCount);
+        
         // 作成したシフトをmyShiftsから即座に除外（UIを即座に更新）
         if (selectedShift) {
           setMyShifts(prevShifts => {
@@ -541,7 +595,33 @@ export default function EmergencyPage() {
       alert('応募を取り消しました');
       
       // データを再取得
-      window.location.reload();
+      const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
+      if (emergencyResponse.ok) {
+        const emergencyData = await emergencyResponse.json();
+        const myRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.original_user_id === currentUser.id && req.status === 'open'
+        );
+        const otherRequests = emergencyData.data.filter((req: EmergencyRequest) => 
+          req.status === 'open' && req.original_user_id !== currentUser.id
+        );
+        
+        const sortedMyRequests = [...myRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        const sortedOtherRequests = [...otherRequests].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        
+        setMyEmergencyRequests(sortedMyRequests);
+        setEmergencyRequests(sortedOtherRequests);
+        
+        // 応募していない代打募集の件数を更新
+        const unappliedCount = calculateUnappliedCount(sortedOtherRequests);
+        setUnappliedRequestCount(unappliedCount);
+      }
+      
+      // ヘッダーの通知を更新
+      window.dispatchEvent(new CustomEvent('updateEmergencyRequests'));
     } catch (error) {
       console.error('応募取り消しエラー:', error);
       setError(error instanceof Error ? error.message : '応募の取り消しに失敗しました');
@@ -632,13 +712,18 @@ export default function EmergencyPage() {
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`px-4 py-2 font-medium rounded-md transition-all ${
+                className={`px-4 py-2 font-medium rounded-md transition-all relative ${
                   activeTab === 'browse'
                     ? 'bg-white text-blue-700 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
                 募集中の代打
+                {unappliedRequestCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-xs font-bold rounded-full">
+                    {unappliedRequestCount > 99 ? '99+' : unappliedRequestCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setActiveTab('create')}
@@ -700,7 +785,7 @@ export default function EmergencyPage() {
                   <div className="space-y-4">
                     {myEmergencyRequests.map((request) => (
                       <div key={request.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start gap-4">
+                        <div className="flex flex-col">
                           <div>
                             <h3 className="font-medium text-gray-900">
                               {new Date(request.date).toLocaleDateString('ja-JP', {
@@ -737,14 +822,16 @@ export default function EmergencyPage() {
                               </div>
                             )}
                           </div>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteEmergencyRequest(request.id)}
-                            className="bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 whitespace-nowrap px-4 min-w-[4rem] flex-shrink-0 shadow-sm"
-                          >
-                            削除
-                          </Button>
+                          <div className="flex justify-end mt-4">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteEmergencyRequest(request.id)}
+                              className="bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 whitespace-nowrap px-4 min-w-[4rem] flex-shrink-0 shadow-sm"
+                            >
+                              削除
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}

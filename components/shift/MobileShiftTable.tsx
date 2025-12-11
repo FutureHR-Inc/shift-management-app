@@ -12,11 +12,11 @@ interface MobileShiftTableProps {
   getShiftForSlot?: (date: string, timeSlot: string) => Shift[]; // 親のgetShiftForSlotを使用
   getEmergencyRequestForShift: (shiftId: string) => any;
   handleCellClick: (date: string, timeSlot: string, dayIndex: number) => void;
-  handleDeleteShift: (shiftId: string) => void;
+  handleDeleteShift: (shiftId: string, shift?: Shift, date?: string) => void;
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
   setEmergencyModal: (modal: { show: boolean; shift: any | null }) => void;
-  currentUser?: { id: string };
+  currentUser?: { id: string; role?: string };
   shifts: Shift[];
   users: User[];
   timeSlots: TimeSlot[];
@@ -206,9 +206,49 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           return;
                                         }
                                         
+                                        // 店長権限チェック
+                                        const isManager = currentUser?.role === 'manager';
+                                        
                                         if (isFixedShift) {
+                                          // 固定シフトの場合は代打募集と削除の両方を選択可能（店長のみ）
+                                          if (!isManager) {
+                                            return;
+                                          }
+                                          
+                                          // 店長の場合は選択肢を表示
+                                          const action = window.confirm(
+                                            `${user.name}さんの固定シフト\n\nOK: 代打募集を開始\nキャンセル: この日のみ削除`
+                                          );
+                                          
+                                          if (action) {
+                                            // 代打募集モーダルを表示
+                                            try {
+                                              const convertedShift = {
+                                                id: shift.id,
+                                                user_id: shift.userId,
+                                                store_id: shift.storeId,
+                                                time_slot_id: shift.timeSlotId,
+                                                date: shift.date,
+                                                status: 'confirmed', // 固定シフトは確定済みとして扱う
+                                                created_at: new Date().toISOString(),
+                                                updated_at: new Date().toISOString()
+                                              };
+                                              if (setEmergencyModal) {
+                                                setEmergencyModal({ show: true, shift: convertedShift });
+                                              }
+                                            } catch (error) {
+                                              console.error('Error showing emergency modal:', error);
+                                            }
+                                          } else {
+                                            // 削除
+                                            if (window.confirm(`${user.name}さんの固定シフトをこの日のみ削除しますか？\n他の週は通常通り表示されます。`)) {
+                                              handleDeleteShift(shift.id, shift, shift.date);
+                                            }
+                                          }
+                                          
                                           return;
                                         }
+                                        
                                         if (isEmergencyRequested) {
                                           const volunteerCount = emergencyRequest.emergency_volunteers?.length || 0;
                                           if (volunteerCount > 0) {
@@ -220,23 +260,57 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                             alert('まだ応募者がいません。');
                                           }
                                         } else if (isConfirmed) {
-                                          // 確定済みシフトの場合は代打募集モーダルを表示
-                                          try {
-                                            const convertedShift = {
-                                              id: shift.id,
-                                              user_id: shift.userId,
-                                              store_id: shift.storeId,
-                                              time_slot_id: shift.timeSlotId,
-                                              date: shift.date,
-                                              status: shift.status,
-                                              created_at: new Date().toISOString(),
-                                              updated_at: new Date().toISOString()
-                                            };
-                                            if (setEmergencyModal) {
-                                              setEmergencyModal({ show: true, shift: convertedShift });
+                                          // 確定済みシフトの場合は代打募集と削除の選択肢を表示
+                                          if (isManager) {
+                                            // 店長の場合は選択肢を表示
+                                            const action = window.confirm(
+                                              `${user.name}さんのシフト\n\nOK: 代打募集を開始\nキャンセル: 削除`
+                                            );
+                                            
+                                            if (action) {
+                                              // 代打募集モーダルを表示
+                                              try {
+                                                const convertedShift = {
+                                                  id: shift.id,
+                                                  user_id: shift.userId,
+                                                  store_id: shift.storeId,
+                                                  time_slot_id: shift.timeSlotId,
+                                                  date: shift.date,
+                                                  status: shift.status,
+                                                  created_at: new Date().toISOString(),
+                                                  updated_at: new Date().toISOString()
+                                                };
+                                                if (setEmergencyModal) {
+                                                  setEmergencyModal({ show: true, shift: convertedShift });
+                                                }
+                                              } catch (error) {
+                                                console.error('Error showing emergency modal:', error);
+                                              }
+                                            } else {
+                                              // 削除
+                                              if (window.confirm(`${user.name}さんのシフトを削除しますか？`)) {
+                                                handleDeleteShift(shift.id, shift, shift.date);
+                                              }
                                             }
-                                          } catch (error) {
-                                            console.error('Error showing emergency modal:', error);
+                                          } else {
+                                            // 店長以外は代打募集のみ
+                                            try {
+                                              const convertedShift = {
+                                                id: shift.id,
+                                                user_id: shift.userId,
+                                                store_id: shift.storeId,
+                                                time_slot_id: shift.timeSlotId,
+                                                date: shift.date,
+                                                status: shift.status,
+                                                created_at: new Date().toISOString(),
+                                                updated_at: new Date().toISOString()
+                                              };
+                                              if (setEmergencyModal) {
+                                                setEmergencyModal({ show: true, shift: convertedShift });
+                                              }
+                                            } catch (error) {
+                                              console.error('Error showing emergency modal:', error);
+                                            }
                                           }
                                         } else {
                                           setContextMenu({
@@ -275,12 +349,12 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           {isEmergencyRequested && (
                                             <span className="text-red-600 font-bold text-xs">🆘</span>
                                           )}
-                                          {/* 削除ボタン - 固定シフトと確定済みシフトは削除不可 */}
+                                          {/* 削除ボタン - 下書きシフトのみ表示（確定シフトと固定シフトはクリックで削除可能） */}
                                           {!isConfirmed && !isEmergencyRequested && !isFixedShift && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleDeleteShift(shift.id);
+                                                handleDeleteShift(shift.id, shift, shift.date);
                                               }}
                                               className="w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
                                               title="削除"
