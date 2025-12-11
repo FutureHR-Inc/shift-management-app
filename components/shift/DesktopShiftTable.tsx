@@ -12,11 +12,11 @@ interface DesktopShiftTableProps {
   getShiftForSlot?: (date: string, timeSlot: string) => Shift[]; // 親のgetShiftForSlotを使用
   getEmergencyRequestForShift: (shiftId: string) => any;
   handleCellClick: (date: string, timeSlot: string, dayIndex: number) => void;
-  handleDeleteShift: (shiftId: string) => void;
+  handleDeleteShift: (shiftId: string, shift?: Shift, date?: string) => void;
   setContextMenu: (menu: any) => void;
   setEmergencyManagement: (emergency: any) => void;
   setEmergencyModal: (modal: { show: boolean; shift: any | null }) => void;
-  currentUser?: { id: string };
+  currentUser?: { id: string; role?: string };
   shifts: Shift[];
   users: User[];
   timeSlots: TimeSlot[];
@@ -311,8 +311,151 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                           }
                                         });
 
+                                        // 店長権限チェック
+                                        const isManager = currentUser?.role === 'manager';
+                                        
                                         if (isFixedShift) {
-                                          console.log('❌ 固定シフトなのでスキップ');
+                                          // 固定シフトの場合は代打募集と削除の両方を選択可能（店長のみ）
+                                          if (!isManager) {
+                                            return;
+                                          }
+                                          
+                                          console.log('✅ 固定シフト - 代打募集と削除ボタンを表示');
+                                          // 代打募集と削除ボタンを表示
+                                          console.log('🎯 ボタン要素を作成開始');
+                                          // ボタンのコンテナを作成
+                                          const container = document.createElement('div');
+                                          container.style.position = 'fixed';
+                                          container.style.top = '0';
+                                          container.style.left = '0';
+                                          container.style.width = '100%';
+                                          container.style.height = '100%';
+                                          container.style.pointerEvents = 'none';
+                                          container.style.zIndex = '9999';
+
+                                          // ボタン要素を作成
+                                          const buttonElement = document.createElement('div');
+                                          buttonElement.className = 'bg-white rounded-xl shadow-lg border border-gray-200 p-4';
+                                          buttonElement.style.position = 'absolute';
+                                          buttonElement.style.pointerEvents = 'auto';
+                                          buttonElement.style.display = 'block';
+                                          buttonElement.style.visibility = 'visible';
+                                          
+                                          buttonElement.innerHTML = `
+                                            <div class="flex flex-col gap-3">
+                                              <div class="flex items-center gap-2 text-gray-900">
+                                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                </svg>
+                                                <span class="font-medium">固定シフト</span>
+                                              </div>
+                                              <div class="text-sm text-gray-600">
+                                                ${user.name}さんのシフト
+                                                <div class="mt-1">${displayTime}</div>
+                                              </div>
+                                              <button class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 active:bg-red-300 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                </svg>
+                                                代打募集を開始
+                                              </button>
+                                              <button class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                この日のみ削除
+                                              </button>
+                                            </div>
+                                          `;
+
+                                          // クリックされた要素の位置情報を取得
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          
+                                          // ビューポート内での位置を計算（クリックされた要素の中央に配置）
+                                          const buttonLeft = rect.left + (rect.width / 2);
+                                          const buttonTop = rect.top + (rect.height / 2);
+                                          
+                                          // ボタンを配置
+                                          buttonElement.style.left = `${buttonLeft}px`;
+                                          buttonElement.style.top = `${buttonTop}px`;
+                                          buttonElement.style.transform = 'translate(-50%, -50%)';  // 中央揃え
+                                          
+                                          // 画面端に近い場合の調整
+                                          setTimeout(() => {
+                                            const buttonRect = buttonElement.getBoundingClientRect();
+                                            const viewportWidth = window.innerWidth;
+                                            const viewportHeight = window.innerHeight;
+
+                                            // 右端からはみ出す場合
+                                            if (buttonRect.right > viewportWidth) {
+                                              const newLeft = viewportWidth - buttonRect.width - 10;
+                                              buttonElement.style.left = `${newLeft + scrollX}px`;
+                                            }
+
+                                            // 下端からはみ出す場合
+                                            if (buttonRect.bottom > viewportHeight) {
+                                              const newTop = viewportHeight - buttonRect.height - 10;
+                                              buttonElement.style.top = `${newTop + scrollY}px`;
+                                            }
+                                          }, 0);
+                                          
+                                          // ボタンのクリックイベントを設定
+                                          const buttons = buttonElement.querySelectorAll('button');
+                                          if (buttons.length > 0) {
+                                            // 最初のボタン（代打募集）
+                                            buttons[0].onclick = (e) => {
+                                              e.stopPropagation();
+                                              // containerごと削除
+                                              if (container.parentNode) {
+                                                container.parentNode.removeChild(container);
+                                              }
+                                              // DatabaseShiftに変換
+                                              const convertedShift: DatabaseShift = {
+                                                id: shift.id,
+                                                user_id: shift.userId,
+                                                store_id: shift.storeId,
+                                                time_slot_id: shift.timeSlotId,
+                                                date: shift.date,
+                                                status: 'confirmed', // 固定シフトは確定済みとして扱う
+                                                created_at: new Date().toISOString(),
+                                                updated_at: new Date().toISOString()
+                                              };
+                                              setEmergencyModal({ show: true, shift: convertedShift });
+                                            };
+                                            
+                                            // 2番目のボタン（削除）
+                                            if (buttons.length > 1) {
+                                              buttons[1].onclick = (e) => {
+                                                e.stopPropagation();
+                                                // containerごと削除
+                                                if (container.parentNode) {
+                                                  container.parentNode.removeChild(container);
+                                                }
+                                                if (window.confirm(`${user.name}さんの固定シフトをこの日のみ削除しますか？\n他の週は通常通り表示されます。`)) {
+                                                  handleDeleteShift(shift.id, shift, shift.date);
+                                                }
+                                              };
+                                            }
+                                          }
+                                          
+                                          // ボタンをコンテナに追加
+                                          container.appendChild(buttonElement);
+                                          // コンテナをbodyに追加
+                                          document.body.appendChild(container);
+
+                                          // クリックイベントのリスナーを追加して、ボタン以外をクリックしたら削除
+                                          const handleClickOutside = (event: MouseEvent) => {
+                                            if (!buttonElement.contains(event.target as Node)) {
+                                              if (container.parentNode) {
+                                                container.parentNode.removeChild(container);
+                                              }
+                                              document.removeEventListener('click', handleClickOutside);
+                                            }
+                                          };
+                                          setTimeout(() => {
+                                            document.addEventListener('click', handleClickOutside);
+                                          }, 0);
+                                          
                                           return;
                                         }
 
@@ -328,8 +471,8 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                             alert('まだ応募者がいません。');
                                           }
                                         } else if (isConfirmed) {
-                                          console.log('✅ 確定済みシフト - 代打募集ボタンを表示');
-                                          // 代打募集ボタンを表示
+                                          console.log('✅ 確定済みシフト - 代打募集と削除ボタンを表示');
+                                          // 代打募集と削除ボタンを表示
                                           console.log('🎯 ボタン要素を作成開始');
                                           // ボタンのコンテナを作成
                                           const container = document.createElement('div');
@@ -355,6 +498,17 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                             position: buttonElement.style.position,
                                             zIndex: buttonElement.style.zIndex
                                           });
+                                          
+                                          // 店長の場合は削除ボタンも表示
+                                          const deleteButtonHtml = isManager ? `
+                                            <button class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors mt-2">
+                                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                              </svg>
+                                              削除
+                                            </button>
+                                          ` : '';
+                                          
                                           buttonElement.innerHTML = `
                                             <div class="flex flex-col gap-3">
                                               <div class="flex items-center gap-2 text-gray-900">
@@ -373,6 +527,7 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                                 </svg>
                                                 募集を開始
                                               </button>
+                                              ${deleteButtonHtml}
                                             </div>
                                           `;
 
@@ -422,9 +577,10 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                             }
                                           }, 0);
                                           // 募集開始ボタンのクリックイベントを設定
-                                          const startButton = buttonElement.querySelector('button');
-                                          if (startButton) {
-                                            startButton.onclick = (e) => {
+                                          const buttons = buttonElement.querySelectorAll('button');
+                                          if (buttons.length > 0) {
+                                            // 最初のボタン（募集開始）
+                                            buttons[0].onclick = (e) => {
                                               e.stopPropagation();
                                               // containerごと削除
                                               if (container.parentNode) {
@@ -443,6 +599,20 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                               };
                                               setEmergencyModal({ show: true, shift: convertedShift });
                                             };
+                                            
+                                            // 2番目のボタン（削除、店長のみ）
+                                            if (buttons.length > 1 && isManager) {
+                                              buttons[1].onclick = (e) => {
+                                                e.stopPropagation();
+                                                // containerごと削除
+                                                if (container.parentNode) {
+                                                  container.parentNode.removeChild(container);
+                                                }
+                                                if (window.confirm(`${user.name}さんのシフトを削除しますか？`)) {
+                                                  handleDeleteShift(shift.id, shift, shift.date);
+                                                }
+                                              };
+                                            }
                                           }
                                           console.log('🎯 DOMにボタンを追加');
                                           // ボタンをコンテナに追加
@@ -514,12 +684,12 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
                                                   )}
                                                 </div>
                                               </div>
-                                              {/* 削除ボタン - 固定シフトと確定済みシフトは削除不可 */}
+                                              {/* 削除ボタン - 下書きシフトのみ表示（確定シフトと固定シフトはクリックで削除可能） */}
                                               {!isConfirmed && !isEmergencyRequested && !isFixedShift && (
                                                 <button
                                                   onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleDeleteShift(shift.id);
+                                                    handleDeleteShift(shift.id, shift, shift.date);
                                                   }}
                                                   className="shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
                                                   title="削除"
