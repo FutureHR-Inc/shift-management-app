@@ -1074,15 +1074,15 @@ export default function DashboardPage() {
                   const period = submissionPeriods.find(p => p.id === request.submission_period);
                   
                   return (
-                    <div key={request.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                      <div>
+                    <div key={request.id} className="flex items-center justify-between gap-2 p-3 border border-gray-200 rounded-lg">
+                      <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900">{user?.name || '不明なユーザー'}</p>
                         <p className="text-sm text-gray-500">
                           {request.date} - {period?.label || request.submission_period} 
                           (優先度: {request.priority === 1 ? '最優先' : request.priority === 2 ? '希望' : '可能'})
                         </p>
                       </div>
-                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 whitespace-nowrap ${
                         request.status === 'submitted' 
                           ? 'bg-blue-100 text-blue-800'
                           : request.status === 'converted_to_shift'

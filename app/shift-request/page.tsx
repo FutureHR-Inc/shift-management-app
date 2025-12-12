@@ -21,6 +21,8 @@ interface ShiftRequestData {
   preferredEndTime: string | null;
   priority: 1 | 2 | 3;
   notes: string;
+  id?: string; // 既存データのID（提出済みかどうかの判定に使用）
+  isSubmitted?: boolean; // 提出済みかどうか
 }
 
 interface DateData {
@@ -52,6 +54,9 @@ export default function ShiftRequestPage() {
 
   // UI states
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [selectedDatesForBulk, setSelectedDatesForBulk] = useState<Set<string>>(new Set());
+  const [showBulkInput, setShowBulkInput] = useState(false);
+  const [bulkPriority, setBulkPriority] = useState<1 | 2 | 3>(2);
 
   useEffect(() => {
     initializePage();
@@ -62,6 +67,32 @@ export default function ShiftRequestPage() {
       loadPeriodData();
     }
   }, [selectedPeriod, selectedStore]);
+
+  // 一括入力モーダルが開かれたとき、提出済みの日付を選択から除外
+  useEffect(() => {
+    if (showBulkInput && dates.length > 0) {
+      setSelectedDatesForBulk(prev => {
+        const newSet = new Set(prev);
+        let hasRemoved = false;
+        
+        prev.forEach(date => {
+          const dateData = dates.find(d => d.date === date);
+          if (dateData) {
+            const isSubmitted = dateData.requests.some(req => req.isSubmitted === true);
+            const isConfirmed = hasConfirmedShift(date);
+            const isFixed = hasFixedShift(date);
+            
+            if (isSubmitted || isConfirmed || isFixed) {
+              newSet.delete(date);
+              hasRemoved = true;
+            }
+          }
+        });
+        
+        return newSet;
+      });
+    }
+  }, [showBulkInput, dates]);
 
   const initializePage = async () => {
     try {
@@ -273,7 +304,9 @@ export default function ShiftRequestPage() {
               preferredStartTime: req.preferred_start_time,
               preferredEndTime: req.preferred_end_time,
               priority: req.priority as 1 | 2 | 3,
-              notes: req.notes || ''
+              notes: req.notes || '',
+              id: req.id,
+              isSubmitted: req.status === 'submitted' || req.status === 'approved' || req.status === 'rejected'
             }))
         }));
         setDates(updatedDates);
@@ -356,6 +389,80 @@ export default function ShiftRequestPage() {
     ));
   };
 
+  // 一括入力機能：選択した日付に同じ時間帯・優先度を適用
+  const handleBulkApply = (timeSlotId: string | null, priority: 1 | 2 | 3, notes: string) => {
+    const validDates = Array.from(selectedDatesForBulk).filter(date => {
+      const dateData = dates.find(d => d.date === date);
+      if (!dateData) return false;
+      // 確定済みシフト、固定シフト、提出済みの日付は除外
+      if (hasConfirmedShift(date)) return false;
+      if (hasFixedShift(date)) return false;
+      // 既に提出済みのリクエストがある日付は除外（新規追加のみ）
+      const hasSubmittedRequest = dateData.requests.some(req => req.isSubmitted === true);
+      if (hasSubmittedRequest) return false;
+      return true;
+    });
+
+    if (validDates.length === 0) {
+      setError('一括適用できる日付がありません。確定済みシフト、固定シフト、提出済みの日付は除外されます。');
+      return;
+    }
+
+    setDates(prev => prev.map(d => {
+      if (validDates.includes(d.date)) {
+        // 既存の未提出リクエストを削除してから新規追加
+        const unsubmittedRequests = d.requests.filter(req => req.isSubmitted !== true);
+        const newRequest: ShiftRequestData = {
+          date: d.date,
+          timeSlotId,
+          preferredStartTime: null,
+          preferredEndTime: null,
+          priority,
+          notes
+        };
+        return {
+          ...d,
+          requests: [...unsubmittedRequests, newRequest]
+        };
+      }
+      return d;
+    }));
+
+    setSelectedDatesForBulk(new Set());
+    setShowBulkInput(false);
+    setBulkPriority(2);
+    setError(null);
+    
+    // フォームをリセット
+    setTimeout(() => {
+      const timeSlotSelect = document.getElementById('bulk-time-slot') as HTMLSelectElement;
+      const notesTextarea = document.getElementById('bulk-notes') as HTMLTextAreaElement;
+      if (timeSlotSelect) timeSlotSelect.value = '';
+      if (notesTextarea) notesTextarea.value = '';
+    }, 100);
+  };
+
+  // 日付の選択状態を切り替え
+  const toggleDateSelection = (date: string) => {
+    const dateData = dates.find(d => d.date === date);
+    if (!dateData) return;
+
+    // 確定済みシフト、固定シフト、提出済みの日付は選択不可
+    if (hasConfirmedShift(date) || hasFixedShift(date)) return;
+    const hasSubmittedRequest = dateData.requests.some(req => req.isSubmitted === true);
+    if (hasSubmittedRequest) return;
+
+    setSelectedDatesForBulk(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(date)) {
+        newSet.delete(date);
+      } else {
+        newSet.add(date);
+      }
+      return newSet;
+    });
+  };
+
   const handleSubmit = async () => {
     if (!selectedPeriod || !selectedStore) {
       setError('提出期間と店舗を選択してください');
@@ -387,9 +494,11 @@ export default function ShiftRequestPage() {
         return;
       }
       
-      // 全ての希望を配列に変換
+      // 全ての希望を配列に変換（提出済みのものは除外）
       const allRequests = dates.flatMap(dateData =>
-        dateData.requests.map(req => ({
+        dateData.requests
+          .filter(req => req.isSubmitted !== true) // 提出済みのものは除外
+          .map(req => ({
           date: req.date,
           time_slot_id: req.timeSlotId,
           preferred_start_time: req.preferredStartTime,
@@ -401,7 +510,14 @@ export default function ShiftRequestPage() {
 
       // 空の希望がある場合は警告
       if (allRequests.length === 0) {
-        setError('少なくとも1つのシフト希望を入力してください');
+        setError('少なくとも1つのシフト希望を入力してください。時間帯を選択してください。');
+        return;
+      }
+
+      // 時間帯が選択されていない希望がある場合は警告
+      const invalidRequests = allRequests.filter(req => !req.time_slot_id);
+      if (invalidRequests.length > 0) {
+        setError('時間帯が選択されていないシフト希望があります。すべての希望に時間帯を選択してください。');
         return;
       }
 
@@ -502,8 +618,20 @@ export default function ShiftRequestPage() {
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
+          // 詳細なエラー情報がある場合は追加
+          if (errorData.details && Array.isArray(errorData.details)) {
+            errorMessage += '\n' + errorData.details.join('\n');
+          }
         } catch (e) {
           console.error('Error parsing error response:', e);
+          // レスポンスの解析に失敗した場合でも、ステータスコードから判断
+          if (response.status === 400) {
+            errorMessage = 'リクエストが不正です。入力内容を確認してください。';
+          } else if (response.status === 409) {
+            errorMessage = '重複するシフト希望が検出されました。';
+          } else if (response.status === 500) {
+            errorMessage = 'サーバーエラーが発生しました。しばらく待ってから再度お試しください。';
+          }
         }
         setError(errorMessage);
         return;
@@ -554,7 +682,10 @@ export default function ShiftRequestPage() {
 
   const hasValidRequests = () => {
     return dates.some(dateData =>
-      dateData.requests.some(req => req.timeSlotId !== null)
+      dateData.requests.some(req => 
+        req.timeSlotId !== null && 
+        req.isSubmitted !== true // 提出済みのものは除外
+      )
     );
   };
 
@@ -733,30 +864,273 @@ export default function ShiftRequestPage() {
           </Card>
         )}
 
-        {/* 日付・時間選択 */}
-        {selectedPeriod && selectedStore && (
+        {/* 一括入力モーダル */}
+        {showBulkInput && (
+          <Card className="border-2 border-blue-500">
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-base">📋 一括入力</CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    カレンダーから日付を選択し、時間帯・優先度・メモを一括で設定
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowBulkInput(false);
+                    setSelectedDatesForBulk(new Set());
+                    setBulkPriority(2);
+                    // フォームをリセット
+                    const timeSlotSelect = document.getElementById('bulk-time-slot') as HTMLSelectElement;
+                    const notesTextarea = document.getElementById('bulk-notes') as HTMLTextAreaElement;
+                    if (timeSlotSelect) timeSlotSelect.value = '';
+                    if (notesTextarea) notesTextarea.value = '';
+                  }}
+                  className="text-xs py-1 px-2 flex-shrink-0 whitespace-nowrap"
+                >
+                  閉じる
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* コンパクトカレンダー */}
+              {selectedPeriod && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">日付を選択 ({selectedDatesForBulk.size}日選択中)</label>
+                  <p className="text-xs text-gray-500 mb-2">※提出済み（✓マーク）の日付は重ねて提出できません</p>
+                  <div className="border border-gray-200 rounded-lg p-2 bg-gray-50">
+                    <div className="grid grid-cols-7 gap-0.5 mb-1">
+                      {['日', '月', '火', '水', '木', '金', '土'].map(day => (
+                        <div key={day} className="text-center text-[10px] font-medium text-gray-600 py-0.5">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5">
+                      {(() => {
+                        // 選択期間の日付範囲を取得
+                        const dateRange = generateDateRange(selectedPeriod.startDate, selectedPeriod.endDate);
+                        
+                        // 最初の日付の週の開始日（日曜日）を取得
+                        const firstDate = new Date(dateRange[0]);
+                        const firstDayOfWeek = firstDate.getDay(); // 0=日曜日
+                        const startDate = new Date(firstDate);
+                        startDate.setDate(startDate.getDate() - firstDayOfWeek);
+                        
+                        // 最後の日付の週の終了日（土曜日）を取得
+                        const lastDate = new Date(dateRange[dateRange.length - 1]);
+                        const lastDayOfWeek = lastDate.getDay();
+                        const endDate = new Date(lastDate);
+                        endDate.setDate(endDate.getDate() + (6 - lastDayOfWeek));
+                        
+                        // カレンダーに表示する全日付を生成
+                        const calendarDates: Array<{ date: string; isInRange: boolean }> = [];
+                        const currentDate = new Date(startDate);
+                        while (currentDate <= endDate) {
+                          const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+                          const isInRange = dateRange.includes(dateStr);
+                          calendarDates.push({ date: dateStr, isInRange });
+                          currentDate.setDate(currentDate.getDate() + 1);
+                        }
+                        
+                        return calendarDates.map(({ date, isInRange }) => {
+                          const dateObj = new Date(date);
+                          const day = dateObj.getDate();
+                          const isSelected = selectedDatesForBulk.has(date);
+                          const isConfirmed = hasConfirmedShift(date);
+                          const isSubmitted = dates.find(d => d.date === date)?.requests.some(req => req.isSubmitted === true);
+                          const isFixed = hasFixedShift(date);
+                          const isSelectable = isInRange && !isConfirmed && !isSubmitted && !isFixed;
+                          
+                          return (
+                            <button
+                              key={date}
+                              type="button"
+                              onClick={() => {
+                                if (isSelectable) {
+                                  toggleDateSelection(date);
+                                }
+                              }}
+                              disabled={!isSelectable}
+                              className={`
+                                h-12 text-[10px] rounded transition-all flex flex-col items-center justify-center relative
+                                ${!isInRange 
+                                  ? 'text-gray-300 cursor-default' 
+                                  : isSelectable
+                                  ? isSelected
+                                    ? 'bg-blue-500 text-white font-medium hover:bg-blue-600'
+                                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-200'
+                                  : isConfirmed
+                                  ? 'bg-orange-100 text-orange-600 cursor-not-allowed opacity-60'
+                                  : isSubmitted
+                                  ? 'bg-green-100 text-green-700 cursor-not-allowed border-2 border-green-400 relative'
+                                  : isFixed
+                                  ? 'bg-purple-100 text-purple-600 cursor-not-allowed opacity-50'
+                                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                }
+                              `}
+                              title={
+                                !isInRange 
+                                  ? '期間外'
+                                  : isConfirmed
+                                  ? '確定済みシフトあり'
+                                  : isSubmitted
+                                  ? '提出済み（重ねて提出できません）'
+                                  : isFixed
+                                  ? '固定シフトあり'
+                                  : date
+                              }
+                            >
+                              {day}
+                              {isSubmitted && (
+                                <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-green-700">
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] text-gray-600">
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-2 h-2 bg-blue-500 rounded"></div>
+                        <span>選択中</span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-2 h-2 bg-white border border-gray-200 rounded"></div>
+                        <span>選択可能</span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-2 h-2 bg-orange-100 rounded"></div>
+                        <span>確定済み</span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-2 h-2 bg-green-100 rounded"></div>
+                        <span>提出済み</span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-2 h-2 bg-purple-100 rounded"></div>
+                        <span>固定</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium mb-2">時間帯</label>
+                <select
+                  id="bulk-time-slot"
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">時間帯を選択</option>
+                  {timeSlots.map(slot => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.name} ({formatTime(slot.start_time)} - {formatTime(slot.end_time)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">優先度</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map(priority => (
+                    <button
+                      key={priority}
+                      type="button"
+                      onClick={() => setBulkPriority(priority as 1 | 2 | 3)}
+                      className={`p-2 text-sm rounded-lg border transition-all ${
+                        bulkPriority === priority
+                          ? getPriorityColor(priority)
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {getPriorityLabel(priority)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">メモ（任意）</label>
+                <textarea
+                  id="bulk-notes"
+                  placeholder="時間調整の希望など..."
+                  rows={2}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  const timeSlotSelect = document.getElementById('bulk-time-slot') as HTMLSelectElement;
+                  const notesTextarea = document.getElementById('bulk-notes') as HTMLTextAreaElement;
+                  handleBulkApply(
+                    timeSlotSelect.value || null,
+                    bulkPriority,
+                    notesTextarea.value || ''
+                  );
+                }}
+                className="w-full"
+              >
+                選択した日付に一括適用
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 日付・時間選択（一括入力が閉じている時のみ表示） */}
+        {selectedPeriod && selectedStore && !showBulkInput && (
           <Card>
             <CardHeader className="pb-3">
+              <div className="flex justify-between items-center gap-2">
+                <div className="flex-1 min-w-0">
               <CardTitle className="text-base">🕐 勤務希望日時</CardTitle>
-              <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 mt-1">
                 勤務したい日をタップして時間帯を選択
               </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowBulkInput(true);
+                    setSelectedDatesForBulk(new Set());
+                    setBulkPriority(2); // デフォルトで「希望」を選択
+                  }}
+                  className="text-xs py-1 px-2 flex-shrink-0 whitespace-nowrap"
+                >
+                  📋 一括入力
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {dates.map(dateData => (
                 <div key={dateData.date} className="border border-gray-200 rounded-lg overflow-hidden">
                   {/* 日付ヘッダー */}
                   <div
-                    className={`p-3 flex justify-between items-center cursor-pointer ${
+                    className={`p-3 flex justify-between items-center ${
                       hasConfirmedShift(dateData.date)
                         ? 'bg-orange-50 border-l-4 border-orange-500' 
-                        : isDateSubmitted(dateData.date) 
+                        : dateData.requests.some(req => req.isSubmitted === true)
                         ? 'bg-green-50 border-l-4 border-green-500' 
                         : hasFixedShift(dateData.date)
                         ? 'bg-purple-50 border-l-4 border-purple-500'
+                        : selectedDatesForBulk.has(dateData.date)
+                        ? 'bg-blue-50 border-l-4 border-blue-500'
                         : 'bg-gray-50'
                     }`}
-                    onClick={() => setExpandedDate(expandedDate === dateData.date ? null : dateData.date)}
+                  >
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => {
+                        if (showBulkInput) {
+                          toggleDateSelection(dateData.date);
+                        } else {
+                          setExpandedDate(expandedDate === dateData.date ? null : dateData.date);
+                        }
+                      }}
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-medium">
@@ -767,33 +1141,39 @@ export default function ShiftRequestPage() {
                           ✓ 確定済み
                         </span>
                       )}
-                      {isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                      {dateData.requests.some(req => req.isSubmitted === true) && !hasConfirmedShift(dateData.date) && (
                         <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
                           ✓ 提出済み
                         </span>
                       )}
-                      {hasFixedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                      {showBulkInput && selectedDatesForBulk.has(dateData.date) && (
+                        <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                          ✓ 選択中
+                        </span>
+                      )}
+                      {hasFixedShift(dateData.date) && !dateData.requests.some(req => req.isSubmitted === true) && !hasConfirmedShift(dateData.date) && (
                         <span className="bg-purple-500 text-white text-xs px-2 py-1 rounded-full font-medium">
                           🔒 固定シフト
                         </span>
                       )}
-                      {dateData.requests.length > 0 && !hasConfirmedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasFixedShift(dateData.date) && (
+                      {dateData.requests.length > 0 && !hasConfirmedShift(dateData.date) && !dateData.requests.some(req => req.isSubmitted === true) && !hasFixedShift(dateData.date) && (
                         <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                           {dateData.requests.length}件
                         </span>
                       )}
-                      {dateData.requests.length > 0 && isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                      {dateData.requests.length > 0 && dateData.requests.some(req => req.isSubmitted === true) && !hasConfirmedShift(dateData.date) && (
                         <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
                           {dateData.requests.length}件
                         </span>
                       )}
-                      {dateData.requests.length > 0 && hasFixedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasConfirmedShift(dateData.date) && (
+                      {dateData.requests.length > 0 && hasFixedShift(dateData.date) && !dateData.requests.some(req => req.isSubmitted === true) && !hasConfirmedShift(dateData.date) && (
                         <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
                           {dateData.requests.length}件
                         </span>
                       )}
                     </div>
-                    {!hasConfirmedShift(dateData.date) && !isDateSubmitted(dateData.date) && !hasFixedShift(dateData.date) && (
+                    </div>
+                    {!hasConfirmedShift(dateData.date) && !dateData.requests.some(req => req.isSubmitted === true) && !hasFixedShift(dateData.date) && !showBulkInput && (
                       <Button
                         type="button"
                         variant="secondary"
@@ -811,24 +1191,23 @@ export default function ShiftRequestPage() {
                   {/* 展開されたコンテンツ */}
                   {(expandedDate === dateData.date || dateData.requests.length > 0) && (
                     <div className="p-3 space-y-3">
-                      {/* 提出済みまたは確定済みの場合の警告メッセージ */}
-                      {(isDateSubmitted(dateData.date) || hasConfirmedShift(dateData.date)) && (
+                      {/* 確定済みシフトがある場合の警告メッセージ */}
+                      {hasConfirmedShift(dateData.date) && (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <div className="flex items-center space-x-2">
                             <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                             <p className="text-sm text-yellow-800">
-                              {hasConfirmedShift(dateData.date) 
-                                ? 'この日付は既にシフトとして確定されています。編集・削除はできません。'
-                                : 'この日付は既に提出済みです。編集・削除はできません。'}
+                              この日付は既にシフトとして確定されています。編集・削除はできません。
                             </p>
                           </div>
                         </div>
                       )}
                       
                       {dateData.requests.map((request, index) => {
-                        const isReadOnly = isDateSubmitted(dateData.date) || hasConfirmedShift(dateData.date);
+                        // 個別のリクエストが提出済みかどうか、または確定済みシフトがあるかどうかで判定
+                        const isReadOnly = (request.isSubmitted === true) || hasConfirmedShift(dateData.date);
                         
                         return (
                           <div key={index} className={`bg-white border rounded-lg p-3 space-y-3 ${
@@ -839,12 +1218,37 @@ export default function ShiftRequestPage() {
                               <label className="block text-sm font-medium mb-2">時間帯</label>
                               <select
                                 value={request.timeSlotId || ''}
-                                onChange={(e) => handleUpdateRequest(dateData.date, index, { 
+                                onChange={async (e) => {
+                                  if (isReadOnly && request.id) {
+                                    // 提出済みの場合はAPIを呼び出して更新
+                                    try {
+                                      const response = await fetch('/api/shift-requests', {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          id: request.id,
+                                          time_slot_id: e.target.value || null
+                                        }),
+                                      });
+                                      if (!response.ok) {
+                                        throw new Error('更新に失敗しました');
+                                      }
+                                      // データを再取得
+                                      await loadPeriodData();
+                                    } catch (error) {
+                                      setError(error instanceof Error ? error.message : '更新に失敗しました');
+                                    }
+                                  } else {
+                                    handleUpdateRequest(dateData.date, index, { 
                                   timeSlotId: e.target.value || null 
-                                })}
-                                disabled={isReadOnly}
+                                    });
+                                  }
+                                }}
+                                disabled={isReadOnly && !request.id}
                                 className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                  isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+                                  isReadOnly && !request.id ? 'bg-gray-100 cursor-not-allowed' : ''
                                 }`}
                               >
                                 <option value="">時間帯を選択</option>
@@ -864,12 +1268,37 @@ export default function ShiftRequestPage() {
                                   <button
                                     key={priority}
                                     type="button"
-                                    onClick={() => !isReadOnly && handleUpdateRequest(dateData.date, index, { 
+                                    onClick={async () => {
+                                      if (isReadOnly && request.id) {
+                                        // 提出済みの場合はAPIを呼び出して更新
+                                        try {
+                                          const response = await fetch('/api/shift-requests', {
+                                            method: 'PUT',
+                                            headers: {
+                                              'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                              id: request.id,
                                       priority: priority as 1 | 2 | 3 
-                                    })}
-                                    disabled={isReadOnly}
+                                            }),
+                                          });
+                                          if (!response.ok) {
+                                            throw new Error('更新に失敗しました');
+                                          }
+                                          // データを再取得
+                                          await loadPeriodData();
+                                        } catch (error) {
+                                          setError(error instanceof Error ? error.message : '更新に失敗しました');
+                                        }
+                                      } else if (!isReadOnly) {
+                                        handleUpdateRequest(dateData.date, index, { 
+                                          priority: priority as 1 | 2 | 3 
+                                        });
+                                      }
+                                    }}
+                                    disabled={isReadOnly && !request.id}
                                     className={`p-2 text-sm rounded-lg border transition-all ${
-                                      isReadOnly 
+                                      isReadOnly && !request.id
                                         ? 'bg-gray-100 cursor-not-allowed opacity-50'
                                         : request.priority === priority
                                         ? getPriorityColor(priority)
@@ -887,21 +1316,46 @@ export default function ShiftRequestPage() {
                               <label className="block text-sm font-medium mb-2">メモ（任意）</label>
                               <textarea
                                 value={request.notes}
-                                onChange={(e) => !isReadOnly && handleUpdateRequest(dateData.date, index, { 
+                                onChange={async (e) => {
+                                  if (isReadOnly && request.id) {
+                                    // 提出済みの場合はAPIを呼び出して更新
+                                    try {
+                                      const response = await fetch('/api/shift-requests', {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          id: request.id,
                                   notes: e.target.value 
-                                })}
+                                        }),
+                                      });
+                                      if (!response.ok) {
+                                        throw new Error('更新に失敗しました');
+                                      }
+                                      // データを再取得
+                                      await loadPeriodData();
+                                    } catch (error) {
+                                      setError(error instanceof Error ? error.message : '更新に失敗しました');
+                                    }
+                                  } else if (!isReadOnly) {
+                                    handleUpdateRequest(dateData.date, index, { 
+                                      notes: e.target.value 
+                                    });
+                                  }
+                                }}
                                 placeholder="時間調整の希望など..."
                                 rows={2}
-                                disabled={isReadOnly}
+                                disabled={isReadOnly && !request.id}
                                 className={`w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none ${
-                                  isReadOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+                                  isReadOnly && !request.id ? 'bg-gray-100 cursor-not-allowed' : ''
                                 }`}
                               />
                             </div>
 
-                            {/* 削除ボタン - 提出済みまたは確定済みの場合は非表示 */}
-                            {!isReadOnly && (
+                            {/* 削除ボタン */}
                               <div className="flex justify-end">
+                              {!isReadOnly ? (
                                 <Button
                                   type="button"
                                   variant="secondary"
@@ -910,8 +1364,34 @@ export default function ShiftRequestPage() {
                                 >
                                   削除
                                 </Button>
+                              ) : request.id ? (
+                                // 提出済みの場合はAPIを呼び出して削除
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={async () => {
+                                    if (!confirm('このシフト希望を削除してもよろしいですか？')) {
+                                      return;
+                                    }
+                                    try {
+                                      const response = await fetch(`/api/shift-requests?id=${request.id}`, {
+                                        method: 'DELETE',
+                                      });
+                                      if (!response.ok) {
+                                        throw new Error('削除に失敗しました');
+                                      }
+                                      // データを再取得
+                                      await loadPeriodData();
+                                    } catch (error) {
+                                      setError(error instanceof Error ? error.message : '削除に失敗しました');
+                                    }
+                                  }}
+                                  className="text-red-600 hover:bg-red-50 text-sm py-1 px-2"
+                                >
+                                  削除
+                                </Button>
+                              ) : null}
                               </div>
-                            )}
                           </div>
                         );
                       })}

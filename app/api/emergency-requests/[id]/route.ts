@@ -33,6 +33,29 @@ export async function DELETE(
       return NextResponse.json({ error: '代打募集が見つかりません' }, { status: 404 });
     }
 
+    // 関連するemergency_volunteersレコードを先に削除
+    // 削除前に応募者数を取得（ログ用）
+    const { data: volunteersBeforeDelete } = await supabase
+      .from('emergency_volunteers')
+      .select('id')
+      .eq('emergency_request_id', id);
+
+    const { error: deleteVolunteersError } = await supabase
+      .from('emergency_volunteers')
+      .delete()
+      .eq('emergency_request_id', id);
+
+    if (deleteVolunteersError) {
+      console.error('Error deleting emergency volunteers:', deleteVolunteersError);
+      return NextResponse.json({ error: '関連する応募データの削除に失敗しました' }, { status: 500 });
+    }
+
+    // 削除された応募者数をログに記録
+    const deletedVolunteersCount = volunteersBeforeDelete?.length || 0;
+    if (deletedVolunteersCount > 0) {
+      console.log(`代打募集削除: ${deletedVolunteersCount}件の応募データを削除しました`);
+    }
+
     // 代打募集を削除
     const { error: deleteError } = await supabase
       .from('emergency_requests')
