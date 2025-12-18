@@ -166,15 +166,16 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    let query = supabase.from('fixed_shift_exceptions');
+    // Supabase v2 では delete() の後に eq(...) で条件を指定する
+    let deleteQuery = supabase.from('fixed_shift_exceptions').delete();
 
     if (id) {
-      query = query.eq('id', id);
-    } else {
-      query = query.eq('fixed_shift_id', fixedShiftId).eq('date', date);
+      deleteQuery = deleteQuery.eq('id', id);
+    } else if (fixedShiftId && date) {
+      deleteQuery = deleteQuery.eq('fixed_shift_id', fixedShiftId).eq('date', date);
     }
 
-    const { error } = await query.delete();
+    const { error } = await deleteQuery;
 
     if (error) {
       console.error('固定シフト例外削除エラー:', error);

@@ -476,7 +476,8 @@ export default function DashboardPage() {
         fixedShifts: todayFixedShifts.length, // 固定シフト
         draftShifts: allTodayShifts.filter(s => s.status === 'draft').length,
         statusBreakdown: allTodayShifts.reduce((acc, shift) => {
-          const status = shift.isFixedShift ? 'fixed' : shift.status;
+          const isFixed = (shift as any).isFixedShift;
+          const status = isFixed ? 'fixed' : shift.status;
           acc[status] = (acc[status] || 0) + 1;
           return acc;
         }, {} as Record<string, number>),
@@ -591,7 +592,7 @@ export default function DashboardPage() {
             user_id: s.user_id,
             date: s.date,
             status: s.status,
-            isFixedShift: s.isFixedShift || false,
+            isFixedShift: (s as any).isFixedShift || false,
             store_id: s.store_id
           })),
           // 全シフトからこの店舗のシフトを確認
@@ -600,7 +601,7 @@ export default function DashboardPage() {
             user_id: s.user_id,
             date: s.date,
             status: s.status,
-            isFixedShift: s.isFixedShift || false,
+            isFixedShift: (s as any).isFixedShift || false,
             store_id: s.store_id
           })),
           // 確定済み通常シフトからこの店舗のシフトを確認
@@ -633,8 +634,8 @@ export default function DashboardPage() {
 
         console.log(`🏪 [${store.name}] シフト内訳:`, {
           totalSlots: actualShiftCount,
-          fixedSlots: storeShifts.filter(s => s.isFixedShift).length,
-          confirmedSlots: storeShifts.filter(s => !s.isFixedShift && s.status === 'confirmed').length,
+          fixedSlots: storeShifts.filter(s => (s as any).isFixedShift).length,
+          confirmedSlots: storeShifts.filter(s => !(s as any).isFixedShift && s.status === 'confirmed').length,
           uniqueStaff: actualStaffCount,
           uniqueStaffIds: Array.from(uniqueStaffIds)
         });
@@ -642,7 +643,11 @@ export default function DashboardPage() {
         console.log(`👥 [${store.name}] 今日のシフト:`, {
           totalShifts: actualShiftCount,
           uniqueStaff: actualStaffCount,
-          shifts: storeShifts.map(s => ({ user_id: s.user_id, status: s.status, pattern_id: s.pattern_id }))
+          shifts: storeShifts.map(s => ({
+            user_id: s.user_id,
+            status: s.status,
+            time_slot_id: (s as any).time_slot_id
+          }))
         });
         
         // required_staffから直接必要人数を計算（time_slotsに依存しない）
@@ -686,7 +691,10 @@ export default function DashboardPage() {
         // 時間帯別の詳細情報（表示用）
         const timeSlotDetails = store.required_staff?.[todayDayName] 
           ? Object.entries(store.required_staff[todayDayName]).map(([timeSlotId, required]) => {
-              const slotShifts = storeShifts.filter(shift => getTimeSlotForPattern(shift.pattern_id, store.id) === timeSlotId);
+              const slotShifts = storeShifts.filter(shift => {
+                const patternId = (shift as any).pattern_id;
+                return getTimeSlotForPattern(patternId, store.id) === timeSlotId;
+              });
               return {
                 name: timeSlotId,
                 scheduled: slotShifts.length,
