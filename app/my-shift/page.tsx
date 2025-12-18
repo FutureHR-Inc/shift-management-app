@@ -340,6 +340,12 @@ export default function MyShiftPage() {
 
   const weeklyHours = calculateWeeklyHours();
 
+  // マイシフトのPDF出力（ブラウザの印刷機能を利用）
+  const handlePrintMyShiftPdf = () => {
+    if (typeof window === 'undefined') return;
+    window.print();
+  };
+
   if (loading) {
     return (
       <AuthenticatedLayout>
@@ -370,7 +376,9 @@ export default function MyShiftPage() {
             <p className="text-gray-600 mt-2">あなたの勤務スケジュールを確認できます</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="secondary">PDF出力</Button>
+            <Button variant="secondary" onClick={handlePrintMyShiftPdf}>
+              PDF出力
+            </Button>
           </div>
         </div>
 

@@ -192,6 +192,12 @@ function ShiftCreatePageInner() {
   const [viewModalViewMode, setViewModalViewMode] = useState<'week' | 'half-month' | 'month'>('month');
   const [viewModalSelectedWeek, setViewModalSelectedWeek] = useState(() => getAppropriateStartDate('month'));
 
+  // 確定シフト閲覧モーダル用のPDF出力（ブラウザの印刷機能を利用）
+  const handlePrintConfirmedShiftsPdf = () => {
+    if (typeof window === 'undefined') return;
+    window.print();
+  };
+
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -4000,11 +4006,11 @@ function ShiftCreatePageInner() {
         {/* 確定シフト閲覧モーダル */}
         {isViewModalOpen && (
           <div
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4"
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 print-modal-root"
             onClick={() => setIsViewModalOpen(false)}
           >
             <div
-              className="bg-white rounded-2xl max-w-[95vw] w-full max-h-[90vh] overflow-hidden shadow-2xl"
+              className="bg-white rounded-2xl max-w-[95vw] w-full max-h-[90vh] overflow-hidden shadow-2xl print-area"
               onClick={(e) => e.stopPropagation()}
             >
               {/* モーダルヘッダー */}
@@ -4014,16 +4020,26 @@ function ShiftCreatePageInner() {
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-900">確定シフト閲覧</h2>
                     <p className="text-sm text-gray-600 mt-1">確定済みシフトのみを表示（編集不可）</p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsViewModalOpen(false)}
-                    className="flex-shrink-0"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handlePrintConfirmedShiftsPdf}
+                      className="flex-shrink-0"
+                    >
+                      PDF出力
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsViewModalOpen(false)}
+                      className="flex-shrink-0"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
 
                 {/* 表示期間切り替え */}

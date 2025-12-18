@@ -69,7 +69,9 @@ export const DesktopShiftTable: React.FC<DesktopShiftTableProps> = ({
   return (
     <div className="hidden lg:block">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed" style={{ 
+        <table
+          className="w-full border-collapse table-fixed print-table"
+          style={{ 
           width: viewMode === 'month' ? '2000px' : 
                  viewMode === 'half-month' ? '1400px' : 
                  '100%',

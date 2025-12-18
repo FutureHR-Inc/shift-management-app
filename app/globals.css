@@ -17,3 +17,46 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  /* 確定シフト閲覧モーダル・マイシフトなど印刷対象のレイアウト調整 */
+  .print-modal-root {
+    position: static !important;
+    inset: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+  }
+
+  .print-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+
+  .print-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  .print-table col {
+    width: auto !important;
+  }
+
+  /* 画面用の余計な装飾は印刷時に非表示 */
+  .backdrop-blur-sm,
+  .shadow-2xl {
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+}

@@ -166,9 +166,8 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    let deleteQuery = supabase
-      .from('fixed_shift_exceptions')
-      .delete();
+    // Supabase v2 では delete() の後に eq(...) で条件を指定する
+    let deleteQuery = supabase.from('fixed_shift_exceptions').delete();
 
     if (id) {
       deleteQuery = deleteQuery.eq('id', id);
