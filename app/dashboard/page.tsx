@@ -159,7 +159,7 @@ export default function DashboardPage() {
         fixedShiftsResponse
       ] = await Promise.all([
         fetch(`/api/shifts?current_user_id=${currentUser.id}`, cacheOptions), // 企業フィルタリング付き
-        fetch('/api/shift-requests?status=submitted', cacheOptions),
+        fetch(`/api/shift-requests?status=submitted&current_user_id=${currentUser.id}`, cacheOptions),
         fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`, cacheOptions),
         fetch(`/api/users?current_user_id=${currentUser.id}`, cacheOptions),
         fetch(`/api/stores?current_user_id=${currentUser.id}`, cacheOptions),
@@ -289,19 +289,45 @@ export default function DashboardPage() {
       // 日本時間の今日の日付を使用
       const todayToUse = todayJapan;
 
-      // 今日の固定シフトを取得
-      const todayFixedShifts = fixedShiftsData.filter((fs: DatabaseFixedShift) => 
-        fs.day_of_week === todayDayOfWeek && 
-        fs.is_active
-      ).map((fs: DatabaseFixedShift) => ({
-        id: `fixed-${fs.id}`,
-        user_id: fs.user_id,
-        store_id: fs.store_id,
-        date: todayToUse,
-        time_slot_id: fs.time_slot_id,
-        status: 'confirmed',
-        isFixedShift: true
-      }));
+      // 固定シフト例外（この日だけ表示しない固定シフト）を取得
+      let fixedShiftExceptions: Array<{ fixed_shift_id: string; date: string }> = [];
+      try {
+        const exceptionsResponse = await fetch(`/api/fixed-shift-exceptions?date=${todayToUse}`);
+        if (exceptionsResponse.ok) {
+          const exceptionsResult = await exceptionsResponse.json();
+          fixedShiftExceptions = (exceptionsResult.data || []).map((ex: any) => ({
+            fixed_shift_id: ex.fixed_shift_id,
+            date: ex.date
+          }));
+        } else {
+          console.error('Fixed shift exceptions API error:', await exceptionsResponse.text());
+        }
+      } catch (error) {
+        console.error('Fixed shift exceptions fetch error:', error);
+      }
+
+      const exceptionIdSet = new Set(
+        fixedShiftExceptions
+          .filter((ex) => ex.date === todayToUse)
+          .map((ex) => ex.fixed_shift_id)
+      );
+
+      // 今日の固定シフトを取得（例外が設定されているものは除外）
+      const todayFixedShifts = (fixedShiftsData as DatabaseFixedShift[])
+        .filter((fs: DatabaseFixedShift) => 
+          fs.day_of_week === todayDayOfWeek && 
+          fs.is_active &&
+          !exceptionIdSet.has(fs.id)
+        )
+        .map((fs: DatabaseFixedShift) => ({
+          id: `fixed-${fs.id}`,
+          user_id: fs.user_id,
+          store_id: fs.store_id,
+          date: todayToUse,
+          time_slot_id: fs.time_slot_id,
+          status: 'confirmed',
+          isFixedShift: true
+        }));
 
       console.log('📅 [DASHBOARD DEBUG] 固定シフト:', {
         todayFixedShiftsCount: todayFixedShifts.length,
@@ -309,7 +335,8 @@ export default function DashboardPage() {
           user_id: fs.user_id,
           store_id: fs.store_id,
           date: fs.date
-        }))
+        })),
+        fixedShiftExceptionsForToday: Array.from(exceptionIdSet)
       });
 
       // 今日の通常シフトを取得（確定済みのみ）
@@ -403,12 +430,9 @@ export default function DashboardPage() {
         }))
       });
 
-      // 確定済みシフトをフィルタリング（ステータスが'confirmed'のもの）
-      // ⭐ 重要: シフト表で確定ボタンを押したシフトは status='confirmed' になる
-      const todayRegularShifts = allTodayShiftsRaw.filter((shift: DashboardShift) => {
-        const isConfirmed = shift.status === 'confirmed';
-        return isConfirmed;
-      });
+      // 確定済みシフトをフィルタリング（デバッグ用）
+      // ※ 実際の店舗別人数計算は全ステータス（draft/confirmed/completed）を対象とする
+      const todayRegularShifts = allTodayShiftsRaw.filter((shift: DashboardShift) => shift.status === 'confirmed');
       
       console.log('📅 [DASHBOARD DEBUG] 今日の確定済みシフト（シフト表で確定したもの）:', {
         todayRegularShiftsCount: todayRegularShifts.length,
@@ -436,9 +460,9 @@ export default function DashboardPage() {
         }))
       });
 
-      // 全てのシフトを結合（確定済み通常シフト + 固定シフト）
-      // 固定シフトは常に確定扱いのため、そのまま含める
-      const allTodayShifts = [...todayRegularShifts, ...todayFixedShifts];
+      // 全てのシフトを結合（通常シフト全ステータス + 固定シフト）
+      // 固定シフトは常に確定扱いとして含める
+      const allTodayShifts = [...allTodayShiftsRaw, ...todayFixedShifts];
       
       // 今日の確定済みシフト数（確定済み通常シフト + 固定シフト）
       // 下書きシフトは含めない
@@ -476,7 +500,8 @@ export default function DashboardPage() {
           user_id: s.user_id
         }))
       });
-      const pendingRequests = (requestsData as DashboardShiftRequest[])?.filter(req => req.status === 'submitted') || [];
+      const pendingRequestsArray = (requestsData as DashboardShiftRequest[]) || [];
+      const pendingRequests = pendingRequestsArray.filter(req => req.status === 'submitted');
       const filteredEmergencies = (emergencyData as DatabaseEmergencyRequest[])?.filter(req => 
         req.status === 'open' && req.original_user_id !== currentUser?.id
       ) || [];
@@ -600,20 +625,22 @@ export default function DashboardPage() {
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const todayDayName = dayNames[today.getDay()];
         
-        // 実際に勤務するユニークなスタッフ数を計算（確定シフトと固定シフトを含む）
+        // 実際のシフト枠数（同じ人が複数シフトに入っていればその分だけカウント）
+        const actualShiftCount = storeShifts.length;
+        // 参考用にユニークなスタッフ数も算出（表示には使用しない）
         const uniqueStaffIds = new Set(storeShifts.map(shift => shift.user_id));
         const actualStaffCount = uniqueStaffIds.size;
 
         console.log(`🏪 [${store.name}] シフト内訳:`, {
-          total: storeShifts.length,
-          fixed: storeShifts.filter(s => s.isFixedShift).length,
-          confirmed: storeShifts.filter(s => !s.isFixedShift && s.status === 'confirmed').length,
+          totalSlots: actualShiftCount,
+          fixedSlots: storeShifts.filter(s => s.isFixedShift).length,
+          confirmedSlots: storeShifts.filter(s => !s.isFixedShift && s.status === 'confirmed').length,
           uniqueStaff: actualStaffCount,
           uniqueStaffIds: Array.from(uniqueStaffIds)
         });
         
         console.log(`👥 [${store.name}] 今日のシフト:`, {
-          totalShifts: storeShifts.length,
+          totalShifts: actualShiftCount,
           uniqueStaff: actualStaffCount,
           shifts: storeShifts.map(s => ({ user_id: s.user_id, status: s.status, pattern_id: s.pattern_id }))
         });
@@ -653,8 +680,8 @@ export default function DashboardPage() {
           console.log(`ℹ️ [${store.name}] 必要人数設定なし → 0人として表示`);
         }
 
-        // 充足判定: 実際のスタッフ数 >= 必要人数（従来通り）
-        const status = actualStaffCount >= totalRequired ? 'sufficient' : 'insufficient';
+        // 充足判定: 実際のシフト枠数 >= 必要人数
+        const status = actualShiftCount >= totalRequired ? 'sufficient' : 'insufficient';
 
         // 時間帯別の詳細情報（表示用）
         const timeSlotDetails = store.required_staff?.[todayDayName] 
@@ -671,7 +698,8 @@ export default function DashboardPage() {
 
         return {
           store: store.name,
-          scheduled: actualStaffCount,
+          // 店舗別出勤状況では「シフト枠数」を人数として扱う
+          scheduled: actualShiftCount,
           required: totalRequired,
           status,
           details: {
@@ -819,11 +847,13 @@ export default function DashboardPage() {
     };
 
     window.addEventListener('dashboardRefresh', handleDashboardRefresh);
+    window.addEventListener('updateShiftRequestNotifications', handleDashboardRefresh);
     console.log('✅ [DASHBOARD] dashboardRefreshイベントリスナーを登録しました');
 
     return () => {
       console.log('🗑️ [DASHBOARD] dashboardRefreshイベントリスナーを削除します');
       window.removeEventListener('dashboardRefresh', handleDashboardRefresh);
+      window.removeEventListener('updateShiftRequestNotifications', handleDashboardRefresh);
     };
   }, [currentUser, loadDashboardData]);
 

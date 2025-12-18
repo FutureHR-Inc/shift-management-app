@@ -386,6 +386,10 @@ export default function ShiftRequestsPage() {
             <p className="text-gray-600 mt-2">
               スタッフから提出されたシフト希望を確認し、シフトを作成できます
             </p>
+            <p className="text-sm text-gray-500 mt-2">
+              未確認のシフト希望: <span className="font-semibold">{requests.length}</span>件（
+              <span className="font-semibold">{personGroups.length}</span>人分）
+            </p>
           </div>
         </div>
 

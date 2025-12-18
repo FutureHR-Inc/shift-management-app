@@ -54,8 +54,10 @@ const Navigation = () => {
       try {
         // 管理者の場合のみシフト希望数と新規応募数を取得
         if (currentUser.role === 'manager') {
-          // 未処理のシフト希望数を取得
-          const shiftRequestsResponse = await fetch('/api/shift-requests?status=submitted');
+          // 未処理のシフト希望数を取得（現在の企業に紐づくもののみ）
+          const shiftRequestsResponse = await fetch(
+            `/api/shift-requests?status=submitted&current_user_id=${currentUser.id}`
+          );
           let shiftRequestsCount = 0;
           
           if (shiftRequestsResponse.ok) {
