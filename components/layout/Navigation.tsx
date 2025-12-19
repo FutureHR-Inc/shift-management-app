@@ -62,14 +62,117 @@ const Navigation = () => {
           
           if (shiftRequestsResponse.ok) {
             const shiftRequestsData = await shiftRequestsResponse.json();
-            // 変換済みを除外してカウント
-            const unprocessedRequests = (shiftRequestsData.data || []).filter(
-              (request: any) => request.status !== 'converted_to_shift'
+            const allRequests = shiftRequestsData.data || [];
+            
+            // 現在のユーザーの企業IDを取得（localStorageから直接取得）
+            // 念のため、/api/users エンドポイントから最新の企業IDを取得
+            let currentUserCompanyId: string | null = currentUser.company_id || null;
+            try {
+              const userResponse = await fetch(`/api/users?current_user_id=${currentUser.id}`);
+              if (userResponse.ok) {
+                const userData = await userResponse.json();
+                const latestUser = userData.data?.find((u: any) => u.id === currentUser.id);
+                if (latestUser?.company_id) {
+                  currentUserCompanyId = latestUser.company_id;
+                }
+              }
+            } catch (err) {
+              console.warn('ユーザー企業ID取得エラー:', err);
+              // エラー時はlocalStorageの値をそのまま使用
+            }
+            
+            // デバッグログ: 取得したデータの詳細を確認
+            console.log('🔍 [NAVIGATION] シフト希望データ取得:', {
+              totalCount: allRequests.length,
+              currentUserId: currentUser.id,
+              currentUserCompanyId: currentUserCompanyId,
+              requests: allRequests.map((req: any) => ({
+                id: req.id,
+                user_id: req.user_id,
+                user_name: req.users?.name,
+                store_id: req.store_id,
+                store_name: req.stores?.name,
+                store_company_id: req.stores?.company_id,
+                status: req.status,
+                date: req.date
+              }))
+            });
+            
+            // 変換済みを除外し、企業IDもチェックしてカウント
+            const unprocessedRequests = allRequests.filter(
+              (request: any) => {
+                // ステータスチェック: converted_to_shift は除外
+                if (request.status === 'converted_to_shift') {
+                  console.log('🔍 [NAVIGATION] 変換済みシフト希望を除外:', {
+                    id: request.id,
+                    user_name: request.users?.name,
+                    store_name: request.stores?.name,
+                    status: request.status
+                  });
+                  return false;
+                }
+                
+                // storesが配列の場合とオブジェクトの場合を考慮
+                const store = Array.isArray(request.stores) ? request.stores[0] : request.stores;
+                
+                // 企業IDチェック: 現在のユーザーの企業IDと一致するもののみ
+                if (currentUserCompanyId !== null) {
+                  const storeCompanyId = store?.company_id;
+                  
+                  // 店舗情報が取得できていない場合は除外
+                  if (!store || !storeCompanyId) {
+                    console.warn('⚠️ [NAVIGATION] 店舗情報が取得できていないシフト希望を除外:', {
+                      id: request.id,
+                      store_id: request.store_id,
+                      stores: request.stores
+                    });
+                    return false;
+                  }
+                  
+                  if (storeCompanyId !== currentUserCompanyId) {
+                    console.warn('⚠️ [NAVIGATION] 他の企業のシフト希望を除外:', {
+                      id: request.id,
+                      store_name: store?.name,
+                      store_company_id: storeCompanyId,
+                      expected_company_id: currentUserCompanyId
+                    });
+                    return false;
+                  }
+                } else {
+                  // currentUserCompanyIdがnullの場合、店舗情報が取得できていないものは除外
+                  const store = Array.isArray(request.stores) ? request.stores[0] : request.stores;
+                  if (!store || !store.company_id) {
+                    console.warn('⚠️ [NAVIGATION] 店舗情報が取得できていないシフト希望を除外:', {
+                      id: request.id,
+                      store_id: request.store_id,
+                      stores: request.stores
+                    });
+                    return false;
+                  }
+                }
+                
+                return true;
+              }
             );
+            
+            // デバッグログ: 企業IDの確認
+            const companyIds = [...new Set(allRequests.map((req: any) => req.stores?.company_id))];
+            console.log('🔍 [NAVIGATION] 企業ID一覧:', companyIds);
+            
             shiftRequestsCount = unprocessedRequests.length;
+            
+            console.log('🔍 [NAVIGATION] シフト希望カウント結果:', {
+              total: allRequests.length,
+              unprocessed: unprocessedRequests.length,
+              converted: allRequests.filter((r: any) => r.status === 'converted_to_shift').length,
+              wrongCompany: allRequests.filter((r: any) => {
+                if (currentUserCompanyId === null) return false;
+                return r.stores?.company_id !== currentUserCompanyId && r.stores?.company_id !== null;
+              }).length
+            });
           }
 
-          // 新規応募数を取得
+          // 未処理の応募数を取得（承認も不採用も選択していない応募の数）
           let emergencyRequestsCount = 0;
           try {
             const emergencyResponse = await fetch(`/api/emergency-requests?current_user_id=${currentUser.id}`);
@@ -81,30 +184,37 @@ const Navigation = () => {
               const viewedData = localStorage.getItem('emergency_request_viewed');
               const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
               
-              // 新規応募がある募集をカウント
-              emergencyRequestsCount = requests.filter((request: any) => {
+              // 各募集の未処理応募数をカウント
+              emergencyRequestsCount = requests.reduce((total: number, request: any) => {
                 const volunteers = request.emergency_volunteers || [];
-                if (volunteers.length === 0) return false;
+                
+                // 未処理の応募（statusがnull、undefined、または'pending'）のみをフィルタリング
+                const unprocessedVolunteers = volunteers.filter((vol: any) => {
+                  return !vol.status || vol.status === 'pending';
+                });
+                
+                if (unprocessedVolunteers.length === 0) return total;
                 
                 // 最後に確認した時刻を取得
                 const lastViewed = viewedMap[request.id];
+                
                 if (!lastViewed) {
-                  // 未確認の場合は新規応募があればカウント
-                  return true;
+                  // 未確認の場合は未処理の応募数を全てカウント
+                  return total + unprocessedVolunteers.length;
                 }
                 
-                // 最後に確認した時刻より後に応募があったかチェック
+                // 最後に確認した時刻より後に応募があった未処理の応募をカウント
                 const lastViewedTime = new Date(lastViewed).getTime();
-                const hasNewVolunteers = volunteers.some((vol: any) => {
+                const newUnprocessedVolunteers = unprocessedVolunteers.filter((vol: any) => {
                   const volunteerTime = new Date(vol.responded_at).getTime();
                   return volunteerTime > lastViewedTime;
                 });
                 
-                return hasNewVolunteers;
-              }).length;
+                return total + newUnprocessedVolunteers.length;
+              }, 0);
             }
           } catch (error) {
-            console.error('新規応募数の取得に失敗:', error);
+            console.error('未処理応募数の取得に失敗:', error);
           }
 
           setNotifications({
