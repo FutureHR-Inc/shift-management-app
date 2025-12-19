@@ -346,8 +346,8 @@ function ShiftCreatePageInner() {
       console.log('  - 取得件数:', exceptions.length);
       
       return exceptions.map((ex: any) => ({
-        fixed_shift_id: ex.fixed_shift_id,
-        date: ex.date
+        fixed_shift_id: String(ex.fixed_shift_id), // UUIDを文字列に統一
+        date: ex.date ? (typeof ex.date === 'string' ? ex.date.split('T')[0] : String(ex.date).split('T')[0]) : ex.date // タイムスタンプ部分を削除してYYYY-MM-DD形式に統一
       }));
     } catch (error) {
       console.error('Error fetching fixed shift exceptions:', error);
@@ -873,18 +873,28 @@ function ShiftCreatePageInner() {
       const existingUserIds = regularShifts.map(shift => shift.userId);
       
       // 固定シフト例外をチェック（この日付で例外が設定されている固定シフトを除外）
+      // 日付を正規化（YYYY-MM-DD形式に統一、タイムスタンプ部分を削除）
+      const normalizedDate = date ? date.split('T')[0] : '';
       const exceptionKeys = new Set(
         fixedShiftExceptions
-          .filter(ex => ex.date === date)
-          .map(ex => ex.fixed_shift_id)
+          .filter(ex => {
+            // 日付の形式を正規化して比較（YYYY-MM-DD形式に統一）
+            const exDate = ex.date ? (typeof ex.date === 'string' ? ex.date.split('T')[0] : String(ex.date).split('T')[0]) : '';
+            return exDate === normalizedDate;
+          })
+          .map(ex => String(ex.fixed_shift_id)) // UUIDを文字列に統一
       );
       
       // 固定シフトをshiftオブジェクトとして変換
       const fixedShiftsAsShifts = fixedShiftsForSlot
-        .filter(fixedShift => 
-          !existingUserIds.includes(fixedShift.user_id) &&
-          !exceptionKeys.has(fixedShift.id) // 例外が設定されている固定シフトを除外
-        )
+        .filter(fixedShift => {
+          // fixed_shift_idを文字列に統一して比較
+          const fixedShiftIdStr = String(fixedShift.id);
+          const hasException = exceptionKeys.has(fixedShiftIdStr);
+          const hasNormalShift = existingUserIds.includes(fixedShift.user_id);
+          
+          return !hasNormalShift && !hasException;
+        })
         .map(fixedShift => ({
           id: `fixed-${fixedShift.id}`, // 固定シフト識別のためのプレフィックス
           userId: fixedShift.user_id,
@@ -1194,14 +1204,63 @@ function ShiftCreatePageInner() {
         }
         
         const fixedShiftId = shiftId.replace('fixed-', '');
-        const targetDate = date || shift?.date;
+        
+        // 日付の取得を優先順位で試行
+        let targetDate = date;
+        if (!targetDate && shift) {
+          targetDate = shift.date;
+        }
+        // shiftオブジェクトにdateプロパティがない場合、固定シフトデータから取得
+        if (!targetDate && shift && (shift as any).fixedShiftData) {
+          // 固定シフトの場合、表示されている日付を使用
+          // これはgetShiftForSlotで設定されたdateプロパティ
+          targetDate = (shift as any).date;
+        }
+        
+        console.log('🔍 [handleDeleteShift] 固定シフト削除パラメータ:', {
+          shiftId,
+          fixedShiftId,
+          date,
+          shiftDate: shift?.date,
+          shiftObject: shift,
+          targetDate,
+          hasFixedShiftData: !!(shift as any)?.fixedShiftData
+        });
         
         if (!targetDate) {
-          setError('削除する日付が指定されていません');
+          setError('削除する日付が指定されていません。シフトを再読み込みしてください。');
+          console.error('❌ [handleDeleteShift] 日付が取得できませんでした:', {
+            date,
+            shift,
+            shiftDate: shift?.date
+          });
           return;
         }
         
-        // 固定シフト例外を作成
+        // 既に例外が存在するかチェック
+        const checkResponse = await fetch(`/api/fixed-shift-exceptions?fixed_shift_id=${fixedShiftId}&date=${targetDate}`);
+        let existingException = null;
+        if (checkResponse.ok) {
+          const checkData = await checkResponse.json();
+          existingException = checkData.data?.[0] || null;
+        }
+        
+        console.log('🔍 [handleDeleteShift] 例外チェック結果:', {
+          fixedShiftId,
+          targetDate,
+          existingException: existingException ? { id: existingException.id } : null,
+          checkResponseStatus: checkResponse.status
+        });
+        
+        // 既に例外が存在する場合はエラー（復元は不可）
+        if (existingException) {
+          setError('この固定シフトは既に削除されています。');
+          console.log('⚠️ [handleDeleteShift] 既に例外が存在するため削除不可:', existingException.id);
+          return;
+        }
+        
+        // 例外が存在しない場合は作成（削除）
+        console.log('🔄 [handleDeleteShift] 固定シフト例外を作成（シフト削除）');
         const response = await fetch('/api/fixed-shift-exceptions', {
           method: 'POST',
           headers: {
@@ -1215,10 +1274,22 @@ function ShiftCreatePageInner() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || '固定シフト例外の作成に失敗しました');
+          // 409エラー（既に存在）の場合はエラーを表示
+          if (response.status === 409) {
+            setError('この固定シフトは既に削除されています。');
+            console.log('⚠️ [handleDeleteShift] 例外が既に存在（409エラー）');
+            return;
+          } else {
+            throw new Error(errorData.error || '固定シフト例外の作成に失敗しました');
+          }
         }
+        
+        console.log('✅ [handleDeleteShift] 固定シフト例外作成成功:', {
+          fixedShiftId,
+          targetDate
+        });
 
-        // 例外データを再取得
+        // 例外データを再取得して状態を更新
         if (selectedStore && selectedWeek) {
           const startDate = selectedWeek;
           let endDate = selectedWeek;
@@ -1238,9 +1309,32 @@ function ShiftCreatePageInner() {
             endDate = end.toISOString().split('T')[0];
           }
           
+          // 固定シフト例外を再取得
           const exceptionsData = await fetchFixedShiftExceptions(startDate, endDate);
           setFixedShiftExceptions(exceptionsData);
+          
+          console.log('✅ [handleDeleteShift] 固定シフト例外再取得完了:', {
+            count: exceptionsData.length,
+            exceptions: exceptionsData
+          });
+          
+          // シフトデータも再取得（表示を即座に更新）
+          const updatedShifts = await fetchShifts(selectedStore, startDate, endDate);
+          setShifts(updatedShifts);
+          
+          console.log('✅ [handleDeleteShift] シフトデータ再取得完了:', {
+            count: updatedShifts.length
+          });
         }
+        
+        // 固定シフト更新イベントを発火（他のコンポーネントに通知）
+        window.dispatchEvent(new CustomEvent('fixedShiftUpdated', {
+          detail: { 
+            action: 'exception_created',
+            date: targetDate,
+            fixedShiftId: fixedShiftId
+          }
+        }));
         
         // マイシフト画面に通知（固定シフト例外作成時）
         window.dispatchEvent(new CustomEvent('shiftUpdated', {
@@ -1261,6 +1355,16 @@ function ShiftCreatePageInner() {
         }));
         setTimeout(() => localStorage.removeItem('shiftUpdate'), 100);
         
+        // 固定シフト更新通知（別タブ対応）
+        localStorage.setItem('fixedShiftUpdate', JSON.stringify({
+          action: 'exception_created',
+          date: targetDate,
+          fixedShiftId: fixedShiftId,
+          timestamp: timestamp
+        }));
+        setTimeout(() => localStorage.removeItem('fixedShiftUpdate'), 100);
+        
+        alert('固定シフトを削除しました');
         return;
       }
       
@@ -1284,6 +1388,10 @@ function ShiftCreatePageInner() {
         throw new Error(errorData.error || 'シフトの削除に失敗しました');
       }
 
+      console.log('✅ [handleDeleteShift] 通常シフト削除成功:', {
+        shiftId
+      });
+
       // データを再取得
       if (selectedStore && selectedWeek) {
         const startDate = selectedWeek;
@@ -1304,8 +1412,13 @@ function ShiftCreatePageInner() {
           endDate = end.toISOString().split('T')[0];
         }
         
+        // シフトデータを再取得
         const updatedShifts = await fetchShifts(selectedStore, startDate, endDate);
         setShifts(updatedShifts);
+        
+        console.log('✅ [handleDeleteShift] シフトデータ再取得完了:', {
+          count: updatedShifts.length
+        });
       }
       
       // マイシフト画面に通知（通常シフト削除時）
@@ -1324,6 +1437,8 @@ function ShiftCreatePageInner() {
         timestamp: timestamp
       }));
       setTimeout(() => localStorage.removeItem('shiftUpdate'), 100);
+      
+      alert('シフトを削除しました');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'シフトの削除に失敗しました');
     }

@@ -242,7 +242,15 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                           } else {
                                             // 削除
                                             if (window.confirm(`${user.name}さんの固定シフトをこの日のみ削除しますか？\n他の週は通常通り表示されます。`)) {
-                                              handleDeleteShift(shift.id, shift, shift.date);
+                                              // 日付を確実に取得（shift.dateが設定されていない場合のフォールバック）
+                                              const deleteDate = shift.date || dateString;
+                                              console.log('🔍 [MobileTable] 固定シフト削除:', {
+                                                shiftId: shift.id,
+                                                shiftDate: shift.date,
+                                                dateString,
+                                                deleteDate
+                                              });
+                                              handleDeleteShift(shift.id, shift, deleteDate);
                                             }
                                           }
                                           
@@ -289,7 +297,9 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                             } else {
                                               // 削除
                                               if (window.confirm(`${user.name}さんのシフトを削除しますか？`)) {
-                                                handleDeleteShift(shift.id, shift, shift.date);
+                                                // 日付を確実に取得（shift.dateが設定されていない場合のフォールバック）
+                                                const deleteDate = shift.date || dateString;
+                                                handleDeleteShift(shift.id, shift, deleteDate);
                                               }
                                             }
                                           } else {
@@ -354,7 +364,9 @@ export const MobileShiftTable: React.FC<MobileShiftTableProps> = ({
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleDeleteShift(shift.id, shift, shift.date);
+                                                // 日付を確実に取得（shift.dateが設定されていない場合のフォールバック）
+                                                const deleteDate = shift.date || dateString;
+                                                handleDeleteShift(shift.id, shift, deleteDate);
                                               }}
                                               className="w-4 h-4 sm:w-5 sm:h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold opacity-70 group-hover:opacity-100 transition-all"
                                               title="削除"

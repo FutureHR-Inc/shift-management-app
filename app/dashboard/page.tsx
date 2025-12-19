@@ -296,8 +296,8 @@ export default function DashboardPage() {
         if (exceptionsResponse.ok) {
           const exceptionsResult = await exceptionsResponse.json();
           fixedShiftExceptions = (exceptionsResult.data || []).map((ex: any) => ({
-            fixed_shift_id: ex.fixed_shift_id,
-            date: ex.date
+            fixed_shift_id: String(ex.fixed_shift_id), // UUIDを文字列に統一
+            date: ex.date ? (typeof ex.date === 'string' ? ex.date.split('T')[0] : String(ex.date).split('T')[0]) : ex.date // タイムスタンプ部分を削除してYYYY-MM-DD形式に統一
           }));
         } else {
           console.error('Fixed shift exceptions API error:', await exceptionsResponse.text());
@@ -309,7 +309,7 @@ export default function DashboardPage() {
       const exceptionIdSet = new Set(
         fixedShiftExceptions
           .filter((ex) => ex.date === todayToUse)
-          .map((ex) => ex.fixed_shift_id)
+          .map((ex) => String(ex.fixed_shift_id)) // UUIDを文字列に統一
       );
 
       // 今日の固定シフトを取得（例外が設定されているものは除外）
@@ -317,7 +317,7 @@ export default function DashboardPage() {
         .filter((fs: DatabaseFixedShift) => 
           fs.day_of_week === todayDayOfWeek && 
           fs.is_active &&
-          !exceptionIdSet.has(fs.id)
+          !exceptionIdSet.has(String(fs.id)) // UUIDを文字列に統一して比較
         )
         .map((fs: DatabaseFixedShift) => ({
           id: `fixed-${fs.id}`,

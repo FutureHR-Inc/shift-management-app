@@ -177,8 +177,8 @@ export default function MyShiftPage() {
       if (exceptionsResponse.ok) {
         const exceptionsResult = await exceptionsResponse.json();
         fixedShiftExceptions = (exceptionsResult.data || []).map((ex: any) => ({
-          fixed_shift_id: ex.fixed_shift_id,
-          date: ex.date
+          fixed_shift_id: String(ex.fixed_shift_id), // UUIDを文字列に統一
+          date: ex.date ? (typeof ex.date === 'string' ? ex.date.split('T')[0] : String(ex.date).split('T')[0]) : ex.date // タイムスタンプ部分を削除してYYYY-MM-DD形式に統一
         }));
         console.log('🔍 [MyShift] 固定シフト例外:');
         console.log('  - 取得した例外数:', fixedShiftExceptions.length);
@@ -225,7 +225,7 @@ export default function MyShiftPage() {
             if (dayFixedShift) {
               // 固定シフト例外をチェック（この日付で例外が設定されている固定シフトを除外）
               const hasException = fixedShiftExceptions.some(
-                ex => ex.fixed_shift_id === dayFixedShift.id && ex.date === dateString
+                ex => String(ex.fixed_shift_id) === String(dayFixedShift.id) && ex.date === dateString
               );
               
               if (hasException) {
