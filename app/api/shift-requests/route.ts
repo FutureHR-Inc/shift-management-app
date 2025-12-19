@@ -42,18 +42,20 @@ export async function GET(request: NextRequest) {
       console.log('🔍 [SHIFT REQUESTS API] companyIdFilter:', companyIdFilter);
     }
 
+    // 🔧 企業分離: 店舗の企業IDでフィルタリング
+    // stores!inner を使用して、店舗が存在しないシフト希望を除外
     let query = supabase
       .from('shift_requests')
       .select(`
         *,
         users(id, name, email, role, skill_level),
-        stores(id, name, company_id),
+        stores!inner(id, name, company_id),
         time_slots(id, name, start_time, end_time)
       `)
       .order('date', { ascending: true })
       .order('priority', { ascending: true });
 
-    // 🔧 企業分離: 店舗の企業IDでフィルタリング
+    // 企業フィルタリングを適用
     if (currentUserId) {
       if (companyIdFilter) {
         console.log('🔍 [SHIFT REQUESTS API] 新企業フィルタリング: stores.company_id =', companyIdFilter);
@@ -95,12 +97,87 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // デバッグログ: 取得したデータの詳細を確認
+    const requestsData = data || [];
     console.log('🔍 [SHIFT REQUESTS API] 結果:', {
-      requestCount: data?.length || 0,
-      storeCompanyIds: data?.map(r => ({ storeName: r.stores?.name, companyId: r.stores?.company_id })) || []
+      requestCount: requestsData.length,
+      statusFilter: status,
+      companyIdFilter: companyIdFilter,
+      storeCompanyIds: [...new Set(requestsData.map(r => r.stores?.company_id))],
+      statusBreakdown: requestsData.reduce((acc: any, r: any) => {
+        acc[r.status] = (acc[r.status] || 0) + 1;
+        return acc;
+      }, {}),
+      // 企業フィルタリングが正しく機能しているか確認
+      requests: requestsData.map((r: any) => ({
+        id: r.id,
+        user_id: r.user_id,
+        user_name: r.users?.name,
+        store_id: r.store_id,
+        store_name: r.stores?.name,
+        store_company_id: r.stores?.company_id,
+        status: r.status,
+        date: r.date
+      }))
     });
 
-    return NextResponse.json({ data: data || [] });
+    // 企業フィルタリングが正しく機能しているか検証
+    if (companyIdFilter && requestsData.length > 0) {
+      const wrongCompanyRequests = requestsData.filter((r: any) => {
+        // storesが配列の場合とオブジェクトの場合を考慮
+        const store = Array.isArray(r.stores) ? r.stores[0] : r.stores;
+        const storeCompanyId = store?.company_id;
+        return storeCompanyId !== companyIdFilter && storeCompanyId !== null;
+      });
+      
+      if (wrongCompanyRequests.length > 0) {
+        console.error('⚠️ [SHIFT REQUESTS API] 企業フィルタリングエラー: 他の企業のデータが含まれています', {
+          expectedCompanyId: companyIdFilter,
+          wrongRequests: wrongCompanyRequests.map((r: any) => {
+            const store = Array.isArray(r.stores) ? r.stores[0] : r.stores;
+            return {
+              id: r.id,
+              store_name: store?.name,
+              store_company_id: store?.company_id
+            };
+          })
+        });
+      }
+      
+      // storesがundefinedのレコードを検出
+      const missingStoreRequests = requestsData.filter((r: any) => {
+        const store = Array.isArray(r.stores) ? r.stores[0] : r.stores;
+        return !store || !store.company_id;
+      });
+      
+      if (missingStoreRequests.length > 0) {
+        console.error('⚠️ [SHIFT REQUESTS API] 店舗情報が取得できていないシフト希望があります', {
+          missingStoreCount: missingStoreRequests.length,
+          missingStoreRequests: missingStoreRequests.map((r: any) => ({
+            id: r.id,
+            store_id: r.store_id,
+            stores: r.stores
+          }))
+        });
+      }
+    }
+
+    // status=submitted でフィルタリングしている場合、converted_to_shift が含まれていないか検証
+    if (status === 'submitted' && requestsData.length > 0) {
+      const convertedRequests = requestsData.filter((r: any) => r.status === 'converted_to_shift');
+      if (convertedRequests.length > 0) {
+        console.error('⚠️ [SHIFT REQUESTS API] ステータスフィルタリングエラー: converted_to_shift が含まれています', {
+          convertedCount: convertedRequests.length,
+          convertedRequests: convertedRequests.map((r: any) => ({
+            id: r.id,
+            user_name: r.users?.name,
+            status: r.status
+          }))
+        });
+      }
+    }
+
+    return NextResponse.json({ data: requestsData });
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(

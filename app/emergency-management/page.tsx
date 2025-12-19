@@ -16,10 +16,22 @@ function EmergencyManagementPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // 新規応募の判定関数
-  const hasNewVolunteers = (request: any): { hasNew: boolean; count: number } => {
+  // 未処理の応募があるかどうかを判定する関数
+  // 確定済みや既に採用・不採用を選択しているものは除外
+  const hasUnprocessedVolunteers = (request: any): { hasNew: boolean; count: number } => {
+    // 確定済みの場合は色をつけない
+    if (request.status !== 'open') {
+      return { hasNew: false, count: 0 };
+    }
+
     const volunteers = request.emergency_volunteers || [];
-    if (volunteers.length === 0) {
+    
+    // 未処理の応募（statusがnull、undefined、または'pending'）のみをフィルタリング
+    const unprocessedVolunteers = volunteers.filter((vol: any) => {
+      return !vol.status || vol.status === 'pending';
+    });
+
+    if (unprocessedVolunteers.length === 0) {
       return { hasNew: false, count: 0 };
     }
 
@@ -29,18 +41,18 @@ function EmergencyManagementPageContent() {
     const lastViewed = viewedMap[request.id];
 
     if (!lastViewed) {
-      // 未確認の場合は全て新規応募として扱う
-      return { hasNew: true, count: volunteers.length };
+      // 未確認の場合は未処理の応募を全て新規として扱う
+      return { hasNew: true, count: unprocessedVolunteers.length };
     }
 
-    // 最後に確認した時刻より後に応募があったものをカウント
+    // 最後に確認した時刻より後に応募があった未処理の応募をカウント
     const lastViewedTime = new Date(lastViewed).getTime();
-    const newVolunteers = volunteers.filter((vol: any) => {
+    const newUnprocessedVolunteers = unprocessedVolunteers.filter((vol: any) => {
       const volunteerTime = new Date(vol.responded_at).getTime();
       return volunteerTime > lastViewedTime;
     });
 
-    return { hasNew: newVolunteers.length > 0, count: newVolunteers.length };
+    return { hasNew: newUnprocessedVolunteers.length > 0, count: newUnprocessedVolunteers.length };
   };
 
   // 募集詳細を開いたときに既読として記録
@@ -306,6 +318,49 @@ function EmergencyManagementPageContent() {
     }
   };
 
+  // 代打募集を削除
+  const handleDeleteEmergencyRequest = async (requestId: string) => {
+    const volunteerCount = selectedRequest?.emergency_volunteers?.length || 0;
+    const confirmMessage = volunteerCount > 0
+      ? `この代打募集を削除しますか？\n応募中の${volunteerCount}人の応募も全て削除されます。`
+      : 'この代打募集を削除しますか？';
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/emergency-requests/${requestId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || '代打募集の削除に失敗しました');
+      }
+
+      // 成功時にデータを再取得
+      await fetchEmergencyRequests();
+      
+      // 選択状態をクリアして募集一覧タブに戻る
+      setSelectedRequest(null);
+      setActiveTab('browse');
+      
+      // ヘッダーの通知を更新
+      window.dispatchEvent(new CustomEvent('updateEmergencyNotifications'));
+      
+      alert('代打募集を削除しました');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '予期せぬエラーが発生しました');
+      alert(err instanceof Error ? err.message : '代打募集の削除に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthenticatedLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -388,11 +443,11 @@ function EmergencyManagementPageContent() {
                         </tr>
                       ) : emergencyRequests?.length > 0 ? (
                         emergencyRequests.map((request) => {
-                          const newVolunteers = hasNewVolunteers(request);
+                          const unprocessedVolunteers = hasUnprocessedVolunteers(request);
                           return (
                           <tr 
                             key={request.id} 
-                            className={`hover:bg-gray-50 ${newVolunteers.hasNew ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}
+                            className={`hover:bg-gray-50 ${unprocessedVolunteers.hasNew ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}
                           >
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {new Date(request.date).toLocaleDateString('ja-JP')}
@@ -529,7 +584,25 @@ function EmergencyManagementPageContent() {
               <CardContent>
                 {/* 募集シフトの詳細 */}
                 <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">募集シフト詳細</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-gray-900">募集シフト詳細</h3>
+                    <Button
+                      onClick={() => handleDeleteEmergencyRequest(selectedRequest.id)}
+                      variant="destructive"
+                      size="sm"
+                      disabled={loading}
+                      className="whitespace-nowrap"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                          削除中...
+                        </>
+                      ) : (
+                        '代打募集を削除'
+                      )}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500">日時</p>
@@ -558,11 +631,11 @@ function EmergencyManagementPageContent() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-medium text-gray-900">応募者一覧</h3>
                     {(() => {
-                      const newVolunteers = hasNewVolunteers(selectedRequest);
-                      if (newVolunteers.hasNew) {
+                      const unprocessedVolunteers = hasUnprocessedVolunteers(selectedRequest);
+                      if (unprocessedVolunteers.hasNew) {
                         return (
                           <span className="inline-flex items-center justify-center min-w-[24px] h-[24px] px-2 bg-red-500 text-white text-xs font-bold rounded-full">
-                            新規 {newVolunteers.count}件
+                            新規 {unprocessedVolunteers.count}件
                           </span>
                         );
                       }
@@ -572,11 +645,12 @@ function EmergencyManagementPageContent() {
                   {selectedRequest.emergency_volunteers?.length > 0 ? (
                 <div className="space-y-4">
                                             {selectedRequest.emergency_volunteers.map((volunteer: any) => {
-                        // 新規応募かどうかを判定
+                        // 未処理の応募で、かつ新規かどうかを判定
+                        const isUnprocessed = !volunteer.status || volunteer.status === 'pending';
                         const viewedData = localStorage.getItem('emergency_request_viewed');
                         const viewedMap: Record<string, string> = viewedData ? JSON.parse(viewedData) : {};
                         const lastViewed = viewedMap[selectedRequest.id];
-                        const isNew = !lastViewed || new Date(volunteer.responded_at).getTime() > new Date(lastViewed).getTime();
+                        const isNew = isUnprocessed && (!lastViewed || new Date(volunteer.responded_at).getTime() > new Date(lastViewed).getTime());
                         
                         return (
                         <div key={volunteer.id} className={`border rounded-lg p-4 ${
@@ -599,7 +673,7 @@ function EmergencyManagementPageContent() {
                                     ✗ 不採用
                                   </span>
                                 )}
-                                {!volunteer.status && (
+                                {isUnprocessed && (
                                   <>
                                     <span className="px-3 py-1 text-sm font-medium bg-gray-200 text-gray-700 rounded-full whitespace-nowrap">
                                       審査中
