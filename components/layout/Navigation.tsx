@@ -11,6 +11,7 @@ interface CurrentUser {
   role: 'manager' | 'staff';
   loginId: string;
   stores: string[];
+  company_id?: string | null;
 }
 
 interface NotificationData {
